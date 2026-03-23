@@ -3938,6 +3938,705 @@ function Lots({ onSelectLot }) {
 }
 
 // =============================================================================
+// MODULE PLANIFICATEUR DE TIRAGE (SÉCURISÉ & STATELESS)
+// =============================================================================
+function PlanificateurTirage() {
+  const T = useTheme();
+  const { state, dispatch, refreshData } = useStore();
+
+  const [activeTab, setActiveTab] = useState("MIXTION");
+  
+  // Sécurité et UX pour l'appel API
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+
+  // --- ÉTATS MÉTIER (Valeurs par défaut, plus de LocalStorage) ---
+  const [tirageDays, setTirageDays] = useState([
+    { id: 1, name: "Lundi", vinBaseVolume: 31.5 },
+    { id: 2, name: "Mardi", vinBaseVolume: 31.5 },
+    { id: 3, name: "Mercredi", vinBaseVolume: 31.5 },
+    { id: 4, name: "Jeudi", vinBaseVolume: 31.5 },
+    { id: 5, name: "Vendredi", vinBaseVolume: 15.0 },
+  ]);
+
+  const [tirageStocks, setTirageStocks] = useState({
+    bouteilles: 20000, magnums: 1200,
+    bidules: 20000, capsules: 20000, 
+    bouchonsLiege: 5000, agrafes: 5000
+  });
+
+  const [config, setConfig] = useState({
+    mixTargetPressure: 6.0, mixLevainPct: 3.0, mixLevainSugar: 20,
+    mixSugarSource: "LIQUEUR", mixLiqueurSugar: 530,
+    tirageFormat: 0.75, tirageBouchage: "CAPSULE",
+    levainTemp: 16,
+    alimVolLevain: 18.6, alimVolFinal: 23.8,
+    alimDensiteVeille: 1005, alimDensiteMatin: 998, alimLiqueurG: 530, alimAlcVin: 11.0
+  });
+
+  const updateConfig = (key, value) => { setConfig(prev => ({ ...prev, [key]: value })); };
+
+  // --- ÉTATS VOLATILES (Sélections actuelles de cuves) ---
+  const [mixBaseTankId, setMixBaseTankId] = useState("");
+  const [mixLevainTankId, setMixLevainTankId] = useState("");
+  const [mixDestTankId, setMixDestTankId] = useState("");
+  const [mixVolVinSaisi, setMixVolVinSaisi] = useState("");
+
+  const [createLevainSourceId, setCreateLevainSourceId] = useState("");
+  const [alimSourceTankId, setAlimSourceTankId] = useState("");
+  const [alimLevainTankId, setAlimLevainTankId] = useState("");
+
+  // ===========================================================================
+  // FILTRAGE DES CUVES
+  // ===========================================================================
+  const getContainerLot = (c) => state.lots?.find(l => String(l.id) === String(c.lotId));
+
+  const cuvesVinBase = (state.containers || []).filter(c => {
+    if (parseFloat(c.currentVolume) <= 0) return false;
+    const t = (c.type || "").toUpperCase();
+    const n = (c.displayName || c.name || "").toUpperCase();
+    if (t.includes("BOURBE") || t.includes("LIE") || t.includes("REBECHE")) return false;
+    if (n.includes("BOURBE") || n.includes("LIE") || n.includes("REBECHE")) return false;
+    const lot = getContainerLot(c);
+    if (!lot) return false;
+    if (lot.status !== "VIN_CLAIR" && lot.status !== "ASSEMBLAGE") return false;
+    return true;
+  });
+
+  const cuvesTirage = (state.containers || []).filter(c => {
+    if (parseFloat(c.currentVolume) > 0) return false; 
+    if (c.zone !== "Cuverie") return false;
+    const t = (c.type || "").toUpperCase();
+    const n = (c.displayName || c.name || "").toUpperCase();
+    if (t.includes("BELON") || t.includes("DEBOURBAGE")) return false;
+    if (t.includes("BOURBE") || t.includes("LIE") || t.includes("REBECHE")) return false;
+    if (n.includes("BOURBE") || n.includes("LIE") || n.includes("REBECHE")) return false;
+    if (t.includes("FOUDRE") || t.includes("CITERNE") || t.includes("RESERVE") || t.includes("AUTRE")) return false;
+    if (t.includes("CUVE") || n.includes("CUVE")) return true;
+    return false;
+  });
+
+  const cuvesLevain = (state.containers || []).filter(c => {
+    const t = (c.type || "").toUpperCase();
+    const n = (c.displayName || c.name || "").toUpperCase();
+    return t.includes("LEVAIN") || n.includes("LEVAIN");
+  });
+
+  // ===========================================================================
+  // CALCULS : MIXTION (PRÉVISUALISATION FRONTEND)
+  // ===========================================================================
+  const selectedBaseTank = cuvesVinBase.find(c => String(c.id) === String(mixBaseTankId));
+  const baseVol = mixVolVinSaisi !== "" ? parseFloat(mixVolVinSaisi) : (selectedBaseTank ? parseFloat(selectedBaseTank.currentVolume) : 0);
+  const getTargetSugar = (bars) => (bars * 4) * (25.4 / 24.0); 
+
+  const calcMixtionPreview = () => {
+    if (!baseVol || baseVol <= 0) return null;
+    const baseSugar = 1.0; 
+    const targetSugarGF = getTargetSugar(config.mixTargetPressure);
+    const volLevain = baseVol * (config.mixLevainPct / 100);
+    const volVinLevain = baseVol + volLevain;
+    const sucreVinLevain = ((baseVol * baseSugar) + (volLevain * config.mixLevainSugar)) / volVinLevain;
+    const sucreManquant = targetSugarGF - sucreVinLevain;
+    
+    if (sucreManquant <= 0) return { error: "Le vin contient déjà trop de sucre pour cette pression." };
+
+    let volLiqueur = 0, poidsSucre = 0, volMixtion = 0;
+    if (config.mixSugarSource === "LIQUEUR") {
+      volLiqueur = (volVinLevain * sucreManquant) / (config.mixLiqueurSugar - sucreManquant);
+      volMixtion = volVinLevain + volLiqueur;
+    } else {
+      poidsSucre = (volVinLevain * sucreManquant) / (1 - (sucreManquant * 0.00063));
+      volMixtion = volVinLevain + (poidsSucre * 0.00063);
+    }
+
+    const deltaRho = (targetSugarGF - baseSugar) / 2.5;
+    const nbCols = Math.floor((volMixtion * 100) / config.tirageFormat);
+
+    return {
+      volVin: baseVol.toFixed(2), volLevain: volLevain.toFixed(2),
+      volLiqueur: volLiqueur > 0 ? volLiqueur.toFixed(3) : null,
+      poidsSucre: poidsSucre > 0 ? poidsSucre.toFixed(1) : null,
+      volMixtion: volMixtion.toFixed(2), deltaRho: deltaRho.toFixed(1),
+      targetSugar: targetSugarGF.toFixed(1), nbCols
+    };
+  };
+  const resMix = calcMixtionPreview();
+
+  // ===========================================================================
+  // CALCULS : PLANNING HEBDOMADAIRE (Page 2)
+  // ===========================================================================
+  const calcWeeklyPlanning = () => {
+    let taux = 0.78; 
+    if (config.levainTemp === 20) taux = 0.70;
+    if (config.levainTemp === 13) taux = 0.87;
+
+    const baseSugar = 1.0; 
+    const targetSugarGF = getTargetSugar(config.mixTargetPressure);
+
+    const cascadeResult = [];
+    let volNextDayLevain = 0; 
+    
+    let cBtls = config.tirageFormat === 0.75 ? tirageStocks.bouteilles : tirageStocks.magnums;
+    let cF1 = config.tirageBouchage === "CAPSULE" ? tirageStocks.bidules : tirageStocks.bouchonsLiege;
+    let cF2 = config.tirageBouchage === "CAPSULE" ? tirageStocks.capsules : tirageStocks.agrafes;
+
+    const levainNeeds = [...tirageDays].reverse().map((day, index) => {
+      const vVin = parseFloat(day.vinBaseVolume) || 0;
+      const besoinLevain = vVin * (config.mixLevainPct / 100);
+      let volToFeed = index === 0 ? 0 : volNextDayLevain * taux; 
+      let totalLevainCuveMatin = volToFeed + besoinLevain;
+      let alimentation = index === 0 ? 0 : volNextDayLevain - volToFeed;
+      volNextDayLevain = totalLevainCuveMatin; 
+      return { ...day, besoinLevain, totalLevainCuveMatin, resteCuve: volToFeed, alimentation };
+    }).reverse(); 
+
+    levainNeeds.forEach(day => {
+      const vVin = parseFloat(day.vinBaseVolume) || 0;
+      const vLevain = day.besoinLevain;
+      const volVinLevain = vVin + vLevain;
+      let volMixtion = 0;
+      
+      if (vVin > 0) {
+        const sucreVinLevain = ((vVin * baseSugar) + (vLevain * config.mixLevainSugar)) / volVinLevain;
+        const sucreManquant = targetSugarGF - sucreVinLevain;
+        if (config.mixSugarSource === "LIQUEUR") {
+          volMixtion = volVinLevain + ((volVinLevain * sucreManquant) / (config.mixLiqueurSugar - sucreManquant));
+        } else {
+          volMixtion = volVinLevain + (((volVinLevain * sucreManquant) / (1 - (sucreManquant * 0.00063))) * 0.00063);
+        }
+      }
+
+      const nbColsTires = Math.floor((volMixtion * 100) / config.tirageFormat);
+      cBtls -= nbColsTires; cF1 -= nbColsTires; cF2 -= nbColsTires;
+
+      cascadeResult.push({
+        ...day, volMixtion, nbColsTires, stockBouteilles: cBtls, stockF1: cF1, stockF2: cF2
+      });
+    });
+
+    return cascadeResult;
+  };
+  const cascade = calcWeeklyPlanning();
+  const maxLevainVol = cascade.length > 0 ? Math.max(...cascade.map(r => r.totalLevainCuveMatin)) : 0;
+
+  // ===========================================================================
+  // CALCULS : ALIMENTATION (Page 3)
+  // ===========================================================================
+  const calcAlimentation = () => {
+    const vLevain = parseFloat(config.alimVolLevain) || 0;
+    const vFinal = parseFloat(config.alimVolFinal) || 0;
+    if (!vLevain || !vFinal || vFinal <= vLevain) return null;
+    const sucreConsomme = (config.alimDensiteVeille - config.alimDensiteMatin) * 2.5;
+    const vLiqueur = (vFinal * (20 + sucreConsomme) - (vLevain * 20)) / config.alimLiqueurG;
+    const alcLiqueur = config.alimLiqueurG >= 600 ? 6.8 : 7.5; 
+    const alcNeeds = (vFinal * 12.0) - (vLevain * 12.0) - (vLiqueur * alcLiqueur) - (vFinal * (sucreConsomme / 16.8));
+    const vVin = alcNeeds / config.alimAlcVin;
+    const vEau = vFinal - (vLevain + vVin + vLiqueur);
+    return { sucreConsomme: sucreConsomme.toFixed(1), vLiqueur: vLiqueur > 0 ? vLiqueur.toFixed(3) : "0.000", vVin: vVin > 0 ? vVin.toFixed(2) : "0.00", vEau: vEau > 0 ? vEau.toFixed(2) : "0.00", dap: ((vFinal * 100 * 20) / 1000).toFixed(2) };
+  };
+  const resAlim = calcAlimentation();
+
+  // ===========================================================================
+  // ACTIONS DE CUVERIE INTELLIGENTES (SÉCURISÉES)
+  // ===========================================================================
+
+  const handleAutoCreateLevain = async () => {
+    if (!createLevainSourceId) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: "Sélectionnez la cuve de vin qui servira à créer le levain.", color: T.red } });
+      return;
+    }
+    
+    const sourceTank = state.containers.find(c => String(c.id) === String(createLevainSourceId));
+    if (!sourceTank || parseFloat(sourceTank.currentVolume) < maxLevainVol) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: `Volume insuffisant dans la cuve source. Il vous faut au moins ${maxLevainVol.toFixed(1)} hL.`, color: T.red } });
+      return;
+    }
+
+    setIsSubmitting(true);
+    const suggestedCap = Math.ceil(maxLevainVol * 1.2);
+    try {
+      const res = await fetch('/api/containers', { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          name: "Cuve à Levain", displayName: "Cuve Levain (Actif)", 
+          type: "CUVE_INOX", capacityValue: suggestedCap,
+          status: "PLEINE", zone: "Cuverie", currentVolume: parseFloat(maxLevainVol.toFixed(2)) 
+        }) 
+      });
+      
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur lors de la création de la cuve.");
+        
+      const newSourceVol = parseFloat(sourceTank.currentVolume) - maxLevainVol;
+      dispatch({
+        type: "SET_CONTAINERS",
+        payload: state.containers.map(c => c.id === sourceTank.id ? { ...c, currentVolume: newSourceVol } : c)
+      });
+
+      dispatch({ type: "ADD_CONTAINER", payload: data });
+      dispatch({ type: "TOAST_ADD", payload: { msg: `Levain créé ! ${maxLevainVol.toFixed(1)} hL prélevés.`, color: T.green } });
+      
+      setMixLevainTankId(data.id);
+      setAlimLevainTankId(data.id);
+      updateConfig('alimVolFinal', maxLevainVol);
+      
+      if (refreshData) await refreshData();
+      
+    } catch(e: any) { 
+      dispatch({ type: "TOAST_ADD", payload: { msg: `Erreur : ${e.message}`, color: T.red } });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleValiderAlimentation = async () => {
+    if (!alimSourceTankId || !alimLevainTankId) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: "Sélectionnez la cuve source (vin) et la cuve levain.", color: T.red } });
+      return;
+    }
+    if (!resAlim) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: "Les volumes saisis sont incohérents.", color: T.red } });
+      return;
+    }
+
+    const sourceTank = state.containers.find(c => String(c.id) === String(alimSourceTankId));
+    const levainTank = state.containers.find(c => String(c.id) === String(alimLevainTankId));
+
+    const vVinNeeded = parseFloat(resAlim.vVin);
+    if (parseFloat(sourceTank.currentVolume) < vVinNeeded) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: `Volume insuffisant dans la cuve source. Il vous faut ${vVinNeeded.toFixed(2)} hL.`, color: T.red } });
+      return;
+    }
+
+    // Ici on applique la mise à jour optimiste frontend (en attendant ton API d'alimentation dédiée)
+    const newSourceVol = Math.max(0, parseFloat(sourceTank.currentVolume) - vVinNeeded);
+    const newLevainVol = parseFloat(config.alimVolFinal);
+
+    dispatch({
+      type: "SET_CONTAINERS",
+      payload: state.containers.map(c => {
+        if (c.id === sourceTank.id) return { ...c, currentVolume: newSourceVol };
+        if (c.id === levainTank.id) return { ...c, currentVolume: newLevainVol };
+        return c;
+      })
+    });
+
+    dispatch({ type: "TOAST_ADD", payload: { msg: `Alimentation validée ! Levain remonté à ${newLevainVol} hL.`, color: T.green } });
+  };
+
+  const handleValiderMixtion = async () => {
+    if (!mixBaseTankId || !mixDestTankId || !mixLevainTankId) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: "Sélectionnez la cuve de base, la cuve de levain, et la cuve de destination.", color: T.red } });
+      return;
+    }
+    if (!resMix || resMix.error) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: "Corrigez les erreurs de calcul avant de valider.", color: T.red } });
+      return;
+    }
+
+    setIsSubmitting(true);
+
+    try {
+      const payload = {
+        baseTankId: mixBaseTankId,
+        levainTankId: mixLevainTankId,
+        destTankId: mixDestTankId,
+        baseVolToDraw: parseFloat(mixVolVinSaisi) || parseFloat(selectedBaseTank.currentVolume),
+        targetPressure: parseFloat(config.mixTargetPressure),
+        levainPct: parseFloat(config.mixLevainPct),
+        levainSugar: parseFloat(config.mixLevainSugar),
+        sugarSource: config.mixSugarSource,
+        liqueurSugar: parseFloat(config.mixLiqueurSugar),
+        tirageFormat: parseFloat(config.tirageFormat),
+        tirageBouchage: config.tirageBouchage,
+        idempotencyKey: idempotencyKey || crypto.randomUUID()
+      };
+
+      const res = await fetch('/api/mixtion/execute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Une erreur est survenue lors de l'enregistrement.");
+      }
+
+      dispatch({ type: "TOAST_ADD", payload: { msg: `Succès : ${data.volMixtion.toFixed(2)}hL préparés en cuve !`, color: T.green } });
+      
+      setIdempotencyKey(crypto.randomUUID());
+      if (refreshData) await refreshData();
+      
+      setMixVolVinSaisi("");
+      setMixDestTankId("");
+
+    } catch (e: any) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: `Opération refusée : ${e.message}`, color: T.red } });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:28 }}>
+        <div>
+          <h1 style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:32, color:T.textStrong, margin:0 }}>Préparation & Tirage</h1>
+          <div style={{ color:T.textDim, fontSize:13, marginTop:4 }}>Calculs des mixtions, propagation des levains et anticipation des matières sèches.</div>
+        </div>
+        <div style={{ display: "flex", gap: 10 }}>
+          <Btn variant={activeTab === "MIXTION" ? "primary" : "secondary"} onClick={() => setActiveTab("MIXTION")}>🍷 Mixtion & Mise</Btn>
+          <Btn variant={activeTab === "PLANNING" ? "primary" : "secondary"} onClick={() => setActiveTab("PLANNING")}>📅 Planning & Stocks</Btn>
+          <Btn variant={activeTab === "ALIM" ? "primary" : "secondary"} onClick={() => setActiveTab("ALIM")}>🧪 Alimentation Jour.</Btn>
+        </div>
+      </div>
+
+      {activeTab === "MIXTION" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 32 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: "bold", color: T.accentLight, marginBottom: 16 }}>1. Source & Levain</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <FF label="Cuve d'assemblage (Vin clair)">
+                  <Select value={mixBaseTankId} disabled={isSubmitting} onChange={e => {
+                    setMixBaseTankId(e.target.value);
+                    if (e.target.value) {
+                      const c = cuvesVinBase.find(x => String(x.id) === String(e.target.value));
+                      if (c) setMixVolVinSaisi(c.currentVolume);
+                    } else { setMixVolVinSaisi(""); }
+                  }}>
+                    <option value="">-- Mode Libre (Manuelle) --</option>
+                    {cuvesVinBase.map(c => {
+                      const lot = getContainerLot(c);
+                      const codeDisplay = lot ? `[${lot.code}]` : "";
+                      return <option key={c.id} value={c.id}>{c.displayName || c.name} {codeDisplay} - {parseFloat(c.currentVolume).toFixed(2)} hL</option>
+                    })}
+                  </Select>
+                </FF>
+                <FF label="Volume de vin à tirer (hL)">
+                  <Input type="number" step="0.1" value={mixVolVinSaisi} disabled={isSubmitting} onChange={e => setMixVolVinSaisi(e.target.value)} />
+                </FF>
+              </div>
+              <FF label="Cuve de Levain (Mère)">
+                <Select value={mixLevainTankId} disabled={isSubmitting} onChange={e => setMixLevainTankId(e.target.value)} style={{ borderColor: !mixLevainTankId ? T.accent : T.border }}>
+                  <option value="">-- Sélectionner le levain actif --</option>
+                  {cuvesLevain.length === 0 && <option disabled>Aucune cuve à levain détectée en cuverie.</option>}
+                  {cuvesLevain.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name} - {parseFloat(c.currentVolume).toFixed(2)} hL dispo</option>)}
+                </Select>
+              </FF>
+            </div>
+
+            <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: "bold", color: T.textStrong, marginBottom: 16 }}>2. Objectifs & Sucrage</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
+                <FF label="Pression visée (Bars)"><Input type="number" step="0.1" value={config.mixTargetPressure} disabled={isSubmitting} onChange={e => updateConfig('mixTargetPressure', e.target.value)} /></FF>
+                <FF label="% de Levain"><Input type="number" step="0.1" value={config.mixLevainPct} disabled={isSubmitting} onChange={e => updateConfig('mixLevainPct', e.target.value)} /></FF>
+              </div>
+              <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, color: T.text, fontSize: 13, cursor: "pointer" }}>
+                  <input type="radio" checked={config.mixSugarSource === "LIQUEUR"} onChange={() => updateConfig('mixSugarSource', "LIQUEUR")} disabled={isSubmitting} /> Liqueur/MCR
+                </label>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, color: T.text, fontSize: 13, cursor: "pointer" }}>
+                  <input type="radio" checked={config.mixSugarSource === "SUCRE"} onChange={() => updateConfig('mixSugarSource', "SUCRE")} disabled={isSubmitting} /> Sucre Sec
+                </label>
+              </div>
+              {config.mixSugarSource === "LIQUEUR" && (
+                <FF label="Concentration Liqueur (g/L)">
+                  <Input type="number" value={config.mixLiqueurSugar} disabled={isSubmitting} onChange={e => updateConfig('mixLiqueurSugar', e.target.value)} />
+                </FF>
+              )}
+            </div>
+
+            <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.accent}55` }}>
+              <div style={{ fontSize: 14, fontWeight: "bold", color: T.accentLight, marginBottom: 16 }}>3. Embouteillage</div>
+              <FF label="Cuve de Destination (Mixtion & Tirage)" style={{ marginBottom: 16 }}>
+                <Select value={mixDestTankId} disabled={isSubmitting} onChange={e => setMixDestTankId(e.target.value)} style={{ borderColor: !mixDestTankId ? T.accent : T.border }}>
+                  <option value="">-- Sélectionner une cuve de tirage vide --</option>
+                  {cuvesTirage.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name}</option>)}
+                </Select>
+              </FF>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <FF label="Format Bouteille">
+                  <Select value={config.tirageFormat} disabled={isSubmitting} onChange={e => updateConfig('tirageFormat', parseFloat(e.target.value))}>
+                    <option value={0.75}>Champenoise (75 cl)</option>
+                    <option value={1.5}>Magnum (1.5 L)</option>
+                  </Select>
+                </FF>
+                <FF label="Type Bouchage">
+                  <Select value={config.tirageBouchage} disabled={isSubmitting} onChange={e => updateConfig('tirageBouchage', e.target.value)}>
+                    <option value="CAPSULE">Capsule + Bidule</option>
+                    <option value="LIEGE">Liège + Agrafe</option>
+                  </Select>
+                </FF>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div style={{ position: "sticky", top: 20, background: T.surface, padding: 32, borderRadius: 8, border: `2px solid ${T.accent}`, opacity: isSubmitting ? 0.6 : 1, pointerEvents: isSubmitting ? "none" : "auto", transition: "opacity 0.2s" }}>
+              <div style={{ fontSize: 12, color: T.accent, textTransform: "uppercase", letterSpacing: 2, fontWeight: "bold", marginBottom: 24, textAlign: "center" }}>Recette de la Cuve de Mixtion</div>
+              {!resMix ? (
+                <div style={{ textAlign: "center", color: T.textDim, fontStyle: "italic", padding: "40px 0" }}>Veuillez indiquer un volume de vin à tirer.</div>
+              ) : resMix.error ? (
+                <div style={{ textAlign: "center", color: T.red, fontWeight: "bold", padding: "40px 0" }}>{resMix.error}</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 16, borderBottom: `1px dashed ${T.border}` }}>
+                    <div style={{ fontSize: 14, color: T.textDim }}>1. Vin de Base :</div>
+                    <div style={{ fontSize: 18, color: T.textStrong, fontWeight: "bold", fontFamily: "monospace" }}>{resMix.volVin} hL</div>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 16, borderBottom: `1px dashed ${T.border}` }}>
+                    <div style={{ fontSize: 14, color: T.textDim }}>2. Levain ({config.mixLevainPct}%) :</div>
+                    <div style={{ fontSize: 18, color: T.textStrong, fontWeight: "bold", fontFamily: "monospace" }}>{resMix.volLevain} hL</div>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 16, borderBottom: `1px solid ${T.border}` }}>
+                    <div style={{ fontSize: 14, color: T.textDim }}>3. {config.mixSugarSource === "LIQUEUR" ? "Liqueur :" : "Sucre sec :"}</div>
+                    <div style={{ fontSize: 22, color: T.accentLight, fontWeight: "bold", fontFamily: "monospace" }}>
+                      {config.mixSugarSource === "LIQUEUR" ? `+ ${resMix.volLiqueur} hL` : `+ ${resMix.poidsSucre} kg`}
+                    </div>
+                  </div>
+                  <div style={{ background: T.bg, padding: 20, borderRadius: 6, marginTop: 8 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                      <div style={{ fontSize: 12, textTransform: "uppercase", color: T.textDim, fontWeight: "bold" }}>Volume Total Cuve</div>
+                      <div style={{ fontSize: 24, color: T.textStrong, fontWeight: "bold", fontFamily: "monospace" }}>{resMix.volMixtion} hL</div>
+                    </div>
+                    <div style={{ borderTop: `1px solid ${T.border}`, margin: "16px 0" }} />
+                    <div style={{ fontSize: 12, textTransform: "uppercase", color: T.accent, fontWeight: "bold", marginBottom: 8 }}>🔍 Contrôle Densité (Après brassage)</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ fontSize: 13, color: T.text }}>Augmentation de densité (<span style={{fontFamily:"monospace"}}>Δρ</span>)</div>
+                      <div style={{ fontSize: 16, color: T.green, fontWeight: "bold", fontFamily: "monospace" }}>+ {resMix.deltaRho}</div>
+                    </div>
+                  </div>
+                  <div style={{ background: T.accent+"11", border: `1px solid ${T.accent}44`, padding: 20, borderRadius: 6, marginTop: 8 }}>
+                    <div style={{ fontSize: 12, textTransform: "uppercase", color: T.accentLight, fontWeight: "bold", marginBottom: 16 }}>📦 Tirage & Matières Sèches</div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                      <div style={{ fontSize: 14, color: T.textStrong, fontWeight: "bold" }}>Nombre de cols estimés :</div>
+                      <div style={{ fontSize: 22, color: T.textStrong, fontWeight: "bold", fontFamily: "monospace" }}>{resMix.nbCols.toLocaleString('fr-FR')}</div>
+                    </div>
+                  </div>
+                  <Btn 
+                    onClick={handleValiderMixtion} 
+                    disabled={isSubmitting || !mixBaseTankId || !mixLevainTankId || !mixDestTankId}
+                    style={{ width: "100%", marginTop: 16, height: 48, fontSize: 14, background: isSubmitting ? T.textDim : T.accent, transition: "background 0.2s" }}
+                  >
+                    {isSubmitting ? "Enregistrement sécurisé en cours..." : "Valider & Lancer la Mixtion"}
+                  </Btn>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "PLANNING" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+            <div style={{ background: T.surfaceHigh, padding: "20px 24px", borderRadius: 8, border: `1px solid ${T.border}`, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: "bold", color: T.accentLight, marginBottom: 4 }}>Température de Cuve à Levain</div>
+                <div style={{ fontSize: 12, color: T.textDim, marginBottom: 16 }}>Détermine la vitesse de multiplication nocturne des levures.</div>
+              </div>
+              <div style={{ display: "flex", gap: 12 }}>
+                {[13, 16, 20].map(temp => (
+                  <button key={temp} onClick={() => updateConfig('levainTemp', temp)} style={{ flex: 1, padding: "8px 0", borderRadius: 4, border: `1px solid ${config.levainTemp === temp ? T.accent : T.border}`, background: config.levainTemp === temp ? T.accent+"22" : T.surface, color: config.levainTemp === temp ? T.accent : T.textDim, fontWeight: "bold", cursor: "pointer" }}>
+                    {temp} °C
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ background: T.surfaceHigh, padding: "20px 24px", borderRadius: 8, border: `1px dashed ${T.border}` }}>
+              <div style={{ fontSize: 12, fontWeight: "bold", color: T.textDim, textTransform: "uppercase", marginBottom: 12 }}>Inventaire Initial (Modifiable)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize: 12 }}><span>Bouteilles:</span> <Input type="number" value={tirageStocks.bouteilles} onChange={e=>setTirageStocks({...tirageStocks, bouteilles: parseInt(e.target.value)||0})} style={{width: 70, height: 24, fontSize:11}} /></div>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize: 12 }}><span>Bidules:</span> <Input type="number" value={tirageStocks.bidules} onChange={e=>setTirageStocks({...tirageStocks, bidules: parseInt(e.target.value)||0})} style={{width: 70, height: 24, fontSize:11}} /></div>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize: 12 }}><span>Capsules:</span> <Input type="number" value={tirageStocks.capsules} onChange={e=>setTirageStocks({...tirageStocks, capsules: parseInt(e.target.value)||0})} style={{width: 70, height: 24, fontSize:11}} /></div>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "250px 1fr", gap: 32 }}>
+            <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: 20 }}>
+              <div style={{ fontSize: 14, fontWeight: "bold", color: T.textStrong, marginBottom: 20 }}>Programme de Tirage</div>
+              <div style={{ fontSize: 11, color: T.textDim, marginBottom: 12, fontStyle: "italic" }}>Saisissez le volume de <strong>vin de base</strong> à tirer chaque jour.</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                {tirageDays.map(day => (
+                  <div key={day.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 12, borderBottom: `1px dashed ${T.border}` }}>
+                    <div style={{ fontSize: 14, color: T.text }}>{day.name}</div>
+                    <Input 
+                      type="number" step="0.5" 
+                      value={day.vinBaseVolume} 
+                      onChange={e => setTirageDays(tirageDays.map(d => d.id === day.id ? { ...d, vinBaseVolume: e.target.value } : d))}
+                      style={{ width: 70, textAlign: "center" }} 
+                      title="Volume de vin en hL"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+              <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, overflow: "hidden" }}>
+                <div style={{ padding: "16px 20px", background: T.surfaceHigh, borderBottom: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between" }}>
+                  <div style={{ fontSize: 14, fontWeight: "bold", color: T.textStrong }}>Cycle de vie de la Cuve à Levain</div>
+                  <div style={{ fontSize: 11, color: T.textDim, textTransform: "uppercase" }}>Hypothèse : {config.mixLevainPct}% Levain | Dilution : {config.levainTemp === 16 ? "0.78" : config.levainTemp === 20 ? "0.70" : "0.87"}</div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "80px 100px 100px 100px 1fr 100px", padding: "12px 20px", background: T.bg, borderBottom: `1px solid ${T.border}`, fontSize: 10, fontWeight: "bold", color: T.textDim, textTransform: "uppercase", gap: 10 }}>
+                  <div>Jour</div>
+                  <div style={{ textAlign: "center" }} title="Volume total présent dans la cuve le matin avant le tirage.">Vol. Matin</div>
+                  <div style={{ textAlign: "center", color: T.accentLight }} title="Ce que vous prélevez pour la mixtion du jour.">Prélèvement</div>
+                  <div style={{ textAlign: "center" }} title="Ce qu'il reste dans la cuve.">Reste Cuve</div>
+                  <div style={{ textAlign: "center", color: T.green }} title="Vin + Eau + Sucre ajoutés pour nourrir les levures.">Alimentation</div>
+                  <div style={{ textAlign: "right" }} title="Volume cible que la cuve atteindra le lendemain matin après multiplication.">Cible Demain</div>
+                </div>
+                {cascade.map((p, i) => (
+                  <div key={p.id} style={{ display: "grid", gridTemplateColumns: "80px 100px 100px 100px 1fr 100px", padding: "16px 20px", alignItems: "center", borderBottom: i < cascade.length - 1 ? `1px solid ${T.border}` : "none", gap: 10 }}>
+                    <div style={{ fontSize: 13, fontWeight: "bold", color: T.textStrong }}>{p.name}</div>
+                    <div style={{ textAlign: "center", fontSize: 14, fontWeight: "bold", fontFamily: "monospace", color: p.totalLevainCuveMatin === maxLevainVol ? T.accent : T.textDim }}>{p.totalLevainCuveMatin.toFixed(1)} hL</div>
+                    <div style={{ textAlign: "center", fontSize: 13, color: T.accentLight, fontWeight: "bold" }}>-{p.besoinLevain.toFixed(2)} hL</div>
+                    <div style={{ textAlign: "center", fontSize: 13, color: T.textDim }}>{p.resteCuve.toFixed(2)} hL</div>
+                    <div style={{ textAlign: "center", fontSize: 13, color: T.green, fontWeight: "bold" }}>{p.alimentation > 0 ? `+ ${p.alimentation.toFixed(2)} hL` : "-"}</div>
+                    <div style={{ textAlign: "right", fontSize: 13, fontFamily: "monospace", color: T.textDim }}>{i < cascade.length -1 ? cascade[i+1].totalLevainCuveMatin.toFixed(1) : "0.0"} hL</div>
+                  </div>
+                ))}
+                <div style={{ padding: 20, background: T.bg, borderTop: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                    <div style={{ fontSize: 20 }}>💡</div>
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: "bold", color: T.textStrong }}>Création de la Cuve à Levain</div>
+                      <div style={{ fontSize: 12, color: T.textDim, marginTop: 4 }}>Besoin initial : <strong>{maxLevainVol.toFixed(1)} hL</strong>.</div>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                    <Select value={createLevainSourceId} onChange={e => setCreateLevainSourceId(e.target.value)} style={{ width: 180, fontSize: 12 }}>
+                      <option value="">-- Pomper le vin depuis --</option>
+                      {cuvesVinBase.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
+                    </Select>
+                    <Btn onClick={handleAutoCreateLevain} style={{ fontSize: 12, padding: "8px 16px" }} disabled={isSubmitting || !createLevainSourceId}>{isSubmitting ? "Création..." : "+ Créer le Levain"}</Btn>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, overflow: "hidden" }}>
+                <div style={{ padding: "12px 20px", background: T.surfaceHigh, borderBottom: `1px solid ${T.border}`, fontSize: 14, fontWeight: "bold", color: T.textStrong }}>
+                  Consommation des Matières Sèches
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "80px 100px 100px 1fr 1fr 1fr", padding: "12px 20px", background: T.bg, borderBottom: `1px solid ${T.border}`, fontSize: 10, fontWeight: "bold", color: T.textDim, textTransform: "uppercase", gap: 10 }}>
+                  <div>Jour</div>
+                  <div style={{ textAlign: "center" }}>Tirage Mixtion</div>
+                  <div style={{ textAlign: "center" }}>Cols tirés</div>
+                  <div style={{ textAlign: "right" }}>Stock Btls</div>
+                  <div style={{ textAlign: "right" }}>Stock {config.tirageBouchage === "CAPSULE" ? "Bidules" : "Liège"}</div>
+                  <div style={{ textAlign: "right" }}>Stock {config.tirageBouchage === "CAPSULE" ? "Capsules" : "Agrafes"}</div>
+                </div>
+                {cascade.map((p, i) => {
+                  const isBtlLow = p.stockBouteilles < 0;
+                  const isF1Low = p.stockF1 < 0;
+                  const isF2Low = p.stockF2 < 0;
+                  const hasShortage = isBtlLow || isF1Low || isF2Low;
+                  return (
+                    <div key={p.id} style={{ display: "grid", gridTemplateColumns: "80px 100px 100px 1fr 1fr 1fr", padding: "12px 20px", alignItems: "center", borderBottom: i < cascade.length - 1 ? `1px solid ${T.border}` : "none", background: hasShortage ? T.red+"11" : "transparent", gap: 10 }}>
+                      <div style={{ fontSize: 13, fontWeight: "bold", color: hasShortage ? T.red : T.textStrong }}>{p.name}</div>
+                      <div style={{ textAlign: "center", fontSize: 13, color: T.text }}>{p.volMixtion.toFixed(1)} hL</div>
+                      <div style={{ textAlign: "center", fontSize: 13, color: T.textStrong, fontWeight: "bold" }}>-{p.nbColsTires.toLocaleString('fr-FR')}</div>
+                      <div style={{ textAlign: "right", fontSize: 13, fontFamily: "monospace", fontWeight: "bold", color: isBtlLow ? T.red : T.textDim }}>{p.stockBouteilles.toLocaleString('fr-FR')}</div>
+                      <div style={{ textAlign: "right", fontSize: 13, fontFamily: "monospace", fontWeight: "bold", color: isF1Low ? T.red : T.textDim }}>{p.stockF1.toLocaleString('fr-FR')}</div>
+                      <div style={{ textAlign: "right", fontSize: 13, fontFamily: "monospace", fontWeight: "bold", color: isF2Low ? T.red : T.textDim }}>{p.stockF2.toLocaleString('fr-FR')}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "ALIM" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 32 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+            <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: "bold", color: T.accentLight, marginBottom: 16 }}>1. Volumes (du Planning)</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <FF label="Volume Restant (hL)"><Input type="number" step="0.1" value={config.alimVolLevain} onChange={e=>updateConfig('alimVolLevain', e.target.value)} /></FF>
+                <FF label="Volume Visé (hL)"><Input type="number" step="0.1" value={config.alimVolFinal} onChange={e=>updateConfig('alimVolFinal', e.target.value)} /></FF>
+              </div>
+            </div>
+            <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: "bold", color: T.textStrong, marginBottom: 16 }}>2. Activité des Levures</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <FF label="Densité VEILLE (ex: 1006)"><Input type="number" value={config.alimDensiteVeille} onChange={e=>updateConfig('alimDensiteVeille', e.target.value)} /></FF>
+                <FF label="Densité CE MATIN (ex: 998)"><Input type="number" value={config.alimDensiteMatin} onChange={e=>updateConfig('alimDensiteMatin', e.target.value)} /></FF>
+              </div>
+            </div>
+            <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
+              <div style={{ fontSize: 14, fontWeight: "bold", color: T.textStrong, marginBottom: 16 }}>3. Intrants</div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+                <FF label="Liqueur (g/L)"><Input type="number" value={config.alimLiqueurG} onChange={e=>updateConfig('alimLiqueurG', e.target.value)} /></FF>
+                <FF label="TAV Vin Nourricier (%)"><Input type="number" step="0.1" value={config.alimAlcVin} onChange={e=>updateConfig('alimAlcVin', e.target.value)} /></FF>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div style={{ position: "sticky", top: 20, background: T.surface, padding: 32, borderRadius: 8, border: `2px solid ${T.accent}`, boxShadow: `0 10px 30px ${T.accent}22` }}>
+              <div style={{ fontSize: 12, color: T.accent, textTransform: "uppercase", letterSpacing: 2, fontWeight: "bold", marginBottom: 24, textAlign: "center" }}>Recette d'Alimentation</div>
+              {!resAlim ? (
+                <div style={{ textAlign: "center", color: T.textDim, fontStyle: "italic", padding: "40px 0" }}>Vérifiez vos volumes. Le volume visé doit être supérieur au volume restant.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 16, borderBottom: `1px dashed ${T.border}` }}>
+                    <div style={{ fontSize: 13, color: T.textDim }}>Sucre consommé (nuit) :</div>
+                    <div style={{ fontSize: 14, color: T.textStrong, fontWeight: "bold" }}>{resAlim.sucreConsomme} g/L</div>
+                  </div>
+                  <div style={{ padding: "16px 0", display: "flex", flexDirection: "column", gap: 16 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ fontSize: 15, color: T.text, fontWeight: "bold" }}>1️⃣ Liqueur :</div>
+                      <div style={{ fontSize: 20, color: T.accentLight, fontWeight: "bold", fontFamily: "monospace" }}>+ {resAlim.vLiqueur} hL</div>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ fontSize: 15, color: T.text, fontWeight: "bold" }}>2️⃣ Vin ({config.alimAlcVin}%) :</div>
+                      <div style={{ fontSize: 20, color: T.accentLight, fontWeight: "bold", fontFamily: "monospace" }}>+ {resAlim.vVin} hL</div>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ fontSize: 15, color: T.text, fontWeight: "bold" }}>3️⃣ Eau pure :</div>
+                      <div style={{ fontSize: 20, color: "#3b82f6", fontWeight: "bold", fontFamily: "monospace" }}>+ {resAlim.vEau} hL</div>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ fontSize: 15, color: T.text, fontWeight: "bold" }}>4️⃣ Azote (DAP) :</div>
+                      <div style={{ fontSize: 20, color: "#10b981", fontWeight: "bold", fontFamily: "monospace" }}>+ {resAlim.dap} kg</div>
+                    </div>
+                  </div>
+                  <div style={{ background: T.accent+"11", border: `1px solid ${T.accent}44`, padding: 20, borderRadius: 6, marginTop: 16 }}>
+                    <div style={{ fontSize: 12, textTransform: "uppercase", color: T.accentLight, fontWeight: "bold", marginBottom: 12 }}>🔄 Exécuter l'alimentation</div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                      <Select value={alimSourceTankId} onChange={e => setAlimSourceTankId(e.target.value)} style={{ fontSize: 12 }}>
+                        <option value="">-- Vin nourricier --</option>
+                        {cuvesVinBase.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
+                      </Select>
+                      <Select value={alimLevainTankId} onChange={e => {
+                          setAlimLevainTankId(e.target.value);
+                          const t = cuvesLevain.find(c => String(c.id) === String(e.target.value));
+                          if (t) updateConfig('alimVolLevain', t.currentVolume);
+                      }} style={{ fontSize: 12 }}>
+                        <option value="">-- Cuve à Levain --</option>
+                        {cuvesLevain.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
+                      </Select>
+                    </div>
+                    <Btn onClick={handleValiderAlimentation} disabled={!alimSourceTankId || !alimLevainTankId} style={{ width: "100%", fontSize: 13 }}>Valider l'Alimentation</Btn>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
 // ASSEMBLAGES
 // =============================================================================
 function Assemblages() {
@@ -5081,7 +5780,6 @@ function Expeditions({ onSelectLot }) {
     </div>
   );
 }
-
 
 // =============================================================================
 // MODALE : AJOUTER UN NOUVEAU PRODUIT AU CATALOGUE (SÉCURISÉ)
@@ -6585,353 +7283,359 @@ function GlobalSearch({ onNavigate, onSelectContainer, onSelectLot }) {
 }
 
 // =============================================================================
-// MODULE DÉGUSTATION (AVEC ARBORESCENCE AROMATIQUE - NIVEAU PRODUCTION)
+// ADMINISTRATIF & DOUANES (CAHIER DE PRESSOIR, DRM, EXPORTS)
 // =============================================================================
-
-const PHASES_DEGUSTATION = [
-  { id: "BAIES", label: "🍇 Baies", desc: "Maturité phénolique sur parcelle" },
-  { id: "FERMENTATION", label: "🧪 Fermentation", desc: "Moûts et FA/FML en cours" },
-  { id: "VINS_CLAIRS", label: "🍷 Vins Clairs", desc: "Vins de base & Réserve" },
-  { id: "DOSAGE", label: "🍾 Essais Dosage", desc: "Tests de liqueur pré-dégorgement" },
-  { id: "CHAMPAGNE", label: "🥂 Produit Fini", desc: "Contrôle après vieillissement" } // 👈 Remplacé FINI par CHAMPAGNE
-];
-
-// La taxonomie tirée de votre document Word (Arborescence V5 Fizz)
-const AROMES_TAXONOMY = {
-  "Fruités & Floraux": [
-    "Agrume", "Fruit blanc/jaune", "Fruit Exotique", "Fruit rouge/noir", "Floral"
-  ],
-  "Végétaux & Épicés": [
-    "Pl. arom. / Résineux", "Végétal sec", "Végétal frais", "Epice"
-  ],
-  "Évolués & Pâtissiers": [
-    "Lactique", "Boulangerie", "Empyreumatique", "Fruit mûr/cuit confit", "Fruit sec/à coque", "Miellé", "Boisé"
-  ],
-  "Défauts & Atypiques": [
-    "Animal", "Composé Minéral", "Acescence / Solvant", "Acétique", "Carton", "Sous-bois / Champignon", "Moisi", "Terreux", "SO2"
-  ]
-};
-
-// Descripteurs de Bouche / Saveurs (Inspiré de votre document)
-const SAVEURS_TAXONOMY = ["Acide", "Amer", "Sucré", "Salé", "Umami", "Rond", "Astringent", "Huileux"];
-
-function DegustationModal({ onClose, defaultPhase = "BAIES" }) {
-  const T = useTheme();
-  const { state, dispatch, refreshData } = useStore();
-
-  const [form, setForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
-    phase: defaultPhase,
-    parcelle: "",
-    lotId: "",
-    bottleLotId: "",
-    robe: "",
-    noteGlobale: "",
-    sucreTest: "",
-    notes: ""
+function Administratif() {
+  const T = useTheme(); 
+  const { state } = useStore();
+  const [tab, setTab] = useState("pressoir");
+  const [modal, setModal] = useState(null);
+  
+  const [year, setYear] = useState(new Date().getFullYear().toString());
+  const [drmMonth, setDrmMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; 
   });
 
-  // Gestion des tags cliquables
-  const [selectedNez, setSelectedNez] = useState([]);
-  const [selectedBouche, setSelectedBouche] = useState([]);
+  // ==========================================
+  // 1. LOGIQUE CAHIER DE PRESSOIR
+  // ==========================================
+  const pressings = state.pressings || [];
+  const years = [...new Set(pressings.map(p => p.date ? p.date.split("-")[0] : ""))].filter(Boolean).sort((a,b) => b - a);
+  
+  const activeYear = years.includes(year) ? year : (years[0] || new Date().getFullYear().toString());
+  const filteredPressings = pressings
+    .filter(p => p.date && p.date.startsWith(activeYear))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
+  const totalKg = filteredPressings.reduce((sum, p) => sum + (parseFloat(p.weightKilos || p.weight) || 0), 0);
+  const totalTheoCuvee = ((totalKg / 4000) * 20.5).toFixed(2);
+  const totalTheoTaille = ((totalKg / 4000) * 5.0).toFixed(2);
+
+  // ==========================================
+  // 2. LOGIQUE DRM (REGISTRE DE CAVE)
+  // ==========================================
+  const [drmY, drmM] = drmMonth.split('-');
+  const targetMonthStr = `${drmM}/${drmY}`; 
+  const currentMonthLabel = new Date(drmMonth + '-01').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
+  const drmEvents = (state.events || []).filter(e => e.date.includes(targetMonthStr));
+  const pertesMois = drmEvents.filter(e => e.type === "PERTE" || e.type === "CASSE");
+  const distillerieMois = drmEvents.filter(e => e.type === "DISTILLERIE");
+
+  const getVolSafe = (e) => {
+    const vol = parseFloat(e.volumeOut || e.volumeIn || 0);
+    if (vol > 0) return vol;
+    return parseFloat(e.note?.match(/\d+(\.\d+)?/)?.[0] || 0);
+  };
+
+  const distilMoisHl = distillerieMois.reduce((s, e) => s + getVolSafe(e), 0);
+
+  const getLotNameSafe = (e) => {
+    const lot = state.lots?.find(l => String(l.id) === String(e.lotId));
+    if (lot) return lot.code;
+    const bLot = state.bottleLots?.find(b => String(b.id) === String(e.lotId));
+    return bLot ? bLot.code : "Inconnu";
+  };
+
+  // ==========================================
+  // 3. MOTEUR D'EXPORTS (CSV & PDF)
+  // ==========================================
+  
+  // Fonction utilitaire pour déclencher le téléchargement d'un CSV
+  const downloadCSV = (csvContent, fileName) => {
+    // Le BOM (\uFEFF) force Excel à lire le fichier en UTF-8 (pour les accents)
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", fileName);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const exportPressoirCSV = () => {
+    // Séparateur Point-Virgule pour Excel France
+    let csv = "Date;N° Marc;Parcelle/Provenance;Cépage;Kilos;Degré;Destination\n";
+    filteredPressings.forEach(p => {
+      const dateStr = new Date(p.date).toLocaleDateString('fr-FR');
+      const marc = p.marcNumber || "";
+      const parcelle = p.parcelleName || p.provenance || "";
+      const cepage = p.cepage || "";
+      const kilos = p.weightKilos || p.weight || 0;
+      const degre = p.potentialAlc || "";
+      const dest = p.destinationTank || "";
+      csv += `${dateStr};${marc};${parcelle};${cepage};${kilos};${degre};${dest}\n`;
+    });
+    downloadCSV(csv, `Cahier_Pressoir_${activeYear}.csv`);
+  };
+
+  const exportDrmCSV = () => {
+    let csv = "Date;Type de Sortie;Lot concerne;Quantite Sortie;Unite;Motif/Destinataire;Operateur\n";
+    
+    distillerieMois.forEach(e => {
+      const dateStr = e.date.split(" à ")[0];
+      const note = e.note?.replace("[DISTILLERIE] Motif: ", "") || "";
+      csv += `${dateStr};DISTILLERIE;${getLotNameSafe(e)};${getVolSafe(e)};hL;${note};${e.operator}\n`;
+    });
+
+    pertesMois.forEach(e => {
+      const dateStr = e.date.split(" à ")[0];
+      const unite = e.type === "CASSE" ? "Bouteilles" : "hL";
+      csv += `${dateStr};${e.type};${getLotNameSafe(e)};${getVolSafe(e)};${unite};${e.note};${e.operator}\n`;
+    });
+
+    downloadCSV(csv, `DRM_Sorties_${drmMonth}.csv`);
+  };
+
+  const exportPDF = () => {
+    // Déclenche la fenêtre d'impression native du navigateur
+    window.print();
+  };
+
+  return (
+    <div className="admin-container">
+      {/* RÈGLES D'IMPRESSION (Masque les menus lors de l'export PDF) */}
+      <style>{`
+        @media print {
+          body * { visibility: hidden; }
+          .admin-container, .admin-container * { visibility: visible; }
+          .admin-container { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
+          .no-print { display: none !important; }
+          .print-header { font-size: 24px !important; margin-bottom: 20px !important; color: #000 !important; }
+        }
+      `}</style>
+
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:28 }}>
+        <h1 className="print-header" style={{ fontFamily:"'Playfair Display', serif", fontSize:32, color:T.textStrong, margin:0 }}>
+          {tab === "pressoir" ? `Cahier de Pressoir - ${activeYear}` : `Registre de Cave - ${currentMonthLabel}`}
+        </h1>
+        
+        {/* BOUTONS CACHÉS À L'IMPRESSION */}
+        <div className="no-print" style={{ display:"flex", gap: 10 }}>
+          <button onClick={() => setTab("pressoir")} style={{ background: tab==="pressoir" ? T.accent : "transparent", color: tab==="pressoir" ? T.bg : T.accent, border: `1px solid ${T.accent}`, padding: "9px 18px", borderRadius: 4, fontSize: 11, fontWeight: "bold", cursor: "pointer", transition:"all .2s" }}>
+            CAHIER DE PRESSOIR
+          </button>
+          <button onClick={() => setTab("drm")} style={{ background: tab==="drm" ? T.accent : "transparent", color: tab==="drm" ? T.bg : T.accent, border: `1px solid ${T.accent}`, padding: "9px 18px", borderRadius: 4, fontSize: 11, fontWeight: "bold", cursor: "pointer", transition:"all .2s" }}>
+            REGISTRE DE CAVE (DRM)
+          </button>
+        </div>
+      </div>
+
+      {/* --- VUE CAHIER DE PRESSOIR --- */}
+      {tab === "pressoir" && (
+        <div style={{ display:"flex", flexDirection:"column", gap:24 }}>
+          
+          <div className="no-print" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", background:T.surfaceHigh, padding:20, borderRadius:8, border:`1px solid ${T.border}` }}>
+            <div style={{ display:"flex", gap:24, alignItems:"center" }}>
+              <FF label="Année de récolte">
+                <Select value={activeYear} onChange={e => setYear(e.target.value)} style={{ width:120 }}>
+                  {years.length > 0 ? years.map(y => <option key={y} value={y}>{y}</option>) : <option value={year}>{year}</option>}
+                </Select>
+              </FF>
+              <div style={{ height:30, width:1, background:T.border }} />
+              <div>
+                <div style={{ fontSize:10, color:T.textDim, textTransform:"uppercase", marginBottom:4 }}>Total Kilos {activeYear}</div>
+                <div style={{ fontSize:18, color:T.accentLight, fontWeight:"bold" }}>{totalKg.toLocaleString()} kg</div>
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:16, alignItems: "center" }}>
+              <Btn variant="secondary" onClick={exportPressoirCSV}>📥 Exporter CSV</Btn>
+              <Btn variant="secondary" onClick={exportPDF}>📄 Imprimer PDF</Btn>
+            </div>
+          </div>
+
+          <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, overflow: "hidden" }}>
+             <div style={{ display: "grid", gridTemplateColumns: "100px 100px 1.5fr 1fr 100px 80px 1fr", padding: "12px 20px", background: T.surfaceHigh, borderBottom: `2px solid ${T.border}`, fontSize: 10, fontWeight: "bold", color: T.textDim, textTransform: "uppercase" }}>
+                <div>Date</div><div>N° Marc</div><div>Parcelle</div><div>Cépage</div><div style={{textAlign:"right"}}>Kilos</div><div style={{textAlign:"right"}}>Dég.</div><div>Destination</div>
+             </div>
+             {filteredPressings.map((p, i) => (
+                <div key={p.id} style={{ display: "grid", gridTemplateColumns: "100px 100px 1.5fr 1fr 100px 80px 1fr", padding: "14px 20px", alignItems: "center", borderBottom: `1px solid ${T.border}`, background: i%2===0?"transparent":T.surfaceHigh+"44", fontSize: 13 }}>
+                   <div style={{ color:T.textDim }}>{new Date(p.date).toLocaleDateString('fr-FR').slice(0,5)}</div>
+                   <div style={{ fontFamily:"monospace", fontWeight:"bold" }}>{p.marcNumber || `M-${i+1}`}</div>
+                   <div style={{ fontWeight:"500" }}>{p.parcelleName || p.provenance}</div>
+                   <div style={{ color:T.textDim }}>{p.cepage}</div>
+                   <div style={{ textAlign:"right", fontWeight:"bold" }}>{p.weightKilos?.toLocaleString()}</div>
+                   <div style={{ textAlign:"right", color:T.accent }}>{p.potentialAlc}°</div>
+                   <div style={{ textAlign:"right", fontSize:11, color:T.textDim }}>{p.destinationTank || "En pressoir"}</div>
+                </div>
+             ))}
+             {/* Total visible à l'impression */}
+             <div style={{ padding: "16px 20px", background: T.surfaceHigh, borderTop: `2px solid ${T.border}`, textAlign: "right" }}>
+                <span style={{ fontSize: 12, textTransform: "uppercase", color: T.textDim, marginRight: 16 }}>Poids Total :</span>
+                <span style={{ fontSize: 16, fontWeight: "bold", color: T.textStrong }}>{totalKg.toLocaleString()} kg</span>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- VUE DRM --- */}
+      {tab === "drm" && (
+        <div style={{ display:"flex", flexDirection:"column", gap:24 }}>
+          
+          <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+              <span style={{ fontSize: 13, fontWeight: "bold", color: T.textStrong }}>Période :</span>
+              <Input type="month" value={drmMonth} onChange={e => setDrmMonth(e.target.value)} style={{ width: 170 }} />
+            </div>
+            <div style={{ display: "flex", gap: 12 }}>
+               <Btn variant="secondary" onClick={exportDrmCSV}>📥 Exporter CSV</Btn>
+               <Btn variant="secondary" onClick={exportPDF}>📄 Imprimer PDF</Btn>
+            </div>
+          </div>
+
+          {/* Section Distillerie */}
+          <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:20 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ fontSize: 12, fontWeight: "bold", color: T.textStrong, textTransform: "uppercase", letterSpacing: 1 }}>Sorties Distillerie</div>
+              <div style={{ fontSize: 14, fontWeight: "bold", color: "#d98b2b", fontFamily: "monospace" }}>Total : -{distilMoisHl.toFixed(2)} hL</div>
+            </div>
+            <div style={{ display:"grid", gridTemplateColumns:"120px 150px 100px 1fr 120px", padding:"10px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase" }}>
+              <div>Date</div><div>Lot</div><div>Quantité</div><div>Motif</div><div>Opérateur</div>
+            </div>
+            {distillerieMois.length === 0 ? <div style={{ padding:30, textAlign:"center", color:T.textDim }}>Aucun mouvement ce mois-ci.</div> : 
+              distillerieMois.map(e => (
+                <div key={e.id} style={{ display:"grid", gridTemplateColumns:"120px 150px 100px 1fr 120px", padding:"14px 16px", borderBottom:`1px solid ${T.border}`, fontSize:12 }}>
+                  <div style={{ color:T.textDim }}>{e.date.split(" à ")[0]}</div>
+                  <div style={{ fontWeight:"bold" }}>{getLotNameSafe(e)}</div>
+                  <div style={{ color:"#d98b2b", fontWeight:"bold" }}>-{getVolSafe(e)} hL</div>
+                  <div>{e.note?.replace("[DISTILLERIE] Motif: ", "")}</div>
+                  <div style={{ color:T.textDim }}>{e.operator}</div>
+                </div>
+              ))
+            }
+          </div>
+          
+          {/* Section Pertes */}
+          <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:20 }}>
+             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: "bold", color: T.textStrong, textTransform: "uppercase", letterSpacing: 1 }}>Pertes & Casses déclarées</div>
+                <Btn className="no-print" onClick={() => setModal("perte")} style={{ background:T.red, borderColor:T.red, color:"#fff" }}>⚠️ Déclarer Perte</Btn>
+             </div>
+             <div style={{ display:"grid", gridTemplateColumns:"120px 80px 150px 100px 1fr 120px", padding:"10px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase" }}>
+                <div>Date</div><div>Type</div><div>Lot</div><div>Quantité</div><div>Motif</div><div>Opérateur</div>
+             </div>
+             {pertesMois.length === 0 ? <div style={{ padding:30, textAlign:"center", color:T.textDim }}>Aucune perte déclarée.</div> :
+               pertesMois.map(e => (
+                 <div key={e.id} style={{ display:"grid", gridTemplateColumns:"120px 80px 150px 100px 1fr 120px", padding:"14px 16px", borderBottom:`1px solid ${T.border}`, fontSize:12 }}>
+                   <div style={{ color:T.textDim }}>{e.date.split(" à ")[0]}</div>
+                   <div><Badge label={e.type} color={T.red} /></div>
+                   <div style={{ fontWeight:"bold" }}>{getLotNameSafe(e)}</div>
+                   <div style={{ color:T.red, fontWeight:"bold" }}>-{getVolSafe(e)} {e.type === "CASSE" ? "btl" : "hL"}</div>
+                   <div>{e.note}</div>
+                   <div style={{ color:T.textDim }}>{e.operator}</div>
+                 </div>
+               ))
+             }
+          </div>
+        </div>
+      )}
+      
+      {modal === "perte" && <PerteCasseModal onClose={() => setModal(null)} />}
+    </div>
+  );
+}
+
+// =============================================================================
+// MODALE : DÉCLARATION DE PERTES ET CASSES (SÉCURISÉE)
+// =============================================================================
+function PerteCasseModal({ onClose }) {
+  const T = useTheme();
+  const { user } = useAuth();
+  const { state, dispatch, refreshData } = useStore();
+
+  const [type, setType] = useState("BOTTLE"); // "BOTTLE" ou "BULK"
+  const [entityId, setEntityId] = useState("");
+  const [amount, setAmount] = useState("");
+  const [note, setNote] = useState("");
+  
+  // 👈 NOUVEAU: Sécurité de l'appel API
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
-  const toggleTag = (list, setList, tag) => {
-    if (list.includes(tag)) setList(list.filter(t => t !== tag));
-    else setList([...list, tag]);
-  };
-
-  const getTargetOptions = () => {
-    if (form.phase === "BAIES") {
-      return (state.parcelles || []).map(p => <option key={p.id} value={p.nom}>{p.nom}</option>);
-    }
-    if (["FERMENTATION", "VINS_CLAIRS"].includes(form.phase)) {
-      return (state.lots || []).filter(l => l.volume > 0).map(l => <option key={l.id} value={l.id}>{l.code} ({l.volume} hL)</option>);
-    }
-    if (["DOSAGE", "CHAMPAGNE"].includes(form.phase)) {
-      return (state.bottleLots || []).map(b => <option key={b.id} value={b.id}>{b.code} ({b.currentCount} btl)</option>);
-    }
-    return null;
-  };
+  const availBulk = (state.lots || []).filter(l => l.volume > 0 && l.status !== "TIRE" && l.status !== "ARCHIVE");
+  const availBottles = (state.bottleLots || []).filter(b => b.currentCount > 0);
 
   const submit = async () => {
-    // Validation frontend basique avant d'envoyer au backend
-    if (form.phase === "BAIES" && !form.parcelle) return alert("Veuillez sélectionner une parcelle.");
-    if (["FERMENTATION", "VINS_CLAIRS"].includes(form.phase) && !form.lotId) return alert("Veuillez sélectionner un lot de vin.");
-    if (["DOSAGE", "CHAMPAGNE"].includes(form.phase) && !form.bottleLotId) return alert("Veuillez sélectionner un lot de bouteilles.");
-
-    setIsSubmitting(true);
+    if (!entityId || !amount || !note) return alert("Veuillez remplir tous les champs, le motif est obligatoire.");
     
+    setIsSubmitting(true);
     try {
-      const payload = {
-        ...form,
-        nez: selectedNez.length > 0 ? selectedNez.join(', ') : undefined,     // On envoie une string propre au backend
-        bouche: selectedBouche.length > 0 ? selectedBouche.join(', ') : undefined,
-        noteGlobale: form.noteGlobale ? parseFloat(form.noteGlobale) : undefined,
-        sucreTest: form.sucreTest ? parseFloat(form.sucreTest) : undefined,
-        idempotencyKey
+      const payload = { 
+        entityType: type, 
+        entityId: String(entityId), 
+        amount: parseFloat(amount), 
+        note: note.trim(),
+        idempotencyKey: idempotencyKey
       };
 
-      const res = await fetch('/api/degustations', {
+      const res = await fetch('/api/pertes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
       const data = await res.json();
-      
+
       if (!res.ok) {
-        throw new Error(data.error || "Erreur lors de la sauvegarde.");
+        throw new Error(data.error || "Une erreur est survenue.");
       }
 
-      dispatch({ type: "TOAST_ADD", payload: { msg: "Dégustation enregistrée avec succès !", color: T.green } });
+      dispatch({ type: "TOAST_ADD", payload: { msg: "Déclaration enregistrée et validée pour les douanes.", color: T.green } });
       
+      // On rafraîchit la BDD complète pour mettre à jour les stocks et le DRM
       if (refreshData) await refreshData();
       onClose();
 
-    } catch (e) {
+    } catch(e) { 
       dispatch({ type: "TOAST_ADD", payload: { msg: e.message, color: T.red } });
+    } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <Modal title="Nouvelle Dégustation" onClose={onClose}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
-        <FF label="Date">
-          <Input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} disabled={isSubmitting} />
+    <Modal title="Déclarer une Perte ou Casse" onClose={onClose}>
+      <div style={{ background:T.red+"15", padding:14, borderRadius:4, marginBottom:20, fontSize:12, color:T.red, borderLeft:`3px solid ${T.red}` }}>
+        Attention : Cette opération est transactionnelle et définitive. Les volumes ou bouteilles seront immédiatement soustraits du registre de cave légal.
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12, marginBottom:16 }}>
+        <FF label="Type de perte">
+          <Select value={type} onChange={e => { setType(e.target.value); setEntityId(""); }}>
+            <option value="BOTTLE">Casse Bouteilles (unités)</option>
+            <option value="BULK">Perte Vrac (hL) / Distillerie</option>
+          </Select>
         </FF>
-        <FF label="Phase d'élaboration">
-          <Select value={form.phase} onChange={e => setForm({...form, phase: e.target.value, parcelle: "", lotId: "", bottleLotId: ""})} disabled={isSubmitting}>
-            {PHASES_DEGUSTATION.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+        <FF label="Lot concerné">
+          <Select value={entityId} onChange={e => setEntityId(e.target.value)}>
+            <option value="">-- Choisir un lot --</option>
+            {type === "BULK" 
+              ? availBulk.map(l => <option key={l.id} value={l.id}>{l.code} (Dispo: {l.volume} hL)</option>)
+              : availBottles.map(b => <option key={b.id} value={b.id}>{b.code} (Dispo: {b.currentCount} btl)</option>)
+            }
           </Select>
         </FF>
       </div>
 
-      <div style={{ background: T.surfaceHigh, padding: 16, borderRadius: 6, border: `1px solid ${T.border}`, marginBottom: 20 }}>
-        <FF label="Élément dégusté (Cible obligatoire)">
-          <Select value={form.phase === "BAIES" ? form.parcelle : (form.phase === "DOSAGE" || form.phase === "CHAMPAGNE" ? form.bottleLotId : form.lotId)} 
-                  onChange={e => {
-                    const val = e.target.value;
-                    if (form.phase === "BAIES") setForm({...form, parcelle: val});
-                    else if (["DOSAGE", "CHAMPAGNE"].includes(form.phase)) setForm({...form, bottleLotId: val});
-                    else setForm({...form, lotId: val});
-                  }} disabled={isSubmitting}>
-            <option value="">-- Sélectionner l'élément --</option>
-            {getTargetOptions()}
-          </Select>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12 }}>
+        <FF label={type === "BULK" ? "Volume perdu (hL)" : "Nombre de bouteilles"}>
+          <Input type="number" step={type === "BULK" ? "0.1" : "1"} value={amount} onChange={e => setAmount(e.target.value)} />
         </FF>
-      </div>
-
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
-        <FF label="👁️ Robe / Visuel (Optionnel)">
-          <Input value={form.robe} onChange={e => setForm({...form, robe: e.target.value})} disabled={isSubmitting} placeholder="Ex: Or pâle, reflets verts..." />
-        </FF>
-        {form.phase === "DOSAGE" && (
-          <FF label="Dosage testé (g/L)">
-            <Input type="number" step="0.5" value={form.sucreTest} onChange={e => setForm({...form, sucreTest: e.target.value})} disabled={isSubmitting} placeholder="Ex: 5.5" />
-          </FF>
-        )}
-      </div>
-
-      <div style={{ borderTop: `1px dashed ${T.border}`, margin: "20px 0" }} />
-
-      <div style={{ fontSize: 13, fontWeight: "bold", color: T.accentLight, marginBottom: 12, textTransform: "uppercase" }}>👃 Analyse Olfactive (Nez)</div>
-      {Object.entries(AROMES_TAXONOMY).map(([category, tags]) => (
-        <div key={category} style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, color: T.textDim, marginBottom: 6 }}>{category}</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {tags.map(tag => {
-              const isActive = selectedNez.includes(tag);
-              return (
-                <button key={tag} onClick={() => toggleTag(selectedNez, setSelectedNez, tag)} disabled={isSubmitting}
-                  style={{ padding: "4px 10px", fontSize: 11, borderRadius: 20, cursor: "pointer", transition: "all 0.2s",
-                           border: `1px solid ${isActive ? T.accent : T.border}`,
-                           background: isActive ? T.accent+"22" : "transparent",
-                           color: isActive ? T.accent : T.textDim }}>
-                  {tag}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-
-      <div style={{ borderTop: `1px dashed ${T.border}`, margin: "20px 0" }} />
-
-      <div style={{ fontSize: 13, fontWeight: "bold", color: T.accentLight, marginBottom: 12, textTransform: "uppercase" }}>👄 Analyse Gustative (Bouche)</div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 20 }}>
-        {SAVEURS_TAXONOMY.map(tag => {
-          const isActive = selectedBouche.includes(tag);
-          return (
-            <button key={tag} onClick={() => toggleTag(selectedBouche, setSelectedBouche, tag)} disabled={isSubmitting}
-              style={{ padding: "4px 10px", fontSize: 11, borderRadius: 20, cursor: "pointer", transition: "all 0.2s",
-                        border: `1px solid ${isActive ? T.accent : T.border}`,
-                        background: isActive ? T.accent+"22" : "transparent",
-                        color: isActive ? T.accent : T.textDim }}>
-              {tag}
-            </button>
-          );
-        })}
-      </div>
-
-      <div style={{ display:"grid", gridTemplateColumns:"120px 1fr", gap:16, alignItems:"start" }}>
-        <FF label="Note Globale (/20)">
-          <Input type="number" step="0.5" max="20" min="0" value={form.noteGlobale} onChange={e => setForm({...form, noteGlobale: e.target.value})} disabled={isSubmitting} style={{ fontSize: 18, fontWeight: "bold", textAlign: "center", color: T.accentLight }} />
-        </FF>
-        <FF label="Conclusion / Mots-clés libres">
-          <textarea 
-            maxLength={250} 
-            value={form.notes} 
-            onChange={e => setForm({...form, notes: e.target.value})} 
-            disabled={isSubmitting}
-            style={{ width:"100%", height:70, padding:10, borderRadius:4, border:`1px solid ${T.border}`, background:T.surface, color:T.text, resize:"none", fontFamily:"inherit", fontSize:13 }} 
-            placeholder="Commentaire de synthèse ou précision sur les arômes..."
-          />
-          <div style={{ textAlign:"right", fontSize:10, marginTop:4, color: form.notes.length >= 250 ? T.red : T.textDim, fontWeight: form.notes.length >= 250 ? "bold" : "normal" }}>
-            {form.notes.length} / 250
-          </div>
+        <FF label="Motif (Obligatoire Douanes)">
+          <Input value={note} onChange={e => setNote(e.target.value)} placeholder="Ex: Casse palette, [DISTILLERIE] Envoi MCR..." />
         </FF>
       </div>
 
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:24 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
-        <Btn onClick={submit} disabled={isSubmitting} style={{ background: isSubmitting ? T.textDim : T.accent }}>
-          {isSubmitting ? "Enregistrement sécurisé..." : "Enregistrer la dégustation"}
+        <Btn onClick={submit} disabled={isSubmitting || !entityId || !amount || !note} style={{ background: isSubmitting ? T.textDim : T.red, borderColor: isSubmitting ? T.textDim : T.red, color: "#fff", transition: "background 0.2s" }}>
+          {isSubmitting ? "Enregistrement sécurisé..." : "Confirmer la perte / sortie"}
         </Btn>
       </div>
     </Modal>
-  );
-}
-
-function Degustation() {
-  const T = useTheme();
-  const { state } = useStore();
-  const [modal, setModal] = useState(false);
-  const [activePhase, setActivePhase] = useState("BAIES");
-
-  const degustations = state.degustations || [];
-  
-  // On filtre selon l'onglet actif et on trie de la plus récente à la plus ancienne
-  const filteredData = degustations
-    .filter(d => d.phase === activePhase)
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
-
-  const getTargetName = (d) => {
-    if (d.parcelle) return d.parcelle;
-    if (d.lotId) {
-      const l = state.lots?.find(x => String(x.id) === String(d.lotId));
-      return l ? l.code : `Lot #${d.lotId}`;
-    }
-    if (d.bottleLotId) {
-      const b = state.bottleLots?.find(x => String(x.id) === String(d.bottleLotId));
-      return b ? b.code : `Bouteilles #${d.bottleLotId}`;
-    }
-    return "Cible inconnue";
-  };
-
-  return (
-    <div>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:28 }}>
-        <div>
-          <h1 style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:32, color:T.textStrong, margin:0 }}>Dégustation</h1>
-          <div style={{ color:T.textDim, fontSize:13, marginTop:4 }}>Carnet de suivi sensoriel standardisé (Arborescence V5 Fizz).</div>
-        </div>
-        <Btn onClick={() => setModal(true)}>+ Nouvelle Note</Btn>
-      </div>
-
-      {/* ONGLETS DES PHASES */}
-      <div style={{ display:"flex", gap:10, borderBottom:`1px solid ${T.border}`, paddingBottom:16, marginBottom:24, overflowX:"auto" }}>
-        {PHASES_DEGUSTATION.map(p => (
-          <button 
-            key={p.id} 
-            onClick={() => setActivePhase(p.id)}
-            style={{ 
-              padding:"8px 16px", borderRadius:20, fontSize:13, fontWeight:"bold", cursor:"pointer", transition:"all 0.2s", whiteSpace:"nowrap",
-              background: activePhase === p.id ? T.accent+"20" : "transparent",
-              color: activePhase === p.id ? T.accent : T.textDim,
-              border: `1px solid ${activePhase === p.id ? T.accent : T.border}`
-            }}>
-            {p.label}
-          </button>
-        ))}
-      </div>
-
-      {filteredData.length === 0 ? (
-        <div style={{ padding:"60px", textAlign:"center", border:`1px dashed ${T.border}`, borderRadius:4, color:T.textDim }}>
-          Aucune dégustation enregistrée pour cette phase.
-        </div>
-      ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))", gap: 16 }}>
-          {filteredData.map(d => {
-            const targetName = getTargetName(d);
-            return (
-              <div key={d.id} style={{ background: T.surfaceHigh, border: `1px solid ${T.border}`, borderRadius: 8, padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
-                
-                {/* En-tête Carte */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: `1px dashed ${T.border}`, paddingBottom: 16 }}>
-                  <div>
-                    <div style={{ fontSize: 16, fontWeight: "bold", color: T.accentLight, fontFamily: "monospace" }}>{targetName}</div>
-                    <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>Le {new Date(d.date).toLocaleDateString('fr-FR')}</div>
-                    {d.sucreTest && <Badge label={`Dosage : ${d.sucreTest} g/L`} color="#d98b2b" style={{ marginTop: 8 }} />}
-                  </div>
-                  {d.noteGlobale && (
-                    <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: "50%", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", color: parseFloat(d.noteGlobale) >= 14 ? T.green : T.accentLight, fontSize: 16, fontFamily: "monospace" }}>
-                      {d.noteGlobale}
-                    </div>
-                  )}
-                </div>
-
-                {/* Critères Visuels */}
-                {d.robe && (
-                  <div style={{ fontSize: 12 }}>
-                    <span style={{ color: T.textDim, textTransform: "uppercase", letterSpacing: 1, fontSize: 10 }}>👁️ Robe : </span>
-                    <span style={{ color: T.textStrong }}>{d.robe}</span>
-                  </div>
-                )}
-
-                {/* Critères Aromatiques (Les Tags) */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-                  <div>
-                    <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>👃 Nez</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {d.nez ? d.nez.split(',').map((tag, i) => (
-                        <span key={i} style={{ background: T.accent+"15", color: T.accent, border: `1px solid ${T.accent}33`, padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: "bold" }}>{tag.trim()}</span>
-                      )) : <span style={{ color: T.textDim, fontStyle: "italic", fontSize: 11 }}>Non renseigné</span>}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>👄 Bouche</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {d.bouche ? d.bouche.split(',').map((tag, i) => (
-                        <span key={i} style={{ background: "#d98b2b15", color: "#d98b2b", border: "1px solid #d98b2b33", padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: "bold" }}>{tag.trim()}</span>
-                      )) : <span style={{ color: T.textDim, fontStyle: "italic", fontSize: 11 }}>Non renseigné</span>}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Conclusion */}
-                {d.notes && (
-                  <div style={{ marginTop: "auto", paddingTop: 16, borderTop: `1px solid ${T.border}`, fontSize: 12, color: T.text, fontStyle: "italic", lineHeight: 1.5 }}>
-                    « {d.notes} »
-                  </div>
-                )}
-                
-                {/* Opérateur */}
-                <div style={{ fontSize: 10, color: T.textDim, textAlign: "right", marginTop: d.notes ? 0 : "auto" }}>
-                  Saisi par {d.operator}
-                </div>
-                
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {modal && <DegustationModal onClose={() => setModal(false)} defaultPhase={activePhase} />}
-    </div>
   );
 }
 
@@ -7877,510 +8581,353 @@ function MaturationGraphModal({ data, title, onClose }) {
 }
 
 // =============================================================================
-// MODULE PLANIFICATEUR DE TIRAGE (CONNECTÉ À L'API BACKEND)
+// MODULE DÉGUSTATION (AVEC ARBORESCENCE AROMATIQUE - NIVEAU PRODUCTION)
 // =============================================================================
-// =============================================================================
-// MODULE PLANIFICATEUR DE TIRAGE (SÉCURISÉ & STATELESS)
-// =============================================================================
-function PlanificateurTirage() {
+
+const PHASES_DEGUSTATION = [
+  { id: "BAIES", label: "🍇 Baies", desc: "Maturité phénolique sur parcelle" },
+  { id: "FERMENTATION", label: "🧪 Fermentation", desc: "Moûts et FA/FML en cours" },
+  { id: "VINS_CLAIRS", label: "🍷 Vins Clairs", desc: "Vins de base & Réserve" },
+  { id: "DOSAGE", label: "🍾 Essais Dosage", desc: "Tests de liqueur pré-dégorgement" },
+  { id: "CHAMPAGNE", label: "🥂 Produit Fini", desc: "Contrôle après vieillissement" } // 👈 Remplacé FINI par CHAMPAGNE
+];
+
+// La taxonomie tirée de votre document Word (Arborescence V5 Fizz)
+const AROMES_TAXONOMY = {
+  "Fruités & Floraux": [
+    "Agrume", "Fruit blanc/jaune", "Fruit Exotique", "Fruit rouge/noir", "Floral"
+  ],
+  "Végétaux & Épicés": [
+    "Pl. arom. / Résineux", "Végétal sec", "Végétal frais", "Epice"
+  ],
+  "Évolués & Pâtissiers": [
+    "Lactique", "Boulangerie", "Empyreumatique", "Fruit mûr/cuit confit", "Fruit sec/à coque", "Miellé", "Boisé"
+  ],
+  "Défauts & Atypiques": [
+    "Animal", "Composé Minéral", "Acescence / Solvant", "Acétique", "Carton", "Sous-bois / Champignon", "Moisi", "Terreux", "SO2"
+  ]
+};
+
+// Descripteurs de Bouche / Saveurs (Inspiré de votre document)
+const SAVEURS_TAXONOMY = ["Acide", "Amer", "Sucré", "Salé", "Umami", "Rond", "Astringent", "Huileux"];
+
+function DegustationModal({ onClose, defaultPhase = "BAIES" }) {
   const T = useTheme();
   const { state, dispatch, refreshData } = useStore();
 
-  const [activeTab, setActiveTab] = useState("MIXTION");
-  
-  // Sécurité et UX pour l'appel API
+  const [form, setForm] = useState({
+    date: new Date().toISOString().slice(0, 10),
+    phase: defaultPhase,
+    parcelle: "",
+    lotId: "",
+    bottleLotId: "",
+    robe: "",
+    noteGlobale: "",
+    sucreTest: "",
+    notes: ""
+  });
+
+  // Gestion des tags cliquables
+  const [selectedNez, setSelectedNez] = useState([]);
+  const [selectedBouche, setSelectedBouche] = useState([]);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
-  // --- ÉTATS MÉTIER (Valeurs par défaut, plus de LocalStorage) ---
-  const [tirageDays, setTirageDays] = useState([
-    { id: 1, name: "Lundi", vinBaseVolume: 31.5 },
-    { id: 2, name: "Mardi", vinBaseVolume: 31.5 },
-    { id: 3, name: "Mercredi", vinBaseVolume: 31.5 },
-    { id: 4, name: "Jeudi", vinBaseVolume: 31.5 },
-    { id: 5, name: "Vendredi", vinBaseVolume: 15.0 },
-  ]);
+  const toggleTag = (list, setList, tag) => {
+    if (list.includes(tag)) setList(list.filter(t => t !== tag));
+    else setList([...list, tag]);
+  };
 
-  const [tirageStocks, setTirageStocks] = useState({
-    bouteilles: 20000, magnums: 1200,
-    bidules: 20000, capsules: 20000, 
-    bouchonsLiege: 5000, agrafes: 5000
-  });
-
-  const [config, setConfig] = useState({
-    mixTargetPressure: 6.0, mixLevainPct: 3.0, mixLevainSugar: 20,
-    mixSugarSource: "LIQUEUR", mixLiqueurSugar: 530,
-    tirageFormat: 0.75, tirageBouchage: "CAPSULE",
-    levainTemp: 16,
-    alimVolLevain: 18.6, alimVolFinal: 23.8,
-    alimDensiteVeille: 1005, alimDensiteMatin: 998, alimLiqueurG: 530, alimAlcVin: 11.0
-  });
-
-  const updateConfig = (key, value) => { setConfig(prev => ({ ...prev, [key]: value })); };
-
-  // --- ÉTATS VOLATILES (Sélections de cuves) ---
-  const [mixBaseTankId, setMixBaseTankId] = useState("");
-  const [mixLevainTankId, setMixLevainTankId] = useState("");
-  const [mixDestTankId, setMixDestTankId] = useState("");
-  const [mixVolVinSaisi, setMixVolVinSaisi] = useState("");
-  const [createLevainSourceId, setCreateLevainSourceId] = useState("");
-  const [alimSourceTankId, setAlimSourceTankId] = useState("");
-  const [alimLevainTankId, setAlimLevainTankId] = useState("");
-
-  // ===========================================================================
-  // FILTRAGE DES CUVES (Logique métier inchangée)
-  // ===========================================================================
-  const getContainerLot = (c) => state.lots?.find(l => String(l.id) === String(c.lotId));
-
-  const cuvesVinBase = (state.containers || []).filter(c => {
-    if (parseFloat(c.currentVolume) <= 0) return false;
-    const t = (c.type || "").toUpperCase();
-    const n = (c.displayName || c.name || "").toUpperCase();
-    if (t.includes("BOURBE") || t.includes("LIE") || t.includes("REBECHE")) return false;
-    const lot = getContainerLot(c);
-    if (!lot) return false;
-    return lot.status === "VIN_CLAIR" || lot.status === "ASSEMBLAGE";
-  });
-
-  const cuvesTirage = (state.containers || []).filter(c => 
-    parseFloat(c.currentVolume) <= 0 && c.zone === "Cuverie" && (c.type?.includes("CUVE") || c.name?.includes("CUVE"))
-  );
-
-  const cuvesLevain = (state.containers || []).filter(c => 
-    c.type?.toUpperCase().includes("LEVAIN") || c.displayName?.toUpperCase().includes("LEVAIN")
-  );
-
-  // ===========================================================================
-  // CALCULS : MIXTION & PLANNING (Logique Frontend passive)
-  // ===========================================================================
-  const selectedBaseTank = cuvesVinBase.find(c => String(c.id) === String(mixBaseTankId));
-  const baseVol = mixVolVinSaisi !== "" ? parseFloat(mixVolVinSaisi) : (selectedBaseTank ? parseFloat(selectedBaseTank.currentVolume) : 0);
-  const getTargetSugar = (bars) => (bars * 4) * (25.4 / 24.0); 
-
-  const calcMixtionPreview = () => {
-    if (!baseVol || baseVol <= 0) return null;
-    const targetSugarGF = getTargetSugar(config.mixTargetPressure);
-    const volLevain = baseVol * (config.mixLevainPct / 100);
-    const volVinLevain = baseVol + volLevain;
-    const sucreVinLevain = ((baseVol * 1.0) + (volLevain * config.mixLevainSugar)) / volVinLevain;
-    const sucreManquant = targetSugarGF - sucreVinLevain;
-    if (sucreManquant <= 0) return { error: "Densité trop élevée." };
-
-    let volLiqueur = 0, poidsSucre = 0;
-    if (config.mixSugarSource === "LIQUEUR") {
-      volLiqueur = (volVinLevain * sucreManquant) / (config.mixLiqueurSugar - sucreManquant);
-    } else {
-      poidsSucre = (volVinLevain * sucreManquant) / (1 - (sucreManquant * 0.00063));
+  const getTargetOptions = () => {
+    if (form.phase === "BAIES") {
+      return (state.parcelles || []).map(p => <option key={p.id} value={p.nom}>{p.nom}</option>);
     }
-    const volMixtion = volVinLevain + (volLiqueur || poidsSucre * 0.00063);
-    return {
-      volVin: baseVol.toFixed(2), volLevain: volLevain.toFixed(2),
-      volLiqueur: volLiqueur > 0 ? volLiqueur.toFixed(3) : null,
-      poidsSucre: poidsSucre > 0 ? poidsSucre.toFixed(1) : null,
-      volMixtion: volMixtion.toFixed(2), deltaRho: (sucreManquant / 2.5).toFixed(1),
-      nbCols: Math.floor((volMixtion * 100) / config.tirageFormat)
-    };
-  };
-
-  const resMix = calcMixtionPreview();
-
-  // ===========================================================================
-  // ACTIONS API (Remplacement de la logique locale par le Backend)
-  // ===========================================================================
-  const handleValiderMixtion = async () => {
-    if (!mixBaseTankId || !mixDestTankId || !mixLevainTankId) return alert("Sélection incomplète.");
-    setIsSubmitting(true);
-    try {
-      const res = await fetch('/api/mixtion/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          baseTankId: mixBaseTankId,
-          levainTankId: mixLevainTankId,
-          destTankId: mixDestTankId,
-          baseVolToDraw: baseVol,
-          targetPressure: parseFloat(config.mixTargetPressure),
-          idempotencyKey
-        })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      
-      dispatch({ type: "TOAST_ADD", payload: { msg: `Mixtion réussie : ${data.volMixtion}hL`, color: T.green } });
-      setIdempotencyKey(crypto.randomUUID());
-      if (refreshData) await refreshData();
-      setMixVolVinSaisi(""); setMixDestTankId("");
-    } catch (e) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: e.message, color: T.red } });
-    } finally {
-      setIsSubmitting(false);
+    if (["FERMENTATION", "VINS_CLAIRS"].includes(form.phase)) {
+      return (state.lots || []).filter(l => l.volume > 0).map(l => <option key={l.id} value={l.id}>{l.code} ({l.volume} hL)</option>);
     }
+    if (["DOSAGE", "CHAMPAGNE"].includes(form.phase)) {
+      return (state.bottleLots || []).map(b => <option key={b.id} value={b.id}>{b.code} ({b.currentCount} btl)</option>);
+    }
+    return null;
   };
-
-  // --- RENDU UI (Identique, mais branché sur les nouveaux états) ---
-  return (
-    <div>
-      {/* ... Le reste du code JSX reste identique à votre version, 
-          il utilisera simplement les états tirageDays/tirageStocks 
-          initialisés sans localStorage ... */}
-    </div>
-  );
-}
-
-// =============================================================================
-// ADMINISTRATIF & DOUANES (CAHIER DE PRESSOIR, DRM, EXPORTS)
-// =============================================================================
-function Administratif() {
-  const T = useTheme(); 
-  const { state } = useStore();
-  const [tab, setTab] = useState("pressoir");
-  const [modal, setModal] = useState(null);
-  
-  const [year, setYear] = useState(new Date().getFullYear().toString());
-  const [drmMonth, setDrmMonth] = useState(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`; 
-  });
-
-  // ==========================================
-  // 1. LOGIQUE CAHIER DE PRESSOIR
-  // ==========================================
-  const pressings = state.pressings || [];
-  const years = [...new Set(pressings.map(p => p.date ? p.date.split("-")[0] : ""))].filter(Boolean).sort((a,b) => b - a);
-  
-  const activeYear = years.includes(year) ? year : (years[0] || new Date().getFullYear().toString());
-  const filteredPressings = pressings
-    .filter(p => p.date && p.date.startsWith(activeYear))
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-
-  const totalKg = filteredPressings.reduce((sum, p) => sum + (parseFloat(p.weightKilos || p.weight) || 0), 0);
-  const totalTheoCuvee = ((totalKg / 4000) * 20.5).toFixed(2);
-  const totalTheoTaille = ((totalKg / 4000) * 5.0).toFixed(2);
-
-  // ==========================================
-  // 2. LOGIQUE DRM (REGISTRE DE CAVE)
-  // ==========================================
-  const [drmY, drmM] = drmMonth.split('-');
-  const targetMonthStr = `${drmM}/${drmY}`; 
-  const currentMonthLabel = new Date(drmMonth + '-01').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
-
-  const drmEvents = (state.events || []).filter(e => e.date.includes(targetMonthStr));
-  const pertesMois = drmEvents.filter(e => e.type === "PERTE" || e.type === "CASSE");
-  const distillerieMois = drmEvents.filter(e => e.type === "DISTILLERIE");
-
-  const getVolSafe = (e) => {
-    const vol = parseFloat(e.volumeOut || e.volumeIn || 0);
-    if (vol > 0) return vol;
-    return parseFloat(e.note?.match(/\d+(\.\d+)?/)?.[0] || 0);
-  };
-
-  const distilMoisHl = distillerieMois.reduce((s, e) => s + getVolSafe(e), 0);
-
-  const getLotNameSafe = (e) => {
-    const lot = state.lots?.find(l => String(l.id) === String(e.lotId));
-    if (lot) return lot.code;
-    const bLot = state.bottleLots?.find(b => String(b.id) === String(e.lotId));
-    return bLot ? bLot.code : "Inconnu";
-  };
-
-  // ==========================================
-  // 3. MOTEUR D'EXPORTS (CSV & PDF)
-  // ==========================================
-  
-  // Fonction utilitaire pour déclencher le téléchargement d'un CSV
-  const downloadCSV = (csvContent, fileName) => {
-    // Le BOM (\uFEFF) force Excel à lire le fichier en UTF-8 (pour les accents)
-    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
-    const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", fileName);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  const exportPressoirCSV = () => {
-    // Séparateur Point-Virgule pour Excel France
-    let csv = "Date;N° Marc;Parcelle/Provenance;Cépage;Kilos;Degré;Destination\n";
-    filteredPressings.forEach(p => {
-      const dateStr = new Date(p.date).toLocaleDateString('fr-FR');
-      const marc = p.marcNumber || "";
-      const parcelle = p.parcelleName || p.provenance || "";
-      const cepage = p.cepage || "";
-      const kilos = p.weightKilos || p.weight || 0;
-      const degre = p.potentialAlc || "";
-      const dest = p.destinationTank || "";
-      csv += `${dateStr};${marc};${parcelle};${cepage};${kilos};${degre};${dest}\n`;
-    });
-    downloadCSV(csv, `Cahier_Pressoir_${activeYear}.csv`);
-  };
-
-  const exportDrmCSV = () => {
-    let csv = "Date;Type de Sortie;Lot concerne;Quantite Sortie;Unite;Motif/Destinataire;Operateur\n";
-    
-    distillerieMois.forEach(e => {
-      const dateStr = e.date.split(" à ")[0];
-      const note = e.note?.replace("[DISTILLERIE] Motif: ", "") || "";
-      csv += `${dateStr};DISTILLERIE;${getLotNameSafe(e)};${getVolSafe(e)};hL;${note};${e.operator}\n`;
-    });
-
-    pertesMois.forEach(e => {
-      const dateStr = e.date.split(" à ")[0];
-      const unite = e.type === "CASSE" ? "Bouteilles" : "hL";
-      csv += `${dateStr};${e.type};${getLotNameSafe(e)};${getVolSafe(e)};${unite};${e.note};${e.operator}\n`;
-    });
-
-    downloadCSV(csv, `DRM_Sorties_${drmMonth}.csv`);
-  };
-
-  const exportPDF = () => {
-    // Déclenche la fenêtre d'impression native du navigateur
-    window.print();
-  };
-
-  return (
-    <div className="admin-container">
-      {/* RÈGLES D'IMPRESSION (Masque les menus lors de l'export PDF) */}
-      <style>{`
-        @media print {
-          body * { visibility: hidden; }
-          .admin-container, .admin-container * { visibility: visible; }
-          .admin-container { position: absolute; left: 0; top: 0; width: 100%; margin: 0; padding: 0; }
-          .no-print { display: none !important; }
-          .print-header { font-size: 24px !important; margin-bottom: 20px !important; color: #000 !important; }
-        }
-      `}</style>
-
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:28 }}>
-        <h1 className="print-header" style={{ fontFamily:"'Playfair Display', serif", fontSize:32, color:T.textStrong, margin:0 }}>
-          {tab === "pressoir" ? `Cahier de Pressoir - ${activeYear}` : `Registre de Cave - ${currentMonthLabel}`}
-        </h1>
-        
-        {/* BOUTONS CACHÉS À L'IMPRESSION */}
-        <div className="no-print" style={{ display:"flex", gap: 10 }}>
-          <button onClick={() => setTab("pressoir")} style={{ background: tab==="pressoir" ? T.accent : "transparent", color: tab==="pressoir" ? T.bg : T.accent, border: `1px solid ${T.accent}`, padding: "9px 18px", borderRadius: 4, fontSize: 11, fontWeight: "bold", cursor: "pointer", transition:"all .2s" }}>
-            CAHIER DE PRESSOIR
-          </button>
-          <button onClick={() => setTab("drm")} style={{ background: tab==="drm" ? T.accent : "transparent", color: tab==="drm" ? T.bg : T.accent, border: `1px solid ${T.accent}`, padding: "9px 18px", borderRadius: 4, fontSize: 11, fontWeight: "bold", cursor: "pointer", transition:"all .2s" }}>
-            REGISTRE DE CAVE (DRM)
-          </button>
-        </div>
-      </div>
-
-      {/* --- VUE CAHIER DE PRESSOIR --- */}
-      {tab === "pressoir" && (
-        <div style={{ display:"flex", flexDirection:"column", gap:24 }}>
-          
-          <div className="no-print" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", background:T.surfaceHigh, padding:20, borderRadius:8, border:`1px solid ${T.border}` }}>
-            <div style={{ display:"flex", gap:24, alignItems:"center" }}>
-              <FF label="Année de récolte">
-                <Select value={activeYear} onChange={e => setYear(e.target.value)} style={{ width:120 }}>
-                  {years.length > 0 ? years.map(y => <option key={y} value={y}>{y}</option>) : <option value={year}>{year}</option>}
-                </Select>
-              </FF>
-              <div style={{ height:30, width:1, background:T.border }} />
-              <div>
-                <div style={{ fontSize:10, color:T.textDim, textTransform:"uppercase", marginBottom:4 }}>Total Kilos {activeYear}</div>
-                <div style={{ fontSize:18, color:T.accentLight, fontWeight:"bold" }}>{totalKg.toLocaleString()} kg</div>
-              </div>
-            </div>
-            <div style={{ display:"flex", gap:16, alignItems: "center" }}>
-              <Btn variant="secondary" onClick={exportPressoirCSV}>📥 Exporter CSV</Btn>
-              <Btn variant="secondary" onClick={exportPDF}>📄 Imprimer PDF</Btn>
-            </div>
-          </div>
-
-          <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, overflow: "hidden" }}>
-             <div style={{ display: "grid", gridTemplateColumns: "100px 100px 1.5fr 1fr 100px 80px 1fr", padding: "12px 20px", background: T.surfaceHigh, borderBottom: `2px solid ${T.border}`, fontSize: 10, fontWeight: "bold", color: T.textDim, textTransform: "uppercase" }}>
-                <div>Date</div><div>N° Marc</div><div>Parcelle</div><div>Cépage</div><div style={{textAlign:"right"}}>Kilos</div><div style={{textAlign:"right"}}>Dég.</div><div>Destination</div>
-             </div>
-             {filteredPressings.map((p, i) => (
-                <div key={p.id} style={{ display: "grid", gridTemplateColumns: "100px 100px 1.5fr 1fr 100px 80px 1fr", padding: "14px 20px", alignItems: "center", borderBottom: `1px solid ${T.border}`, background: i%2===0?"transparent":T.surfaceHigh+"44", fontSize: 13 }}>
-                   <div style={{ color:T.textDim }}>{new Date(p.date).toLocaleDateString('fr-FR').slice(0,5)}</div>
-                   <div style={{ fontFamily:"monospace", fontWeight:"bold" }}>{p.marcNumber || `M-${i+1}`}</div>
-                   <div style={{ fontWeight:"500" }}>{p.parcelleName || p.provenance}</div>
-                   <div style={{ color:T.textDim }}>{p.cepage}</div>
-                   <div style={{ textAlign:"right", fontWeight:"bold" }}>{p.weightKilos?.toLocaleString()}</div>
-                   <div style={{ textAlign:"right", color:T.accent }}>{p.potentialAlc}°</div>
-                   <div style={{ textAlign:"right", fontSize:11, color:T.textDim }}>{p.destinationTank || "En pressoir"}</div>
-                </div>
-             ))}
-             {/* Total visible à l'impression */}
-             <div style={{ padding: "16px 20px", background: T.surfaceHigh, borderTop: `2px solid ${T.border}`, textAlign: "right" }}>
-                <span style={{ fontSize: 12, textTransform: "uppercase", color: T.textDim, marginRight: 16 }}>Poids Total :</span>
-                <span style={{ fontSize: 16, fontWeight: "bold", color: T.textStrong }}>{totalKg.toLocaleString()} kg</span>
-             </div>
-          </div>
-        </div>
-      )}
-
-      {/* --- VUE DRM --- */}
-      {tab === "drm" && (
-        <div style={{ display:"flex", flexDirection:"column", gap:24 }}>
-          
-          <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-              <span style={{ fontSize: 13, fontWeight: "bold", color: T.textStrong }}>Période :</span>
-              <Input type="month" value={drmMonth} onChange={e => setDrmMonth(e.target.value)} style={{ width: 170 }} />
-            </div>
-            <div style={{ display: "flex", gap: 12 }}>
-               <Btn variant="secondary" onClick={exportDrmCSV}>📥 Exporter CSV</Btn>
-               <Btn variant="secondary" onClick={exportPDF}>📄 Imprimer PDF</Btn>
-            </div>
-          </div>
-
-          {/* Section Distillerie */}
-          <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:20 }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-              <div style={{ fontSize: 12, fontWeight: "bold", color: T.textStrong, textTransform: "uppercase", letterSpacing: 1 }}>Sorties Distillerie</div>
-              <div style={{ fontSize: 14, fontWeight: "bold", color: "#d98b2b", fontFamily: "monospace" }}>Total : -{distilMoisHl.toFixed(2)} hL</div>
-            </div>
-            <div style={{ display:"grid", gridTemplateColumns:"120px 150px 100px 1fr 120px", padding:"10px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase" }}>
-              <div>Date</div><div>Lot</div><div>Quantité</div><div>Motif</div><div>Opérateur</div>
-            </div>
-            {distillerieMois.length === 0 ? <div style={{ padding:30, textAlign:"center", color:T.textDim }}>Aucun mouvement ce mois-ci.</div> : 
-              distillerieMois.map(e => (
-                <div key={e.id} style={{ display:"grid", gridTemplateColumns:"120px 150px 100px 1fr 120px", padding:"14px 16px", borderBottom:`1px solid ${T.border}`, fontSize:12 }}>
-                  <div style={{ color:T.textDim }}>{e.date.split(" à ")[0]}</div>
-                  <div style={{ fontWeight:"bold" }}>{getLotNameSafe(e)}</div>
-                  <div style={{ color:"#d98b2b", fontWeight:"bold" }}>-{getVolSafe(e)} hL</div>
-                  <div>{e.note?.replace("[DISTILLERIE] Motif: ", "")}</div>
-                  <div style={{ color:T.textDim }}>{e.operator}</div>
-                </div>
-              ))
-            }
-          </div>
-          
-          {/* Section Pertes */}
-          <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:20 }}>
-             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: "bold", color: T.textStrong, textTransform: "uppercase", letterSpacing: 1 }}>Pertes & Casses déclarées</div>
-                <Btn className="no-print" onClick={() => setModal("perte")} style={{ background:T.red, borderColor:T.red, color:"#fff" }}>⚠️ Déclarer Perte</Btn>
-             </div>
-             <div style={{ display:"grid", gridTemplateColumns:"120px 80px 150px 100px 1fr 120px", padding:"10px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase" }}>
-                <div>Date</div><div>Type</div><div>Lot</div><div>Quantité</div><div>Motif</div><div>Opérateur</div>
-             </div>
-             {pertesMois.length === 0 ? <div style={{ padding:30, textAlign:"center", color:T.textDim }}>Aucune perte déclarée.</div> :
-               pertesMois.map(e => (
-                 <div key={e.id} style={{ display:"grid", gridTemplateColumns:"120px 80px 150px 100px 1fr 120px", padding:"14px 16px", borderBottom:`1px solid ${T.border}`, fontSize:12 }}>
-                   <div style={{ color:T.textDim }}>{e.date.split(" à ")[0]}</div>
-                   <div><Badge label={e.type} color={T.red} /></div>
-                   <div style={{ fontWeight:"bold" }}>{getLotNameSafe(e)}</div>
-                   <div style={{ color:T.red, fontWeight:"bold" }}>-{getVolSafe(e)} {e.type === "CASSE" ? "btl" : "hL"}</div>
-                   <div>{e.note}</div>
-                   <div style={{ color:T.textDim }}>{e.operator}</div>
-                 </div>
-               ))
-             }
-          </div>
-        </div>
-      )}
-      
-      {modal === "perte" && <PerteCasseModal onClose={() => setModal(null)} />}
-    </div>
-  );
-}
-
-// =============================================================================
-// MODALE : DÉCLARATION DE PERTES ET CASSES (SÉCURISÉE)
-// =============================================================================
-function PerteCasseModal({ onClose }) {
-  const T = useTheme();
-  const { user } = useAuth();
-  const { state, dispatch, refreshData } = useStore();
-
-  const [type, setType] = useState("BOTTLE"); // "BOTTLE" ou "BULK"
-  const [entityId, setEntityId] = useState("");
-  const [amount, setAmount] = useState("");
-  const [note, setNote] = useState("");
-  
-  // 👈 NOUVEAU: Sécurité de l'appel API
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
-
-  const availBulk = (state.lots || []).filter(l => l.volume > 0 && l.status !== "TIRE" && l.status !== "ARCHIVE");
-  const availBottles = (state.bottleLots || []).filter(b => b.currentCount > 0);
 
   const submit = async () => {
-    if (!entityId || !amount || !note) return alert("Veuillez remplir tous les champs, le motif est obligatoire.");
-    
+    // Validation frontend basique avant d'envoyer au backend
+    if (form.phase === "BAIES" && !form.parcelle) return alert("Veuillez sélectionner une parcelle.");
+    if (["FERMENTATION", "VINS_CLAIRS"].includes(form.phase) && !form.lotId) return alert("Veuillez sélectionner un lot de vin.");
+    if (["DOSAGE", "CHAMPAGNE"].includes(form.phase) && !form.bottleLotId) return alert("Veuillez sélectionner un lot de bouteilles.");
+
     setIsSubmitting(true);
+    
     try {
-      const payload = { 
-        entityType: type, 
-        entityId: String(entityId), 
-        amount: parseFloat(amount), 
-        note: note.trim(),
-        idempotencyKey: idempotencyKey
+      const payload = {
+        ...form,
+        nez: selectedNez.length > 0 ? selectedNez.join(', ') : undefined,     // On envoie une string propre au backend
+        bouche: selectedBouche.length > 0 ? selectedBouche.join(', ') : undefined,
+        noteGlobale: form.noteGlobale ? parseFloat(form.noteGlobale) : undefined,
+        sucreTest: form.sucreTest ? parseFloat(form.sucreTest) : undefined,
+        idempotencyKey
       };
 
-      const res = await fetch('/api/pertes', {
+      const res = await fetch('/api/degustations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
 
       const data = await res.json();
-
+      
       if (!res.ok) {
-        throw new Error(data.error || "Une erreur est survenue.");
+        throw new Error(data.error || "Erreur lors de la sauvegarde.");
       }
 
-      dispatch({ type: "TOAST_ADD", payload: { msg: "Déclaration enregistrée et validée pour les douanes.", color: T.green } });
+      dispatch({ type: "TOAST_ADD", payload: { msg: "Dégustation enregistrée avec succès !", color: T.green } });
       
-      // On rafraîchit la BDD complète pour mettre à jour les stocks et le DRM
       if (refreshData) await refreshData();
       onClose();
 
-    } catch(e) { 
+    } catch (e) {
       dispatch({ type: "TOAST_ADD", payload: { msg: e.message, color: T.red } });
-    } finally {
       setIsSubmitting(false);
     }
   };
 
   return (
-    <Modal title="Déclarer une Perte ou Casse" onClose={onClose}>
-      <div style={{ background:T.red+"15", padding:14, borderRadius:4, marginBottom:20, fontSize:12, color:T.red, borderLeft:`3px solid ${T.red}` }}>
-        Attention : Cette opération est transactionnelle et définitive. Les volumes ou bouteilles seront immédiatement soustraits du registre de cave légal.
-      </div>
-
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12, marginBottom:16 }}>
-        <FF label="Type de perte">
-          <Select value={type} onChange={e => { setType(e.target.value); setEntityId(""); }}>
-            <option value="BOTTLE">Casse Bouteilles (unités)</option>
-            <option value="BULK">Perte Vrac (hL) / Distillerie</option>
-          </Select>
+    <Modal title="Nouvelle Dégustation" onClose={onClose}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+        <FF label="Date">
+          <Input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} disabled={isSubmitting} />
         </FF>
-        <FF label="Lot concerné">
-          <Select value={entityId} onChange={e => setEntityId(e.target.value)}>
-            <option value="">-- Choisir un lot --</option>
-            {type === "BULK" 
-              ? availBulk.map(l => <option key={l.id} value={l.id}>{l.code} (Dispo: {l.volume} hL)</option>)
-              : availBottles.map(b => <option key={b.id} value={b.id}>{b.code} (Dispo: {b.currentCount} btl)</option>)
-            }
+        <FF label="Phase d'élaboration">
+          <Select value={form.phase} onChange={e => setForm({...form, phase: e.target.value, parcelle: "", lotId: "", bottleLotId: ""})} disabled={isSubmitting}>
+            {PHASES_DEGUSTATION.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
           </Select>
         </FF>
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12 }}>
-        <FF label={type === "BULK" ? "Volume perdu (hL)" : "Nombre de bouteilles"}>
-          <Input type="number" step={type === "BULK" ? "0.1" : "1"} value={amount} onChange={e => setAmount(e.target.value)} />
+      <div style={{ background: T.surfaceHigh, padding: 16, borderRadius: 6, border: `1px solid ${T.border}`, marginBottom: 20 }}>
+        <FF label="Élément dégusté (Cible obligatoire)">
+          <Select value={form.phase === "BAIES" ? form.parcelle : (form.phase === "DOSAGE" || form.phase === "CHAMPAGNE" ? form.bottleLotId : form.lotId)} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    if (form.phase === "BAIES") setForm({...form, parcelle: val});
+                    else if (["DOSAGE", "CHAMPAGNE"].includes(form.phase)) setForm({...form, bottleLotId: val});
+                    else setForm({...form, lotId: val});
+                  }} disabled={isSubmitting}>
+            <option value="">-- Sélectionner l'élément --</option>
+            {getTargetOptions()}
+          </Select>
         </FF>
-        <FF label="Motif (Obligatoire Douanes)">
-          <Input value={note} onChange={e => setNote(e.target.value)} placeholder="Ex: Casse palette, [DISTILLERIE] Envoi MCR..." />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+        <FF label="👁️ Robe / Visuel (Optionnel)">
+          <Input value={form.robe} onChange={e => setForm({...form, robe: e.target.value})} disabled={isSubmitting} placeholder="Ex: Or pâle, reflets verts..." />
+        </FF>
+        {form.phase === "DOSAGE" && (
+          <FF label="Dosage testé (g/L)">
+            <Input type="number" step="0.5" value={form.sucreTest} onChange={e => setForm({...form, sucreTest: e.target.value})} disabled={isSubmitting} placeholder="Ex: 5.5" />
+          </FF>
+        )}
+      </div>
+
+      <div style={{ borderTop: `1px dashed ${T.border}`, margin: "20px 0" }} />
+
+      <div style={{ fontSize: 13, fontWeight: "bold", color: T.accentLight, marginBottom: 12, textTransform: "uppercase" }}>👃 Analyse Olfactive (Nez)</div>
+      {Object.entries(AROMES_TAXONOMY).map(([category, tags]) => (
+        <div key={category} style={{ marginBottom: 12 }}>
+          <div style={{ fontSize: 11, color: T.textDim, marginBottom: 6 }}>{category}</div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            {tags.map(tag => {
+              const isActive = selectedNez.includes(tag);
+              return (
+                <button key={tag} onClick={() => toggleTag(selectedNez, setSelectedNez, tag)} disabled={isSubmitting}
+                  style={{ padding: "4px 10px", fontSize: 11, borderRadius: 20, cursor: "pointer", transition: "all 0.2s",
+                           border: `1px solid ${isActive ? T.accent : T.border}`,
+                           background: isActive ? T.accent+"22" : "transparent",
+                           color: isActive ? T.accent : T.textDim }}>
+                  {tag}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+
+      <div style={{ borderTop: `1px dashed ${T.border}`, margin: "20px 0" }} />
+
+      <div style={{ fontSize: 13, fontWeight: "bold", color: T.accentLight, marginBottom: 12, textTransform: "uppercase" }}>👄 Analyse Gustative (Bouche)</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 20 }}>
+        {SAVEURS_TAXONOMY.map(tag => {
+          const isActive = selectedBouche.includes(tag);
+          return (
+            <button key={tag} onClick={() => toggleTag(selectedBouche, setSelectedBouche, tag)} disabled={isSubmitting}
+              style={{ padding: "4px 10px", fontSize: 11, borderRadius: 20, cursor: "pointer", transition: "all 0.2s",
+                        border: `1px solid ${isActive ? T.accent : T.border}`,
+                        background: isActive ? T.accent+"22" : "transparent",
+                        color: isActive ? T.accent : T.textDim }}>
+              {tag}
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"120px 1fr", gap:16, alignItems:"start" }}>
+        <FF label="Note Globale (/20)">
+          <Input type="number" step="0.5" max="20" min="0" value={form.noteGlobale} onChange={e => setForm({...form, noteGlobale: e.target.value})} disabled={isSubmitting} style={{ fontSize: 18, fontWeight: "bold", textAlign: "center", color: T.accentLight }} />
+        </FF>
+        <FF label="Conclusion / Mots-clés libres">
+          <textarea 
+            maxLength={250} 
+            value={form.notes} 
+            onChange={e => setForm({...form, notes: e.target.value})} 
+            disabled={isSubmitting}
+            style={{ width:"100%", height:70, padding:10, borderRadius:4, border:`1px solid ${T.border}`, background:T.surface, color:T.text, resize:"none", fontFamily:"inherit", fontSize:13 }} 
+            placeholder="Commentaire de synthèse ou précision sur les arômes..."
+          />
+          <div style={{ textAlign:"right", fontSize:10, marginTop:4, color: form.notes.length >= 250 ? T.red : T.textDim, fontWeight: form.notes.length >= 250 ? "bold" : "normal" }}>
+            {form.notes.length} / 250
+          </div>
         </FF>
       </div>
 
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:24 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
-        <Btn onClick={submit} disabled={isSubmitting || !entityId || !amount || !note} style={{ background: isSubmitting ? T.textDim : T.red, borderColor: isSubmitting ? T.textDim : T.red, color: "#fff", transition: "background 0.2s" }}>
-          {isSubmitting ? "Enregistrement sécurisé..." : "Confirmer la perte / sortie"}
+        <Btn onClick={submit} disabled={isSubmitting} style={{ background: isSubmitting ? T.textDim : T.accent }}>
+          {isSubmitting ? "Enregistrement sécurisé..." : "Enregistrer la dégustation"}
         </Btn>
       </div>
     </Modal>
+  );
+}
+
+function Degustation() {
+  const T = useTheme();
+  const { state } = useStore();
+  const [modal, setModal] = useState(false);
+  const [activePhase, setActivePhase] = useState("BAIES");
+
+  const degustations = state.degustations || [];
+  
+  // On filtre selon l'onglet actif et on trie de la plus récente à la plus ancienne
+  const filteredData = degustations
+    .filter(d => d.phase === activePhase)
+    .sort((a, b) => new Date(b.date) - new Date(a.date));
+
+  const getTargetName = (d) => {
+    if (d.parcelle) return d.parcelle;
+    if (d.lotId) {
+      const l = state.lots?.find(x => String(x.id) === String(d.lotId));
+      return l ? l.code : `Lot #${d.lotId}`;
+    }
+    if (d.bottleLotId) {
+      const b = state.bottleLots?.find(x => String(x.id) === String(d.bottleLotId));
+      return b ? b.code : `Bouteilles #${d.bottleLotId}`;
+    }
+    return "Cible inconnue";
+  };
+
+  return (
+    <div>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:28 }}>
+        <div>
+          <h1 style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:32, color:T.textStrong, margin:0 }}>Dégustation</h1>
+          <div style={{ color:T.textDim, fontSize:13, marginTop:4 }}>Carnet de suivi sensoriel standardisé (Arborescence V5 Fizz).</div>
+        </div>
+        <Btn onClick={() => setModal(true)}>+ Nouvelle Note</Btn>
+      </div>
+
+      {/* ONGLETS DES PHASES */}
+      <div style={{ display:"flex", gap:10, borderBottom:`1px solid ${T.border}`, paddingBottom:16, marginBottom:24, overflowX:"auto" }}>
+        {PHASES_DEGUSTATION.map(p => (
+          <button 
+            key={p.id} 
+            onClick={() => setActivePhase(p.id)}
+            style={{ 
+              padding:"8px 16px", borderRadius:20, fontSize:13, fontWeight:"bold", cursor:"pointer", transition:"all 0.2s", whiteSpace:"nowrap",
+              background: activePhase === p.id ? T.accent+"20" : "transparent",
+              color: activePhase === p.id ? T.accent : T.textDim,
+              border: `1px solid ${activePhase === p.id ? T.accent : T.border}`
+            }}>
+            {p.label}
+          </button>
+        ))}
+      </div>
+
+      {filteredData.length === 0 ? (
+        <div style={{ padding:"60px", textAlign:"center", border:`1px dashed ${T.border}`, borderRadius:4, color:T.textDim }}>
+          Aucune dégustation enregistrée pour cette phase.
+        </div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))", gap: 16 }}>
+          {filteredData.map(d => {
+            const targetName = getTargetName(d);
+            return (
+              <div key={d.id} style={{ background: T.surfaceHigh, border: `1px solid ${T.border}`, borderRadius: 8, padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
+                
+                {/* En-tête Carte */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: `1px dashed ${T.border}`, paddingBottom: 16 }}>
+                  <div>
+                    <div style={{ fontSize: 16, fontWeight: "bold", color: T.accentLight, fontFamily: "monospace" }}>{targetName}</div>
+                    <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>Le {new Date(d.date).toLocaleDateString('fr-FR')}</div>
+                    {d.sucreTest && <Badge label={`Dosage : ${d.sucreTest} g/L`} color="#d98b2b" style={{ marginTop: 8 }} />}
+                  </div>
+                  {d.noteGlobale && (
+                    <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: "50%", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", color: parseFloat(d.noteGlobale) >= 14 ? T.green : T.accentLight, fontSize: 16, fontFamily: "monospace" }}>
+                      {d.noteGlobale}
+                    </div>
+                  )}
+                </div>
+
+                {/* Critères Visuels */}
+                {d.robe && (
+                  <div style={{ fontSize: 12 }}>
+                    <span style={{ color: T.textDim, textTransform: "uppercase", letterSpacing: 1, fontSize: 10 }}>👁️ Robe : </span>
+                    <span style={{ color: T.textStrong }}>{d.robe}</span>
+                  </div>
+                )}
+
+                {/* Critères Aromatiques (Les Tags) */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
+                  <div>
+                    <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>👃 Nez</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {d.nez ? d.nez.split(',').map((tag, i) => (
+                        <span key={i} style={{ background: T.accent+"15", color: T.accent, border: `1px solid ${T.accent}33`, padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: "bold" }}>{tag.trim()}</span>
+                      )) : <span style={{ color: T.textDim, fontStyle: "italic", fontSize: 11 }}>Non renseigné</span>}
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>👄 Bouche</div>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                      {d.bouche ? d.bouche.split(',').map((tag, i) => (
+                        <span key={i} style={{ background: "#d98b2b15", color: "#d98b2b", border: "1px solid #d98b2b33", padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: "bold" }}>{tag.trim()}</span>
+                      )) : <span style={{ color: T.textDim, fontStyle: "italic", fontSize: 11 }}>Non renseigné</span>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Conclusion */}
+                {d.notes && (
+                  <div style={{ marginTop: "auto", paddingTop: 16, borderTop: `1px solid ${T.border}`, fontSize: 12, color: T.text, fontStyle: "italic", lineHeight: 1.5 }}>
+                    « {d.notes} »
+                  </div>
+                )}
+                
+                {/* Opérateur */}
+                <div style={{ fontSize: 10, color: T.textDim, textAlign: "right", marginTop: d.notes ? 0 : "auto" }}>
+                  Saisi par {d.operator}
+                </div>
+                
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {modal && <DegustationModal onClose={() => setModal(false)} defaultPhase={activePhase} />}
+    </div>
   );
 }
 
@@ -8390,17 +8937,17 @@ function PerteCasseModal({ onClose }) {
 const NAV_CATEGORIES = [
   {
     title: "Tableau de bord", 
-    id: "dashboard", // 👈 Indique à l'application que c'est un lien direct (pas un accordéon)
+    id: "dashboard", 
     items: [] 
   },
   {
     title: "Œnologie",
     items: [
       { id:"maturation",  label:"Maturation",      icon:"🍇" },
-      { id:"planificateur", label:"Planificateur Vendanges", icon:"📅" },
+      { id:"planificateur", label:"Planif. Vendanges", icon:"📅" },
       { id:"tour_fa",     label:"Tour de FA",      icon:"🌡️" },
       { id:"assemblages", label:"Assemblages",     icon:"🧪" },
-      { id:"tirage", label:"Planificateur Tirage", icon:"🍾" },
+      { id:"tirage",      label:"Planif. Tirage",  icon:"🍾" },
       { id:"degustation", label:"Dégustation",     icon:"🥂" },
       { id:"analyses",    label:"Analyses",        icon:"🔬" },
     ]
@@ -8426,8 +8973,6 @@ const NAV_CATEGORIES = [
   }
 ];
 
-const NAV = NAV_CATEGORIES.flatMap(cat => cat.id ? [{id: cat.id, label: cat.title}] : cat.items);
-
 const ADMIN_NAV = [
   { id:"admin_users", label:"Utilisateurs",    icon:"👥" },
   { id:"admin_logs",  label:"Journal d'audit", icon:"📑" },
@@ -8446,25 +8991,24 @@ export default function App() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   
-  const [openMenus, setOpenMenus] = useState([1, 2, 3]); // Mémorise les onglets ouverts (Œnologie, Chai, Gestion)
-  const [adminOpen, setAdminOpen] = useState(false);     // L'onglet Système est fermé par défaut pour ne pas gêner
+  const [openMenus, setOpenMenus] = useState([1, 2, 3]); 
+  const [adminOpen, setAdminOpen] = useState(false);     
 
   const T = THEMES[themeKey];
 
   const fetchAll = async () => {
     const t = Date.now();
-    const opts = { cache: 'no-store' }; // 🛡️ BOUCLIER ANTI-CACHE NEXT.JS
+    const opts = { cache: 'no-store' }; 
 
     try {
       const safeMap = (data, mapFn) => Array.isArray(data) ? data.map(mapFn) : [];
 
-      // 🛡️ NOUVEAU : Un fetch ultra-sécurisé qui ne crash JAMAIS
       const fetchSafe = async (url) => {
         try {
           const res = await fetch(url, opts);
-          if (!res.ok) return []; // Si l'API renvoie une erreur (500, 404), on renvoie vide
+          if (!res.ok) return []; 
           const text = await res.text();
-          return text ? JSON.parse(text) : []; // Évite le crash si l'API renvoie du vide
+          return text ? JSON.parse(text) : []; 
         } catch (e) {
           console.error(`Erreur réseau sur ${url}`);
           return [];
@@ -8483,27 +9027,22 @@ export default function App() {
       fetchSafe(`/api/events?t=${t}`).then(d => {
         dispatch({type:"SET_EVENTS", payload: safeMap(d, e=>{const dD=new Date(e.eventDatetime); return{id:e.id.toString(),type:e.eventType,date:`${dD.toLocaleDateString('fr-FR')} à ${dD.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`,lotId:e.lots?.[0]?.lotId?.toString(),containerId:e.containers?.[0]?.containerId?.toString(),volumeIn:e.eventType==='CREATION'?e.lots?.[0]?.volumeChange||0:0,volumeOut:e.eventType==='TRANSFERT'?e.lots?.[0]?.volumeChange||0:0,operator: e.operator || "Inconnu",note:e.comment||""};})});
       });
-      fetchSafe(`/api/fa?t=${t}`).then(d => {
-        dispatch({type:"SET_FA_READINGS", payload: Array.isArray(d) ? d : []});
-      });
-      fetchSafe(`/api/pressings?t=${t}`).then(d => {
-        dispatch({type:"SET_PRESSINGS", payload: Array.isArray(d) ? d.map(p => ({...p, id: p.id.toString()})) : []});
-      });
-      fetchSafe(`/api/users?t=${t}`).then(d => {
-        dispatch({type: "SET_USERS", payload: Array.isArray(d) ? d.map(u => ({...u, id: u.id.toString(), initials: u.name ? u.name.substring(0, 2).toUpperCase() : "??"})) : [] });
-      });
-      fetchSafe(`/api/maturation?t=${t}`).then(d => {
-        dispatch({type:"SET_MATURATIONS", payload: Array.isArray(d) ? d : []});
-      });
+      fetchSafe(`/api/fa?t=${t}`).then(d => dispatch({type:"SET_FA_READINGS", payload: Array.isArray(d) ? d : []}));
+      fetchSafe(`/api/pressings?t=${t}`).then(d => dispatch({type:"SET_PRESSINGS", payload: Array.isArray(d) ? d.map(p => ({...p, id: p.id.toString()})) : []}));
+      fetchSafe(`/api/users?t=${t}`).then(d => dispatch({type: "SET_USERS", payload: Array.isArray(d) ? d.map(u => ({...u, id: u.id.toString(), initials: u.name ? u.name.substring(0, 2).toUpperCase() : "??"})) : [] }));
+      fetchSafe(`/api/maturation?t=${t}`).then(d => dispatch({type:"SET_MATURATIONS", payload: Array.isArray(d) ? d : []}));
+      fetchSafe(`/api/parcelles?t=${t}`).then(d => dispatch({type:"SET_PARCELLES", payload: Array.isArray(d)?d:[]}));
+      fetchSafe(`/api/degustations?t=${t}`).then(d => dispatch({type:"SET_DEGUSTATIONS", payload: Array.isArray(d)?d:[]}));
+      fetchSafe(`/api/pressoirs?t=${t}`).then(d => dispatch({type:"SET_PRESSOIRS", payload: Array.isArray(d)?d:[]}));
+      
+      // 👇 LES NOUVEAUX FETCHS POUR L'INVENTAIRE SONT LÀ 👇
       fetchSafe(`/api/inventory/products?t=${t}`).then(d => {
         dispatch({type:"SET_PRODUCTS", payload: Array.isArray(d) ? d : []});
       });
       fetchSafe(`/api/inventory/movements?t=${t}`).then(d => {
         dispatch({type:"SET_MOVEMENTS", payload: Array.isArray(d) ? d : []});
       });
-      fetchSafe(`/api/parcelles?t=${t}`).then(d => dispatch({type:"SET_PARCELLES", payload: Array.isArray(d)?d:[]}));
-      fetchSafe(`/api/degustations?t=${t}`).then(d => dispatch({type:"SET_DEGUSTATIONS", payload: Array.isArray(d)?d:[]}));
-      fetchSafe(`/api/pressoirs?t=${t}`).then(d => dispatch({type:"SET_PRESSOIRS", payload: Array.isArray(d)?d:[]}));
+
     } catch(e) { console.error("Erreur globale de chargement", e); }
   };
 
@@ -8512,9 +9051,6 @@ export default function App() {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
-        // Au lieu de chercher dans le localStorage, on pourra plus tard 
-        // faire un fetch(`/api/users/me`) pour avoir le rôle exact.
-        // En attendant, on garde une initialisation sécurisée par défaut :
         const email = session.user.email;
         const name = email.split('@')[0].toUpperCase();
         
@@ -8522,21 +9058,19 @@ export default function App() {
           id: session.user.id, 
           email: email, 
           name: name, 
-          role: "Utilisateur", // Le rôle sera écrasé par les données du fetchAll si nécessaire
+          role: "Utilisateur", 
           initials: name.substring(0, 2) 
         });
       }
     };
 
     checkSession();
-    
-    // fetchAll() devient l'unique source de vérité pour les utilisateurs,
-    // les apports (pressings), les stocks et les lots.
     fetchAll(); 
   }, []); 
 
   const goNav = id => { setNav(id); setSelCont(null); setSelLot(null); };
   const logout = () => { supabase.auth.signOut(); setUser(null); setNav("dashboard"); setSelCont(null); setSelLot(null); };
+  
   const isAdmin = user?.role === "Admin" || user?.role === "Chef de cave"; 
   const alertCount = state.containers.filter(c => c.status === "VIDE" && c.notes).length + state.lots.filter(l => l.notes && l.notes.includes("sans suivi")).length + state.bottleLots.filter(b => b.status === "A_DEGORGER").length;
 
@@ -8546,11 +9080,10 @@ export default function App() {
     setSelLot(lotObj); 
   };
 
-  // NOUVEAU : Le gestionnaire parfait pour les Cuves !
   const handleSelectContainer = (containerObj) => {
-    setSelLot(null);           // On ferme les lots
-    setNav("cuverie");         // On bascule sur l'onglet Cuverie
-    setSelCont(containerObj);  // On ouvre la cuve cliquée
+    setSelLot(null);           
+    setNav("cuverie");         
+    setSelCont(containerObj);  
   };
 
   const renderContent = () => {
@@ -8563,10 +9096,8 @@ export default function App() {
       case "planificateur": return <PlanificateurVendanges />;
       case "degustation": return <Degustation />;
       case "tirage":      return <PlanificateurTirage />;
-      // ON UTILISE LE NOUVEAU GESTIONNAIRE ICI 👇
       case "vendanges":   return <Vendanges onSelectContainer={handleSelectContainer} />;
       case "cuverie":     return <Cuverie   onSelectContainer={handleSelectContainer} />;
-      // ------------------------------------------
       case "lots":        return <Lots      onSelectLot={handleSelectLot} />;
       case "tour_fa":     return <TourFA    onSelectLot={handleSelectLot} />;
       case "assemblages": return <Assemblages />;
@@ -8587,21 +9118,16 @@ export default function App() {
   const executeHardReset = async () => {
     setIsResetting(true);
     try {
-      // 1. Appel API Backend (Seul juge)
       const res = await fetch('/api/reset', { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
       
       const data = await res.json();
-
       if (!res.ok) throw new Error(data.error || "Erreur serveur lors du reset");
 
-      // 2. Notification UI
       dispatch({ type: "TOAST_ADD", payload: { msg: "Base de données remise à zéro. Rechargement...", color: T.green } });
       
-      // 3. Rechargement forcé de l'état
-      // Au lieu de reload la page, on peut simplement vider le store et fetch
       await fetchAll();
       setShowResetModal(false);
 
@@ -8621,18 +9147,15 @@ export default function App() {
             * { box-sizing: border-box; } 
             select option { background: #1a1713; } 
             input:focus, select:focus { border-color: ${T.accent} !important; }
-            
-            /* LA MAGIE POUR LE CALENDRIER 📅 */
             ::-webkit-calendar-picker-indicator {
               background-image: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📅</text></svg>");
-              cursor: pointer;
-              opacity: 1;
+              cursor: pointer; opacity: 1;
             }
           `}</style>
           {!user ? <LoginScreen onLogin={setUser} /> : (
             <div style={{ display:"flex", height:"100vh", background:T.bg, color:T.text, fontFamily:"system-ui,sans-serif" }}>
               
-              {/* SIDEBAR */}
+              {/* --- SIDEBAR --- */}
               <div style={{ width:240, background:T.surface, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", flexShrink:0 }}>
                 <div style={{ padding:"24px 20px 20px", borderBottom:`1px solid ${T.border}` }}>
                   <div style={{ fontSize:22, fontFamily:"'Playfair Display', Georgia, serif", color:T.accentLight, letterSpacing:3 }}>CAVE</div>
@@ -8643,9 +9166,7 @@ export default function App() {
                     const isOpen = openMenus.includes(catIdx);
                     
                     const handleClick = () => {
-                      // Si la catégorie a un ID (comme Tableau de bord), c'est un lien direct
                       if (cat.id) goNav(cat.id);
-                      // Sinon, on ouvre/ferme l'accordéon
                       else {
                         if (isOpen) setOpenMenus(openMenus.filter(i => i !== catIdx));
                         else setOpenMenus([...openMenus, catIdx]);
@@ -8654,30 +9175,19 @@ export default function App() {
 
                     return (
                       <div key={catIdx} style={{ marginBottom: cat.title ? 12 : 0 }}>
-                        {/* Titre cliquable (Lien direct OU Accordéon) */}
                         {cat.title && (
-                          <div 
-                            onClick={handleClick}
-                            style={{ margin:"12px 20px 6px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", padding: "4px 0" }}
-                          >
+                          <div onClick={handleClick} style={{ margin:"12px 20px 6px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", padding: "4px 0" }}>
                             <span style={{ display:"flex", alignItems:"center", gap:8, fontSize:10, color: nav === cat.id ? T.accentLight : T.textDim, textTransform:"uppercase", letterSpacing:1.5, fontWeight:"bold", transition:"color 0.2s" }}>
                               {cat.title}
-                              {/* On replace le badge d'alerte ici pour le tableau de bord */}
                               {cat.id === "dashboard" && alertCount > 0 && (
                                 <span style={{ background:T.red, color:"#fff", fontSize:9, padding:"2px 6px", borderRadius:10, letterSpacing:0 }}>{alertCount}</span>
                               )}
                             </span>
-                            
-                            {/* On affiche la flèche uniquement si ce n'est PAS un lien direct */}
                             {!cat.id && (
-                              <span style={{ fontSize: 9, color: T.textDim, transition: "transform 0.2s", transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)" }}>
-                                ▼
-                              </span>
+                              <span style={{ fontSize: 9, color: T.textDim, transition: "transform 0.2s", transform: isOpen ? "rotate(0deg)" : "rotate(-90deg)" }}>▼</span>
                             )}
                           </div>
                         )}
-                        
-                        {/* Affichage des boutons SEULEMENT si c'est ouvert ET que ce n'est pas un lien direct */}
                         {(!cat.id && isOpen) && cat.items.map(item => (
                           <button key={item.id} onClick={() => goNav(item.id)} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%", padding:"10px 20px", background: nav === item.id ? T.accent+"15" : "none", border:"none", borderLeft:`3px solid ${nav === item.id ? T.accent : "transparent"}`, color: nav === item.id ? T.accentLight : T.textDim, cursor:"pointer", fontSize:13, textAlign:"left", transition:"all .15s", fontFamily:"sans-serif" }}>
                             <span style={{ display:"flex", gap:12, alignItems:"center" }}><span style={{ fontSize:16 }}>{item.icon}</span>{item.label}</span>
@@ -8687,21 +9197,12 @@ export default function App() {
                     );
                   })}
                   
-                  {/* Menu Administration (Accordéon) */}
                   {isAdmin && (
                     <div style={{ marginBottom: 12 }}>
-                      <div 
-                        onClick={() => setAdminOpen(!adminOpen)}
-                        style={{ margin:"20px 20px 6px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", borderTop:`1px solid ${T.border}`, paddingTop:20 }}
-                      >
-                        <span style={{ fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1.5, fontWeight:"bold" }}>
-                          Système
-                        </span>
-                        <span style={{ fontSize: 9, color: T.textDim, transition: "transform 0.2s", transform: adminOpen ? "rotate(0deg)" : "rotate(-90deg)" }}>
-                          ▼
-                        </span>
+                      <div onClick={() => setAdminOpen(!adminOpen)} style={{ margin:"20px 20px 6px", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", borderTop:`1px solid ${T.border}`, paddingTop:20 }}>
+                        <span style={{ fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1.5, fontWeight:"bold" }}>Système</span>
+                        <span style={{ fontSize: 9, color: T.textDim, transition: "transform 0.2s", transform: adminOpen ? "rotate(0deg)" : "rotate(-90deg)" }}>▼</span>
                       </div>
-                      
                       {adminOpen && ADMIN_NAV.map(item => (
                         <button key={item.id} onClick={() => goNav(item.id)} style={{ display:"flex", alignItems:"center", width:"100%", padding:"10px 20px", background: nav === item.id ? T.accent+"15" : "none", border:"none", borderLeft:`3px solid ${nav === item.id ? T.accent : "transparent"}`, color: nav === item.id ? T.accentLight : T.textDim, cursor:"pointer", fontSize:13, textAlign:"left", transition:"all .15s", fontFamily:"sans-serif" }}>
                           <span style={{ display:"flex", gap:12, alignItems:"center" }}><span style={{ fontSize:16 }}>{item.icon}</span>{item.label}</span>
@@ -8725,28 +9226,31 @@ export default function App() {
                 </div>
               </div>
               
-              {/* MAIN CONTENT AREA */}
+              {/* --- MAIN CONTENT AREA --- */}
               <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0, overflow:"hidden" }}>
                 <div style={{ background:T.surface, borderBottom:`1px solid ${T.border}`, padding:"12px 32px", display:"flex", alignItems:"center", gap:16, flexShrink:0 }}>
                   <GlobalSearch onNavigate={goNav} onSelectContainer={c => { setSelCont(c); goNav("cuverie"); }} onSelectLot={l => { setSelLot(l); goNav("lots"); }} />
                 </div>
+                
                 <div style={{ flex:1, overflowY:"auto", padding:"40px 48px" }}>
 
-                  {/* 👇 LE BOUTON EST ICI 👇 */}
-                  <button 
-                    onClick={() => setShowResetModal(true)} 
-                    style={{ 
-                      width: "100%", background: "#8b1c31", color: "white", padding: "12px", 
-                      marginBottom: "24px", borderRadius: "6px", fontWeight: "bold", 
-                      cursor: "pointer", border: "1px solid #ff4444", fontFamily: "monospace", letterSpacing: "1px"
-                    }}
-                  >
-                    🚨 BOUTON D'URGENCE : RÉINITIALISER LA BASE DE DONNÉES (LOTS & CUVES) 🚨
-                  </button>
+                  {/* BOUTON D'URGENCE (VISIBLE UNIQUEMENT PAR LES ADMINS) */}
+                  {isAdmin && (
+                    <button 
+                      onClick={() => setShowResetModal(true)} 
+                      style={{ 
+                        width: "100%", background: "#8b1c31", color: "white", padding: "12px", 
+                        marginBottom: "24px", borderRadius: "6px", fontWeight: "bold", 
+                        cursor: "pointer", border: "1px solid #ff4444", fontFamily: "monospace", letterSpacing: "1px"
+                      }}
+                    >
+                      🚨 BOUTON D'URGENCE : RÉINITIALISER LA BASE DE DONNÉES (LOTS & CUVES) 🚨
+                    </button>
+                  )}
 
-                  {/* LA MODALE DE CONFIRMATION INTÉGRÉE AU THÈME */}
                   {showResetModal && (
                     <Modal title="⚠️ Réinitialisation de Saison" onClose={() => setShowResetModal(false)}>
+                      {/* ... Le contenu de ta modale ... */}
                       <div style={{ padding:"20px 0", color:T.text, lineHeight:1.5 }}>
                         Vous allez préparer l'application pour une nouvelle campagne. <br/><br/>
                         <strong>Ce qui sera conservé :</strong>
@@ -8770,11 +9274,14 @@ export default function App() {
                       </div>
                     </Modal>
                   )}
-                  {/* 👆 FIN DU BOUTON 👆 */}
 
+                  {/* Le contenu des onglets (Dashboard, Cuverie, etc.) */}
                   {renderContent()}
+                  
                 </div>
               </div>
+              
+              {/* Le composant Toast tout en bas, par-dessus tout */}
               <Toast toasts={state.toasts} dispatch={dispatch} />
             </div>
           )}
