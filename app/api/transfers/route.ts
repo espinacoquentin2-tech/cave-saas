@@ -11,6 +11,7 @@ export async function POST(request: Request) {
 
   try {
     const actor = parseRequestActor(request);
+    const payload = createTransferSchema.parse(await request.json());
 import {
   createTransferSchema,
   transferActorSchema,
