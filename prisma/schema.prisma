@@ -14,40 +14,40 @@ datasource db {
 // ==========================================
 
 model User {
-  id            Int           @id @default(autoincrement())
-  name          String
-  email         String        @unique
-  role          String        // ADMIN, CHEF_CAVE, CAVISTE, LECTURE
-  createdAt     DateTime      @default(now()) @map("created_at")
-  
-  lotEvents     LotEvent[]
-  bottleEvents  BottleEvent[]
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  role      String // ADMIN, CHEF_CAVE, CAVISTE, LECTURE
+  createdAt DateTime @default(now()) @map("created_at")
+
+  lotEvents    LotEvent[]
+  bottleEvents BottleEvent[]
 
   @@map("users")
 }
 
 model Place {
-  id             Int       @id @default(autoincrement())
-  code           String    @unique
-  type           String    // COMMUNE, LIEU_DIT, PARCELLE
-  parentId       Int?      @map("parent_id")
+  id             Int    @id @default(autoincrement())
+  code           String @unique
+  type           String // COMMUNE, LIEU_DIT, PARCELLE
+  parentId       Int?   @map("parent_id")
   name           String
-  normalizedName String    @map("normalized_name")
-  
-  parent         Place?    @relation("PlaceHierarchy", fields: [parentId], references: [id])
-  children       Place[]   @relation("PlaceHierarchy")
+  normalizedName String @map("normalized_name")
+
+  parent   Place?  @relation("PlaceHierarchy", fields: [parentId], references: [id])
+  children Place[] @relation("PlaceHierarchy")
 
   @@map("places")
 }
 
 model Intrant {
-  id                Int                @id @default(autoincrement())
-  code              String             @unique
-  name              String
-  category          String
-  mainUnit          String             @map("main_unit")
-  
-  lotEventIntrants  LotEventIntrant[]
+  id       Int    @id @default(autoincrement())
+  code     String @unique
+  name     String
+  category String
+  mainUnit String @map("main_unit")
+
+  lotEventIntrants LotEventIntrant[]
 
   @@map("intrants")
 }
@@ -57,22 +57,22 @@ model Intrant {
 // ==========================================
 
 model Container {
-  id             Int      @id @default(autoincrement())
-  code           String   @unique
-  displayName    String   @map("display_name")
-  type           String   // CUVE_INOX, CITERNE, COMPARTIMENT...
-  capacityValue  Float    @map("capacity_value")
-  capacityUnit   String   @default("hL") @map("capacity_unit")
-  site           String?
-  zone           String?
-  status         String   @default("VIDE")
-  notes          String?
-  createdAt      DateTime @default(now()) @map("created_at")
+  id            Int      @id @default(autoincrement())
+  code          String   @unique
+  displayName   String   @map("display_name")
+  type          String // CUVE_INOX, CITERNE, COMPARTIMENT...
+  capacityValue Decimal  @map("capacity_value")
+  capacityUnit  String   @default("hL") @map("capacity_unit")
+  site          String?
+  zone          String?
+  status        String   @default("VIDE")
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
 
   // NOUVEAU : Relations Parent/Enfant pour les compartiments
-  parentId       Int?     @map("parent_id")
-  parent         Container?  @relation("ContainerHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
-  children       Container[] @relation("ContainerHierarchy")
+  parentId Int?        @map("parent_id")
+  parent   Container?  @relation("ContainerHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children Container[] @relation("ContainerHierarchy")
 
   currentLots        Lot[]
   lotEventContainers LotEventContainer[]
@@ -81,57 +81,58 @@ model Container {
 }
 
 model Lot {
-  id                 Int       @id @default(autoincrement())
-  technicalCode      String    @unique @map("technical_code")
-  businessCode       String    @unique @map("business_code")
+  id                 Int      @id @default(autoincrement())
+  technicalCode      String   @unique @map("technical_code")
+  businessCode       String   @unique @map("business_code")
   year               Int
-  mainGrapeCode      String    @map("main_grape_code")
-  placeCode          String?   @map("place_code")
-  sequenceNumber     Int       @map("sequence_number")
-  status             String    @default("ACTIF")
-  currentVolume      Float     @default(0) @map("current_volume")
-  currentVolumeUnit  String    @default("hL") @map("current_volume_unit")
-  currentContainerId Int?      @map("current_container_id")
-  createdAt          DateTime  @default(now()) @map("created_at")  
-// LA NOUVELLE COLONNE INDISPENSABLE 👇
+  mainGrapeCode      String   @map("main_grape_code")
+  placeCode          String?  @map("place_code")
+  sequenceNumber     Int      @map("sequence_number")
+  status             String   @default("ACTIF")
+  currentVolume      Decimal  @default(0) @map("current_volume")
+  currentVolumeUnit  String   @default("hL") @map("current_volume_unit")
+  currentContainerId Int?     @map("current_container_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  // LA NOUVELLE COLONNE INDISPENSABLE 👇
   notes              String?
 
-  currentContainer  Container?     @relation(fields: [currentContainerId], references: [id])
-  components        LotComponent[]
-  analyses          Analysis[]
-  lotEventLots      LotEventLot[]
-  bottleLots        BottleLot[]
-  faReadings        FaReading[]
+  currentContainer Container?     @relation(fields: [currentContainerId], references: [id])
+  components       LotComponent[]
+  analyses         Analysis[]
+  lotEventLots     LotEventLot[]
+  bottleLots       BottleLot[]
+  faReadings       FaReading[]
+
   @@map("lots")
 }
 
 model LotComponent {
-  id          Int    @id @default(autoincrement())
-  lotId       Int    @map("lot_id")
-  grapeCode   String @map("grape_code")
-  percentage  Float
+  id         Int     @id @default(autoincrement())
+  lotId      Int     @map("lot_id")
+  grapeCode  String  @map("grape_code")
+  percentage Decimal
 
-  lot         Lot    @relation(fields: [lotId], references: [id])
+  lot Lot @relation(fields: [lotId], references: [id])
 
   @@map("lot_components")
 }
 
 model Analysis {
-  id            Int      @id @default(autoincrement())
-  lotId         Int      @map("lot_id")
-  analysisDate  DateTime @default(now()) @map("analysis_date")
-  ph            Float?
-  at            Float?
-  so2Free       Float?   @map("so2_free")
-  so2Total      Float?   @map("so2_total")
-  alcohol       Float?
-  fileUrl       String?  @map("file_url")
-  notes         String?
-  
-  // LE FAMEUX TIROIR MAGIQUE POUR LES BRETTS ET AUTRES 🧪
-  extraData     Json?    @map("extra_data")
+  id           Int      @id @default(autoincrement())
+  lotId        Int      @map("lot_id")
+  analysisDate DateTime @default(now()) @map("analysis_date")
+  ph           Float?
+  at           Float?
+  so2Free      Float?   @map("so2_free")
+  so2Total     Float?   @map("so2_total")
+  alcohol      Float?
+  fileUrl      String?  @map("file_url")
+  notes        String?
 
-  lot           Lot      @relation(fields: [lotId], references: [id])
+  // LE FAMEUX TIROIR MAGIQUE POUR LES BRETTS ET AUTRES 🧪
+  extraData Json? @map("extra_data")
+
+  lot Lot @relation(fields: [lotId], references: [id])
 
   @@map("analyses")
 }
@@ -141,43 +142,43 @@ model Analysis {
 // ==========================================
 
 model LotEvent {
-  id              Int      @id @default(autoincrement())
-  eventType       String   @map("event_type")
-  eventDatetime   DateTime @default(now()) @map("event_datetime")
-  operatorUserId  Int      @map("operator_user_id")
-  comment         String?
-  createdAt       DateTime @default(now()) @map("created_at")
+  id             Int      @id @default(autoincrement())
+  eventType      String   @map("event_type")
+  eventDatetime  DateTime @default(now()) @map("event_datetime")
+  operatorUserId Int      @map("operator_user_id")
+  comment        String?
+  createdAt      DateTime @default(now()) @map("created_at")
 
-  operator    User                @relation(fields: [operatorUserId], references: [id])
-  lots        LotEventLot[]
-  containers  LotEventContainer[]
-  intrants    LotEventIntrant[]
+  operator   User                @relation(fields: [operatorUserId], references: [id])
+  lots       LotEventLot[]
+  containers LotEventContainer[]
+  intrants   LotEventIntrant[]
 
   @@map("lot_events")
 }
 
 model LotEventLot {
-  id           Int    @id @default(autoincrement())
-  eventId      Int    @map("event_id")
-  lotId        Int    @map("lot_id")
-  roleInEvent  String @map("role_in_event")
-  volumeChange Float  @map("volume")
-  unit         String @default("hL")
+  id           Int     @id @default(autoincrement())
+  eventId      Int     @map("event_id")
+  lotId        Int     @map("lot_id")
+  roleInEvent  String  @map("role_in_event")
+  volumeChange Decimal @map("volume")
+  unit         String  @default("hL")
 
-  event        LotEvent @relation(fields: [eventId], references: [id])
-  lot          Lot      @relation(fields: [lotId], references: [id])
+  event LotEvent @relation(fields: [eventId], references: [id])
+  lot   Lot      @relation(fields: [lotId], references: [id])
 
   @@map("lot_event_lots")
 }
 
 model LotEventContainer {
-  id           Int    @id @default(autoincrement())
-  eventId      Int    @map("event_id")
-  containerId  Int    @map("container_id")
-  roleInEvent  String @map("role_in_event")
+  id          Int    @id @default(autoincrement())
+  eventId     Int    @map("event_id")
+  containerId Int    @map("container_id")
+  roleInEvent String @map("role_in_event")
 
-  event        LotEvent  @relation(fields: [eventId], references: [id])
-  container    Container @relation(fields: [containerId], references: [id])
+  event     LotEvent  @relation(fields: [eventId], references: [id])
+  container Container @relation(fields: [containerId], references: [id])
 
   @@map("lot_event_containers")
 }
@@ -186,12 +187,12 @@ model LotEventIntrant {
   id            Int     @id @default(autoincrement())
   eventId       Int     @map("event_id")
   intrantId     Int     @map("intrant_id")
-  quantity      Float
+  quantity      Decimal
   unit          String
   supplierBatch String? @map("supplier_batch")
 
-  event         LotEvent @relation(fields: [eventId], references: [id])
-  intrant       Intrant  @relation(fields: [intrantId], references: [id])
+  event   LotEvent @relation(fields: [eventId], references: [id])
+  intrant Intrant  @relation(fields: [intrantId], references: [id])
 
   @@map("lot_event_intrants")
 }
@@ -201,55 +202,55 @@ model LotEventIntrant {
 // ==========================================
 
 model BottleLot {
-  id                  Int       @id @default(autoincrement())
-  technicalCode       String    @unique @map("technical_code")
-  businessCode        String    @unique @map("business_code")
-  type                String    // ex: "TIRAGE", "DEGORGE"
-  sourceLotId         Int?      @map("source_lot_id")
-  sourceBottleLotId   Int?      @map("source_bottle_lot_id")
-  formatCode          String    @map("format_code")
-  initialBottleCount  Int       @map("initial_bottle_count")
-  currentBottleCount  Int       @map("current_bottle_count")
-  status              String    @default("EN_CAVE")
-  tirageDate          DateTime? @map("tirage_date")
-  degorgementDate     DateTime? @map("degorgement_date")
-  dosageValue         Float?    @map("dosage_value")
-  dosageUnit          String?   @map("dosage_unit")
-  locationZone        String?   @map("location_zone")
-  locationRack        String?   @map("location_rack")
-  locationPalette     String?   @map("location_palette")
-  createdAt           DateTime  @default(now()) @map("created_at")
+  id                 Int       @id @default(autoincrement())
+  technicalCode      String    @unique @map("technical_code")
+  businessCode       String    @unique @map("business_code")
+  type               String // ex: "TIRAGE", "DEGORGE"
+  sourceLotId        Int?      @map("source_lot_id")
+  sourceBottleLotId  Int?      @map("source_bottle_lot_id")
+  formatCode         String    @map("format_code")
+  initialBottleCount Int       @map("initial_bottle_count")
+  currentBottleCount Int       @map("current_bottle_count")
+  status             String    @default("EN_CAVE")
+  tirageDate         DateTime? @map("tirage_date")
+  degorgementDate    DateTime? @map("degorgement_date")
+  dosageValue        Float?    @map("dosage_value")
+  dosageUnit         String?   @map("dosage_unit")
+  locationZone       String?   @map("location_zone")
+  locationRack       String?   @map("location_rack")
+  locationPalette    String?   @map("location_palette")
+  createdAt          DateTime  @default(now()) @map("created_at")
 
-  sourceLot           Lot?              @relation(fields: [sourceLotId], references: [id])
-  bottleEventLinks    BottleEventLink[]
-  shipmentLines       ShipmentLine[]
+  sourceLot        Lot?              @relation(fields: [sourceLotId], references: [id])
+  bottleEventLinks BottleEventLink[]
+  shipmentLines    ShipmentLine[]
 
   @@map("bottle_lots")
 }
 
 model BottleEvent {
-  id              Int      @id @default(autoincrement())
-  eventType       String   @map("event_type")
-  eventDatetime   DateTime @default(now()) @map("event_datetime")
-  operatorUserId  Int      @map("operator_user_id")
-  comment         String?
-  createdAt       DateTime @default(now()) @map("created_at")
+  id             Int      @id @default(autoincrement())
+  eventType      String   @map("event_type")
+  eventDatetime  DateTime @default(now()) @map("event_datetime")
+  operatorUserId Int      @map("operator_user_id")
+  comment        String?
+  createdAt      DateTime @default(now()) @map("created_at")
 
-  operator        User              @relation(fields: [operatorUserId], references: [id])
-  links           BottleEventLink[]
+  operator User              @relation(fields: [operatorUserId], references: [id])
+  links    BottleEventLink[]
 
   @@map("bottle_events")
 }
 
 model BottleEventLink {
-  id            Int    @id @default(autoincrement())
-  eventId       Int    @map("event_id")
-  bottleLotId   Int    @map("bottle_lot_id")
-  roleInEvent   String @map("role_in_event")
-  bottleCount   Int    @map("bottle_count")
+  id          Int    @id @default(autoincrement())
+  eventId     Int    @map("event_id")
+  bottleLotId Int    @map("bottle_lot_id")
+  roleInEvent String @map("role_in_event")
+  bottleCount Int    @map("bottle_count")
 
-  event         BottleEvent @relation(fields: [eventId], references: [id])
-  bottleLot     BottleLot   @relation(fields: [bottleLotId], references: [id])
+  event     BottleEvent @relation(fields: [eventId], references: [id])
+  bottleLot BottleLot   @relation(fields: [bottleLotId], references: [id])
 
   @@map("bottle_event_links")
 }
@@ -265,19 +266,19 @@ model Shipment {
   comment      String?
   createdAt    DateTime @default(now()) @map("created_at")
 
-  lines        ShipmentLine[]
+  lines ShipmentLine[]
 
   @@map("shipments")
 }
 
 model ShipmentLine {
-  id           Int @id @default(autoincrement())
-  shipmentId   Int @map("shipment_id")
-  bottleLotId  Int @map("bottle_lot_id")
-  bottleCount  Int @map("bottle_count")
+  id          Int @id @default(autoincrement())
+  shipmentId  Int @map("shipment_id")
+  bottleLotId Int @map("bottle_lot_id")
+  bottleCount Int @map("bottle_count")
 
-  shipment     Shipment  @relation(fields: [shipmentId], references: [id])
-  bottleLot    BottleLot @relation(fields: [bottleLotId], references: [id])
+  shipment  Shipment  @relation(fields: [shipmentId], references: [id])
+  bottleLot BottleLot @relation(fields: [bottleLotId], references: [id])
 
   @@map("shipment_lines")
 }
@@ -285,13 +286,13 @@ model ShipmentLine {
 model FaReading {
   id          Int      @id @default(autoincrement())
   lotId       Int      @map("lot_id")
-  date        String   // Format YYYY-MM-DD
+  date        String // Format YYYY-MM-DD
   density     Float
   temperature Float
   operator    String
   createdAt   DateTime @default(now()) @map("created_at")
 
-  lot         Lot      @relation(fields: [lotId], references: [id])
+  lot Lot @relation(fields: [lotId], references: [id])
 
   @@map("fa_readings")
 }
@@ -302,10 +303,10 @@ model FaReading {
 
 model Pressing {
   id        Int      @id @default(autoincrement())
-  date      String   // Format YYYY-MM-DD
+  date      String // Format YYYY-MM-DD
   cru       String
   cepage    String
-  weight    Float
+  weight    Decimal
   status    String   @default("EN_ATTENTE") // "EN_ATTENTE", "PRESSE"
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -316,90 +317,90 @@ model Pressing {
 // SUIVI DE MATURITÉ (VIGNOBLE)
 // ==========================================
 model Maturation {
-  id          Int      @id @default(autoincrement())
-  date        DateTime
-  parcelle    String   // Ex: "Les Craies" ou "Velye"
-  cepage      String   // Ex: "CH", "PN", "PM"
-  
+  id       Int      @id @default(autoincrement())
+  date     DateTime
+  parcelle String // Ex: "Les Craies" ou "Velye"
+  cepage   String // Ex: "CH", "PN", "PM"
+
   // Paramètres analytiques (Optionnels car on ne mesure pas tout tous les jours)
-  sucre       Float?   // En g/L
-  ph          Float?
-  at          Float?   // En g/L (H2SO4)
-  malique     Float?   // En g/L
-  tartrique   Float?   // En g/L
-  maladie     String?  // Ex: "Aucune", "Mildiou", "Oïdium", "Pourriture Grise"
-  intensite   Float?   // Ex: 5 (pour 5%)
-  
+  sucre     Float? // En g/L
+  ph        Float?
+  at        Float? // En g/L (H2SO4)
+  malique   Float? // En g/L
+  tartrique Float? // En g/L
+  maladie   String? // Ex: "Aucune", "Mildiou", "Oïdium", "Pourriture Grise"
+  intensite Float? // Ex: 5 (pour 5%)
+
   // Valeurs calculées stockées pour l'historique
-  tavp        Float?   // Titre Alcoométrique Volumique Potentiel
-  
-  operator    String?
-  notes       String?
-  
-  createdAt   DateTime @default(now())
+  tavp Float? // Titre Alcoométrique Volumique Potentiel
+
+  operator String?
+  notes    String?
+
+  createdAt DateTime @default(now())
 }
 
 // ==========================================
 // VIGNOBLE : LISTE DES PARCELLES
 // ==========================================
 model Parcelle {
-  id          Int      @id @default(autoincrement())
-  nom         String   @unique
-  
+  id  Int    @id @default(autoincrement())
+  nom String @unique
+
   // Nouvelles colonnes de terroir
   departement String?
   region      String?
   commune     String?
-  
-  createdAt   DateTime @default(now())
+
+  createdAt DateTime @default(now())
 }
 
 // ==========================================
 // DÉGUSTATIONS & ANALYSES SENSORIELLES
 // ==========================================
 model Degustation {
-  id          Int      @id @default(autoincrement())
-  date        DateTime @default(now())
-  
+  id   Int      @id @default(autoincrement())
+  date DateTime @default(now())
+
   // Phase : "BAIES", "FERMENTATION", "VINS_CLAIRS", "DOSAGE", "FINI"
-  phase       String   
-  
+  phase String
+
   // Cibles (un seul de ces champs sera rempli selon la phase)
-  parcelle    String?  // Pour la phase BAIES
-  lotId       String?  // Pour Vrac (FERMENTATION / VINS_CLAIRS)
-  bottleLotId String?  // Pour Bouteilles (DOSAGE / FINI)
+  parcelle    String? // Pour la phase BAIES
+  lotId       String? // Pour Vrac (FERMENTATION / VINS_CLAIRS)
+  bottleLotId String? // Pour Bouteilles (DOSAGE / FINI)
 
   // Critères
-  robe        String?  
-  nez         String?  
-  bouche      String?  
-  
+  robe   String?
+  nez    String?
+  bouche String?
+
   // Note globale et essais
-  noteGlobale Float?   // Ex: sur 20 ou 5 étoiles
-  sucreTest   Float?   // Uniquement pour la phase DOSAGE (g/L)
-  
-  operator    String?
-  notes       String?  // Commentaire libre (limité à 250 caractères côté application)
-  
-  createdAt   DateTime @default(now())
+  noteGlobale Float? // Ex: sur 20 ou 5 étoiles
+  sucreTest   Float? // Uniquement pour la phase DOSAGE (g/L)
+
+  operator String?
+  notes    String? // Commentaire libre (limité à 250 caractères côté application)
+
+  createdAt DateTime @default(now())
 }
 
 // ==========================================
 // CHAI : PARC DES PRESSOIRS
 // ==========================================
 model Pressoir {
-  id        Int      @id @default(autoincrement())
-  nom       String   // Ex: Pressoir 1, Pressoir Bücher
-  type      String   // Ex: Pneumatique, Traditionnel
-  marque    String
-  capacite  Int      // En kg (2000, 4000, 8000...)
-  
+  id       Int    @id @default(autoincrement())
+  nom      String // Ex: Pressoir 1, Pressoir Bücher
+  type     String // Ex: Pneumatique, Traditionnel
+  marque   String
+  capacite Int // En kg (2000, 4000, 8000...)
+
   // État en temps réel de la machine
-  status    String   @default("VIDE") // "VIDE", "EN_COURS", "PRET_ECOULAGE"
-  loadKg    Int?     // Poids actuellement chargé
-  parcelle  String?  // Provenance
-  cepage    String?  
-  
+  status   String  @default("VIDE") // "VIDE", "EN_COURS", "PRET_ECOULAGE"
+  loadKg   Int? // Poids actuellement chargé
+  parcelle String? // Provenance
+  cepage   String?
+
   createdAt DateTime @default(now())
 }
 
@@ -408,31 +409,31 @@ model Pressoir {
 // ==========================================
 
 model Product {
-  id            Int             @id @default(autoincrement())
-  name          String
-  category      String          // Ex: "Matières Sèches", "Bouchage", "Intrants"
-  subCategory   String          @map("sub_category") // Ex: "Bouteilles", "Capsules"
-  unit          String          // Ex: "btl", "kg", "g"
-  minStock      Float           @default(0) @map("min_stock")
-  currentStock  Float           @default(0) @map("current_stock")
-  createdAt     DateTime        @default(now()) @map("created_at")
-  updatedAt     DateTime        @updatedAt @map("updated_at")
+  id           Int      @id @default(autoincrement())
+  name         String
+  category     String // Ex: "Matières Sèches", "Bouchage", "Intrants"
+  subCategory  String   @map("sub_category") // Ex: "Bouteilles", "Capsules"
+  unit         String // Ex: "btl", "kg", "g"
+  minStock     Decimal  @default(0) @map("min_stock")
+  currentStock Decimal  @default(0) @map("current_stock")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
 
-  movements     StockMovement[]
+  movements StockMovement[]
 
   @@map("products")
 }
 
 model StockMovement {
-  id          Int      @id @default(autoincrement())
-  productId   Int      @map("product_id")
-  type        String   // "IN" (Entrée) ou "OUT" (Sortie)
-  quantity    Float
-  note        String?  // Ex: "BL Fournisseur n°123", "Tirage imprévu"
-  operator    String?
-  createdAt   DateTime @default(now()) @map("created_at")
+  id        Int      @id @default(autoincrement())
+  productId Int      @map("product_id")
+  type      String // "IN" (Entrée) ou "OUT" (Sortie)
+  quantity  Decimal
+  note      String? // Ex: "BL Fournisseur n°123", "Tirage imprévu"
+  operator  String?
+  createdAt DateTime @default(now()) @map("created_at")
 
-  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@map("stock_movements")
 }
@@ -452,7 +453,7 @@ model IdempotencyRecord {
 
 model AuditLog {
   id        Int      @id @default(autoincrement())
-  action    String   // Ex: "MIXTION_TIRAGE", "CREATION_LEVAIN"
+  action    String // Ex: "MIXTION_TIRAGE", "CREATION_LEVAIN"
   details   String
   userId    String?
   createdAt DateTime @default(now())

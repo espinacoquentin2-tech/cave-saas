@@ -1121,34 +1121,41 @@ function Vendanges({ onSelectContainer }) {
   };
 
   // --- DÉBOURBAGE (TRANSFERT / SOUTIRAGE) ---
-  // Nous réutilisons la logique existante mais appelons l'API backend que nous avons créée
   const validerTransfert = async () => {
-    const volSaisi = transferDests.reduce((sum, d) => parseToHl(sum + parseToHl(d.vol)), 0);
+    // 1. Calcul du volume total saisi
+    const volSaisi = transferDests.reduce((sum, d) => sum + parseToHl(d.vol), 0);
     
-    if (volSaisi <= 0) return alert("Indiquez le volume clair à soutirer.");
-    
-    const sourceId = transferModal.id;
-    const sourceTotal = parseToHl(transferModal.currentVolume || transferModal.volume);
-    const volReste = parseToHl(sourceTotal - volSaisi);
-
-    if (transferOptions.actionRest === "ENVOYER_BOURBES" && !transferOptions.bourbesDestId) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: "Veuillez sélectionner la cuve de destination pour les bourbes.", color: T.red } });
+    // Remplacement du "alert" par un Toast rouge
+    if (volSaisi <= 0) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: "Veuillez indiquer un volume supérieur à 0 pour le soutirage.", color: T.red } });
       return;
     }
-
+    
+    const sourceId = transferModal.id;
     const currentLot = (state.lots || []).find(l => String(l.currentContainerId || l.containerId) === String(sourceId) && parseFloat(l.currentVolume || l.volume) > 0);
 
     if (!currentLot) {
-       dispatch({ type: "TOAST_ADD", payload: { msg: "Erreur : Aucun lot détecté dans ce Belon. Rafraîchissez la page.", color: T.red } });
+       dispatch({ type: "TOAST_ADD", payload: { msg: "Erreur : La cuve source est vide ou le lot est introuvable.", color: T.red } });
        return;
+    }
+
+    if (transferOptions.actionRest === "ENVOYER_BOURBES" && !transferOptions.bourbesDestId) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: "Veuillez sélectionner la cuve de destination pour les bourbes/lies.", color: T.red } });
+      return;
     }
 
     setIsSubmitting(true);
     try {
+      // 2. Préparation stricte des destinations
       const validDestinations = transferDests
         .filter(d => d.cuveId && parseToHl(d.vol) > 0)
         .map(d => ({ toId: parseInt(d.cuveId), volume: parseToHl(d.vol) }));
 
+      if (validDestinations.length === 0) {
+        throw new Error("Aucune cuve de destination valide n'a été configurée.");
+      }
+
+      // 3. Payload Zod-compliant
       const payload = {
           lotId: parseInt(currentLot.id),
           fromId: parseInt(sourceId),
@@ -1158,29 +1165,36 @@ function Vendanges({ onSelectContainer }) {
           bourbesDestId: transferOptions.bourbesDestId ? parseInt(transferOptions.bourbesDestId) : null, 
           operator: user?.name || "Système",
           date: new Date().toISOString(),
-          idempotencyKey
+          idempotencyKey: idempotencyKey || crypto.randomUUID() // Sécurité absolue
       };
 
+      // 4. Appel de l'API blindée
       const res = await fetch('/api/transfers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
       });
 
-      if (!res.ok) throw new Error((await res.json()).error);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur lors du transfert.");
 
+      // 5. SUCCÈS
       if (refreshData) await refreshData();
       
       dispatch({ type: "TOAST_ADD", payload: { msg: `Soutirage validé et sauvegardé en base !`, color: T.accent } });
+      
+      // Reset de l'interface
       setTransferModal(null);
       setTransferDests([]);
       setTransferOptions({ actionRest: "ENVOYER_BOURBES", bourbesDestId: "" });
-      setIdempotencyKey(crypto.randomUUID());
 
-    } catch (e) {
-        alert("Erreur transfert: " + e.message);
+    } catch (e: any) {
+        // 6. ECHEC : Affichage de l'erreur métier en rouge
+        dispatch({ type: "TOAST_ADD", payload: { msg: `Action refusée : ${e.message}`, color: T.red } });
     } finally {
         setIsSubmitting(false);
+        // On renouvelle la clé pour éviter tout blocage au prochain clic
+        setIdempotencyKey(crypto.randomUUID());
     }
   };
 
@@ -1190,7 +1204,7 @@ function Vendanges({ onSelectContainer }) {
     setIsSubmitting(true);
     
     try {
-      // Préparation du payload pour notre API sécurisée
+      // 1. Préparation du payload pour l'API
       const payload = {
         pressoirId: p.id,
         parcelle: p.parcelle,
@@ -1199,7 +1213,7 @@ function Vendanges({ onSelectContainer }) {
         tailles: tailleDests.filter(d => d.cuveId && parseToHl(d.vol) > 0).map(d => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
         rebeches: rebechesDests.filter(d => d.cuveId && parseToHl(d.vol) > 0).map(d => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
         operator: user?.name || "Système",
-        idempotencyKey
+        idempotencyKey: idempotencyKey || crypto.randomUUID()
       };
 
       const res = await fetch('/api/pressings/ecoulement', { 
@@ -1208,21 +1222,21 @@ function Vendanges({ onSelectContainer }) {
         body: JSON.stringify(payload) 
       });
 
-      if (!res.ok) throw new Error((await res.json()).error || "Erreur lors de l'écoulement en base de données.");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erreur lors de l'écoulement en base de données.");
 
+      // 2. SUCCÈS
       dispatch({ type: "TOAST_ADD", payload: { msg: "Jus écoulés, lots créés et pressoir vidé !", color: T.green } });
       
-      // On ferme la modale et on renouvelle la clé d'idempotence pour la prochaine action
       setActionModal(null);
-      setIdempotencyKey(crypto.randomUUID());
-      
-      // On rafraîchit les données depuis le serveur
       if (refreshData) await refreshData();
 
-    } catch(e) { 
-      alert(e.message); 
+    } catch(e: any) { 
+      // 3. ECHEC : Remplacement du vieux alert()
+      dispatch({ type: "TOAST_ADD", payload: { msg: `Erreur d'écoulement : ${e.message}`, color: T.red } });
     } finally {
       setIsSubmitting(false);
+      setIdempotencyKey(crypto.randomUUID());
     }
   };
 
@@ -4441,43 +4455,74 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
   };
 
   // Ce POST tape sur l'API sécurisée /api/tirage que nous avons faite dans le TirageService
-  const submitTirage = async () => {
-    setIsSubmitting(true);
+const submitTirage = async () => {
+  setIsSubmitting(true);
+  
+  try {
     const isTranquille = tirageForm.typeMise === "TRANQUILLE";
-    const finalNote = isTranquille ? `Mise en bouteille tranquille (${tirageForm.bouchage}). ${tirageForm.note}` : `Tirage effervescent (${tirageForm.bouchage}). ${tirageForm.note}`;
-    
-    try {
-      const res = await fetch('/api/tirage', { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
-        body: JSON.stringify({ 
-          baseTankId: String(container?.id),
-          levainTankId: String(container?.id), // Pour simplifier si on tire directement, sinon il faudrait demander le levain
-          destTankId: String(container?.id),
-          baseVolToDraw: parseFloat(tirageForm.volume),
-          levainPct: 0, levainSugar: 0,
-          targetPressure: 6,
-          sugarSource: "MCR",
-          tirageFormat: tirageForm.format === "75cl" ? 0.75 : (tirageForm.format === "150cl" ? 1.5 : 0.375),
-          tirageBouchage: tirageForm.bouchage.toUpperCase(),
-          idempotencyKey
-        }) 
-      });
-      
-      if (res.ok) { 
-        dispatch({ type:"TOAST_ADD", payload:{ msg:`Tirage validé et tracé en base`, color:"#2d6640" } }); 
-        setModal(null); 
-        if (refreshData) await refreshData(); 
-      } else {
-        throw new Error((await res.json()).error);
-      }
-    } catch(e) {
-      alert(e.message);
-    } finally {
-      setIsSubmitting(false);
-      setIdempotencyKey(crypto.randomUUID());
+    const finalNote = isTranquille 
+      ? `Mise en bouteille tranquille (${tirageForm.bouchage}). ${tirageForm.note || ''}` 
+      : `Tirage effervescent (${tirageForm.bouchage}). ${tirageForm.note || ''}`;
+
+    // 1. Calcul automatique du nombre de bouteilles (count)
+    const volumeHL = parseFloat(tirageForm.volume);
+    const formatLiters = tirageForm.format === "75cl" ? 0.75 : (tirageForm.format === "150cl" ? 1.5 : 0.375);
+    const calculatedCount = Math.floor((volumeHL * 100) / formatLiters);
+
+    // 2. On récupère le lot source depuis la cuve sélectionnée
+    const sourceLot = container?.currentLots?.[0];
+    if (!sourceLot) {
+      throw new Error("La cuve sélectionnée est vide. Aucun lot à tirer.");
     }
-  };
+
+    // 3. Préparation du payload STRICTEMENT aligné avec Zod (TirageSchema)
+    const payload = {
+      lotId: sourceLot.id,
+      format: tirageForm.format,
+      count: calculatedCount,
+      volume: volumeHL,
+      zone: container?.zone || null, // Optionnel : pour savoir où on range les palettes
+      tirageDate: new Date().toISOString(),
+      note: finalNote,
+      isTranquille: isTranquille,
+      idempotencyKey: idempotencyKey || crypto.randomUUID()
+    };
+
+    // 4. Appel à l'API blindée
+    const res = await fetch('/api/tirage', { 
+      method: 'POST', 
+      headers: { 'Content-Type': 'application/json' }, 
+      body: JSON.stringify(payload) 
+    });
+    
+    const data = await res.json();
+
+    // 5. Gestion des erreurs du Backend (Zod ou BusinessLogicError)
+    if (!res.ok) {
+      throw new Error(data.error || "Une erreur est survenue lors du tirage.");
+    }
+
+    // 6. SUCCÈS ! 🎉 Affichage du Toast vert de ton système natif
+    dispatch({ 
+      type: "TOAST_ADD", 
+      payload: { msg: `Tirage validé ! Lot créé : ${data.bottleLotCode}`, color: "#2d6640" } 
+    }); 
+    
+    setModal(null); 
+    if (refreshData) await refreshData(); 
+
+  } catch(e: any) {
+    // 7. ECHEC ! 🛑 Affichage du Toast rouge avec le message d'erreur strict
+    dispatch({ 
+      type: "TOAST_ADD", 
+      payload: { msg: `Erreur : ${e.message}`, color: "#d93025" } // Code couleur rouge standard
+    });
+  } finally {
+    // 8. On débloque l'UI et on génère une nouvelle clé pour la prochaine tentative
+    setIsSubmitting(false);
+    setIdempotencyKey(crypto.randomUUID());
+  }
+};
 
   const statusC = LOT_STATUS_COLORS[lot.status] || T.textDim;
   const compoBadge = lot.mainGrapeCode || lot.cepage === "MULTI" && lot.notes?.includes("|") ? lot.notes.split("|")[0].trim() : (lot.mainGrapeCode || lot.cepage);

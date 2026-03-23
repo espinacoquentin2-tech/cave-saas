@@ -18,14 +18,16 @@ export const ExecuteMixtionSchema = z.object({
 export type ExecuteMixtionPayload = z.infer<typeof ExecuteMixtionSchema>;
 
 export const TirageSchema = z.object({
-  lotId: z.number().int().positive(),
-  format: z.string().min(1),
-  count: z.number().int().positive(),
-  volume: z.number().positive(),
+  lotId: z.coerce.number().int().positive("L'ID du lot doit être un entier positif"),
+  format: z.string().min(1, "Le format est requis"),
+  count: z.coerce.number().int().positive("Le nombre de bouteilles doit être supérieur à 0"),
+  volume: z.coerce.number().positive("Le volume doit être supérieur à 0"),
   zone: z.string().optional().nullable(),
-  tirageDate: z.string(),
-  operator: z.string(),
+  tirageDate: z.string().datetime({ message: "La date doit être au format valide (ISO 8601)" }),
+  operator: z.string().email("L'opérateur doit être un email valide").optional(), // À terme, on le prendra du token de session
   note: z.string().optional().nullable(),
   isTranquille: z.boolean().default(false),
-  idempotencyKey: z.string().min(10)
+  idempotencyKey: z.string().min(10, "Clé d'idempotence invalide")
 });
+
+export type TiragePayload = z.infer<typeof TirageSchema>;

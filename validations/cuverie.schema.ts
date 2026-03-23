@@ -1,32 +1,40 @@
+// validations/cuverie.schema.ts
 import { z } from 'zod';
 
 export const DecuvageSchema = z.object({
-  sourceLotId: z.number().int().positive(),
-  sourceContainerId: z.number().int().positive(),
-  volGoutte: z.number().nonnegative(),
-  cuveGoutteId: z.number().int().positive().optional().nullable(),
-  volPresse: z.number().nonnegative(),
-  cuvePresseId: z.number().int().positive().optional().nullable(),
-  finalStatus: z.string().min(1),
+  sourceLotId: z.coerce.number().int().positive("L'ID du lot source est requis"),
+  sourceContainerId: z.coerce.number().int().positive("L'ID de la cuve source est requis"),
+  volGoutte: z.coerce.number().nonnegative("Le volume Goutte ne peut pas être négatif"),
+  cuveGoutteId: z.coerce.number().int().positive().optional().nullable(),
+  volPresse: z.coerce.number().nonnegative("Le volume Presse ne peut pas être négatif"),
+  cuvePresseId: z.coerce.number().int().positive().optional().nullable(),
+  finalStatus: z.string().min(1, "Le statut final est requis"),
   notes: z.string().optional().nullable(),
-  operator: z.string(),
-  idempotencyKey: z.string().min(10)
-}).refine(data => data.volGoutte > 0 || data.volPresse > 0, "Aucun volume à décuver");
+  operator: z.string().email("L'opérateur doit être un email valide").optional(),
+  idempotencyKey: z.string().min(10, "Clé d'idempotence invalide")
+}).refine(data => data.volGoutte > 0 || data.volPresse > 0, {
+  message: "Aucun volume à décuver"
+});
+
+export const TransferDestinationSchema = z.object({
+  toId: z.coerce.number().int().positive("ID de cuve cible invalide"),
+  volume: z.coerce.number().positive("Le volume de la cible doit être supérieur à 0")
+});
 
 export const TransferSchema = z.object({
-  lotId: z.number().int().positive(),
-  fromId: z.number().int().positive(),
-  destinations: z.array(z.object({
-    toId: z.number().int().positive(),
-    volume: z.number().positive()
-  })).min(1),
-  volume: z.number().positive(),
+  lotId: z.coerce.number().int().positive("L'ID du lot source est requis"),
+  fromId: z.coerce.number().int().positive("L'ID de la cuve source est requis"),
+  destinations: z.array(TransferDestinationSchema).min(1, "Au moins une destination est requise"),
+  volume: z.coerce.number().positive("Le volume total doit être supérieur à 0"),
   remainderType: z.string().optional().nullable(),
-  bourbesDestId: z.number().int().positive().optional().nullable(),
-  date: z.string(),
-  operator: z.string(),
-  ph: z.number().optional().nullable(),
-  at: z.number().optional().nullable(),
-  tavp: z.number().optional().nullable(),
-  idempotencyKey: z.string().min(10)
+  bourbesDestId: z.coerce.number().int().positive().optional().nullable(),
+  date: z.string().datetime({ message: "La date doit être au format valide (ISO 8601)" }),
+  operator: z.string().email("L'opérateur doit être un email valide").optional(),
+  ph: z.coerce.number().positive().optional().nullable(),
+  at: z.coerce.number().positive().optional().nullable(),
+  tavp: z.coerce.number().positive().optional().nullable(),
+  idempotencyKey: z.string().min(10, "Clé d'idempotence invalide")
 });
+
+export type TransferPayload = z.infer<typeof TransferSchema>;
+export type DecuvagePayload = z.infer<typeof DecuvageSchema>;

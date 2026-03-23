@@ -1,36 +1,39 @@
 // services/cuverie.service.ts
 import { PrismaClient } from '@prisma/client';
-import { DecuvageSchema, TransferSchema } from '../validations/cuverie.schema';
-import { z } from 'zod';
+import { DecuvagePayload, TransferPayload } from '../validations/cuverie.schema';
+import { BusinessLogicError } from '../lib/errors';
 
 const prisma = new PrismaClient();
 
 export class CuverieService {
   
-  // Fonction utilitaire pour récupérer l'ID utilisateur (sécurité)
+  // Fonction utilitaire pour récupérer l'ID utilisateur
   private static async getUserId(tx: any, email: string) {
-    const user = await tx.user.findUnique({ where: { email } });
-    if (!user) throw new Error("Utilisateur non autorisé.");
+    const user = await tx.user.findFirst({ where: { email } });
+    if (!user) throw new BusinessLogicError("Utilisateur non autorisé.", 401);
     return user.id;
   }
 
   // =========================================================================
   // 1. DÉCUVAGE (Séparation Goutte / Presse)
   // =========================================================================
-  static async executeDecuvage(data: z.infer<typeof DecuvageSchema>, userEmail: string) {
+  static async executeDecuvage(data: DecuvagePayload, userEmail: string) {
     return await prisma.$transaction(async (tx) => {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
-      if (existingTx) throw new Error("ALREADY_APPLIED: Décuvage déjà enregistré.");
+      if (existingTx) throw new BusinessLogicError("ALREADY_APPLIED: Décuvage déjà enregistré.");
 
       const sourceLot = await tx.lot.findUnique({ where: { id: data.sourceLotId } });
-      if (!sourceLot) throw new Error("Lot source introuvable.");
+      if (!sourceLot) throw new BusinessLogicError("Lot source introuvable.", 404);
+
+      // Vérification mathématique stricte
+      const totalDecuvage = data.volGoutte + data.volPresse;
+      if (Number(sourceLot.currentVolume) < totalDecuvage) {
+         throw new BusinessLogicError(`Volume insuffisant. Dispo: ${Number(sourceLot.currentVolume)}hL, Demandé: ${totalDecuvage}hL.`);
+      }
 
       const operatorId = await this.getUserId(tx, userEmail);
-      
-      // 👈 CORRECTION 1 : Typage explicite du tableau pour rassurer TypeScript
       const newLots: any[] = [];
 
-      // Événement racine
       const event = await tx.lotEvent.create({
         data: {
           eventType: 'DECUVAGE',
@@ -45,7 +48,7 @@ export class CuverieService {
         data: { currentVolume: 0, status: "ARCHIVE" }
       });
       await tx.lotEventLot.create({
-        data: { eventId: event.id, lotId: sourceLot.id, roleInEvent: 'SOURCE', volumeChange: -(data.volGoutte + data.volPresse) }
+        data: { eventId: event.id, lotId: sourceLot.id, roleInEvent: 'SOURCE', volumeChange: -totalDecuvage }
       });
 
       // Mettre la cuve en nettoyage
@@ -57,7 +60,6 @@ export class CuverieService {
         data: { eventId: event.id, containerId: data.sourceContainerId, roleInEvent: 'SOURCE' }
       });
 
-      // Fonction locale de création des sous-lots
       const createSubLot = async (vol: number, targetContainerId: number | null | undefined, suffix: string, typeDesc: string) => {
         if (vol <= 0) return;
         const newLot = await tx.lot.create({
@@ -98,20 +100,27 @@ export class CuverieService {
   // =========================================================================
   // 2. TRANSFERT / SOUTIRAGE / ÉCLATEMENT
   // =========================================================================
-  static async executeTransfer(data: z.infer<typeof TransferSchema>, userEmail: string) {
+  static async executeTransfer(data: TransferPayload, userEmail: string) {
     return await prisma.$transaction(async (tx) => {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
-      if (existingTx) throw new Error("ALREADY_APPLIED: Transfert déjà effectué.");
+      if (existingTx) throw new BusinessLogicError("ALREADY_APPLIED: Transfert déjà effectué.");
+
+      // Vérification mathématique (Vases communicants)
+      const sumDestinations = data.destinations.reduce((acc, dest) => acc + dest.volume, 0);
+      if (Math.abs(sumDestinations - data.volume) > 0.01) {
+        throw new BusinessLogicError(`Incohérence : Le total déclaré (${data.volume}hL) ne correspond pas à la somme des cibles (${sumDestinations}hL).`);
+      }
 
       const sourceLot = await tx.lot.findUnique({ where: { id: data.lotId } });
       const sourceContainer = await tx.container.findUnique({ where: { id: data.fromId } });
-      if (!sourceLot || !sourceContainer) throw new Error("Source introuvable.");
+      if (!sourceLot || !sourceContainer) throw new BusinessLogicError("Source introuvable.", 404);
 
-      if (sourceLot.currentVolume < data.volume) throw new Error(`Volume source insuffisant. Dispo: ${sourceLot.currentVolume}hL`);
+      if (Number(sourceLot.currentVolume) < data.volume) {
+         throw new BusinessLogicError(`Volume source insuffisant. Dispo: ${Number(sourceLot.currentVolume)}hL`);
+      }
 
       const operatorId = await this.getUserId(tx, userEmail);
 
-      // Événement racine
       const event = await tx.lotEvent.create({
         data: {
           eventType: 'TRANSFERT',
@@ -121,9 +130,9 @@ export class CuverieService {
         }
       });
 
-      // 👈 CORRECTION : Calcul exact du reste
-      const newSourceVol = sourceLot.currentVolume - data.volume;
-      const isEmpty = newSourceVol <= 0.05; // Marge d'erreur flottante
+      // Calcul exact du reste
+      const newSourceVol = Number(sourceLot.currentVolume) - data.volume;
+      const isEmpty = newSourceVol <= 0.05; // Marge d'erreur pour les queues de cuve
       
       if (isEmpty && !data.remainderType) {
         // Transfert total simple
@@ -157,7 +166,11 @@ export class CuverieService {
       } 
       else {
         // Transfert partiel simple (le lot reste dans sa cuve avec moins de volume)
-        await tx.lot.update({ where: { id: sourceLot.id }, data: { currentVolume: newSourceVol } });
+        // Utilisation de décrémentation atomique
+        await tx.lot.update({ 
+           where: { id: sourceLot.id }, 
+           data: { currentVolume: { decrement: data.volume } } 
+        });
       }
 
       await tx.lotEventLot.create({ data: { eventId: event.id, lotId: sourceLot.id, roleInEvent: 'SOURCE', volumeChange: data.volume } });
@@ -166,12 +179,15 @@ export class CuverieService {
       // Ajout dans les cuves cibles
       let counter = 1;
       for (const dest of data.destinations) {
-        const targetContainer = await tx.container.findUnique({ where: { id: dest.toId }, include: { currentLots: true } });
-        if (!targetContainer) throw new Error(`Cuve cible ID ${dest.toId} introuvable.`);
+        const targetContainer = await tx.container.findUnique({ where: { id: dest.toId }, include: { currentLots: { where: { status: 'ACTIF' } } } });
+        if (!targetContainer) throw new BusinessLogicError(`Cuve cible ID ${dest.toId} introuvable.`);
         
-        const targetCurrentVol = targetContainer.currentLots.reduce((sum, l) => sum + l.currentVolume, 0);
-        if (targetCurrentVol + dest.volume > targetContainer.capacityValue + 0.1) {
-          throw new Error(`Débordement de la cuve ${targetContainer.code || targetContainer.id}.`);
+        // On calcule le volume actuel de la cible en lisant les Decimals
+        const targetCurrentVol = targetContainer.currentLots.reduce((sum, l) => sum + Number(l.currentVolume), 0);
+        
+        // Protection Anti-Débordement
+        if (targetCurrentVol + dest.volume > Number(targetContainer.capacityValue) + 0.1) {
+          throw new BusinessLogicError(`Débordement impossible ! La cuve cible n'a pas assez de place pour accueillir ce transfert.`);
         }
 
         const suffix = `-T${Date.now().toString().slice(-4)}${counter}`;
