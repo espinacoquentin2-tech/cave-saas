@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { BusinessLogicError } from '@/lib/errors';
+import { CreateTransferInput } from '@/server/modules/transfers/transfer.schemas';
 import {
   CreateTransferInput,
   TransferActor,
@@ -8,6 +9,7 @@ import {
   TransferRepository,
   TransferSourceSnapshot,
 } from '@/server/modules/transfers/transfer.repository';
+import { RequestActor } from '@/server/shared/request-context';
 
 interface TransferResult {
   eventId: number;
@@ -45,6 +47,7 @@ const normalizeRemainderStatus = (status: string | null | undefined) => {
 };
 
 export class TransferService {
+  static async execute(input: CreateTransferInput, actor: RequestActor): Promise<TransferResult> {
   static async execute(input: CreateTransferInput, actor: TransferActor): Promise<TransferResult> {
     return TransferRepository.withTransaction(async (tx) => {
       const existingRequest = await TransferRepository.findIdempotencyRecord(tx, input.idempotencyKey);

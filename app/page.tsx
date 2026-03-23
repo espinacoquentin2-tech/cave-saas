@@ -283,7 +283,12 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
         const res = await fetch('/api/tirage', { 
           method: 'POST', 
-          headers: { 'Content-Type': 'application/json' }, 
+          headers: {
+            'Content-Type': 'application/json',
+            'x-request-id': crypto.randomUUID(),
+            'x-user-email': user?.email || '',
+            'x-user-role': user?.role || ''
+          }, 
           body: JSON.stringify({ 
             lotId: parseInt(lotSourceId), 
             format: tirageFormat, count: btlNeeded, volume: volUsed, 
@@ -291,7 +296,10 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
             isTranquille, idempotencyKey
           }) 
         });
-        if (!res.ok) throw new Error((await res.json()).error);
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.message || errorData.error || "Erreur de tirage");
+        }
       }
 
       // 4. INTRANTS (API INTRANTS SÉCURISÉE)
@@ -4260,14 +4268,19 @@ function PlanificateurTirage() {
 
       const res = await fetch('/api/mixtion/execute', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-request-id': crypto.randomUUID(),
+          'x-user-email': user?.email || '',
+          'x-user-role': user?.role || ''
+        },
         body: JSON.stringify(payload)
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Une erreur est survenue lors de l'enregistrement.");
+        throw new Error(data.message || data.error || "Une erreur est survenue lors de l'enregistrement.");
       }
 
       dispatch({ type: "TOAST_ADD", payload: { msg: `Succès : ${data.volMixtion.toFixed(2)}hL préparés en cuve !`, color: T.green } });
@@ -5195,7 +5208,12 @@ const submitTirage = async () => {
     // 4. Appel à l'API blindée
     const res = await fetch('/api/tirage', { 
       method: 'POST', 
-      headers: { 'Content-Type': 'application/json' }, 
+      headers: {
+        'Content-Type': 'application/json',
+        'x-request-id': crypto.randomUUID(),
+        'x-user-email': user?.email || '',
+        'x-user-role': user?.role || ''
+      }, 
       body: JSON.stringify(payload) 
     });
     
