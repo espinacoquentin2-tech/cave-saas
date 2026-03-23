@@ -1,17 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { BusinessLogicError } from '@/lib/errors';
-import { createTransferSchema } from '@/server/modules/transfers/transfer.schemas';
-import { TransferService } from '@/server/modules/transfers/transfer.service';
-import { logger } from '@/server/shared/logger';
-import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
-
-export async function POST(request: Request) {
-  const requestId = getRequestId(request);
-
-  try {
-    const actor = parseRequestActor(request);
-    const payload = createTransferSchema.parse(await request.json());
 import {
   createTransferSchema,
   transferActorSchema,
@@ -127,5 +116,4 @@ export async function POST(request: Request) {
       },
     );
   }
-}
 }
