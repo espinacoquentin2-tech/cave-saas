@@ -1171,7 +1171,12 @@ function Vendanges({ onSelectContainer }) {
       // 4. Appel de l'API blindée
       const res = await fetch('/api/transfers', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-request-id': crypto.randomUUID(),
+            'x-user-email': user?.email || '',
+            'x-user-role': user?.role || ''
+          },
           body: JSON.stringify(payload)
       });
 
