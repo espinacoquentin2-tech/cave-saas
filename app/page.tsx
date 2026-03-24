@@ -283,7 +283,12 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
         const res = await fetch('/api/tirage', { 
           method: 'POST', 
-          headers: { 'Content-Type': 'application/json' }, 
+          headers: {
+            'Content-Type': 'application/json',
+            'x-request-id': crypto.randomUUID(),
+            'x-user-email': user?.email || '',
+            'x-user-role': user?.role || ''
+          }, 
           body: JSON.stringify({ 
             lotId: parseInt(lotSourceId), 
             format: tirageFormat, count: btlNeeded, volume: volUsed, 
@@ -291,7 +296,10 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
             isTranquille, idempotencyKey
           }) 
         });
-        if (!res.ok) throw new Error((await res.json()).error);
+        if (!res.ok) {
+          const errorData = await res.json();
+          throw new Error(errorData.message || errorData.error || "Erreur de tirage");
+        }
       }
 
       // 4. INTRANTS (API INTRANTS SÉCURISÉE)
@@ -1171,7 +1179,12 @@ function Vendanges({ onSelectContainer }) {
       // 4. Appel de l'API blindée
       const res = await fetch('/api/transfers', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-request-id': crypto.randomUUID(),
+            'x-user-email': user?.email || '',
+            'x-user-role': user?.role || ''
+          },
           body: JSON.stringify(payload)
       });
 
@@ -4255,14 +4268,19 @@ function PlanificateurTirage() {
 
       const res = await fetch('/api/mixtion/execute', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-request-id': crypto.randomUUID(),
+          'x-user-email': user?.email || '',
+          'x-user-role': user?.role || ''
+        },
         body: JSON.stringify(payload)
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Une erreur est survenue lors de l'enregistrement.");
+        throw new Error(data.message || data.error || "Une erreur est survenue lors de l'enregistrement.");
       }
 
       dispatch({ type: "TOAST_ADD", payload: { msg: `Succès : ${data.volMixtion.toFixed(2)}hL préparés en cuve !`, color: T.green } });
@@ -5190,7 +5208,12 @@ const submitTirage = async () => {
     // 4. Appel à l'API blindée
     const res = await fetch('/api/tirage', { 
       method: 'POST', 
-      headers: { 'Content-Type': 'application/json' }, 
+      headers: {
+        'Content-Type': 'application/json',
+        'x-request-id': crypto.randomUUID(),
+        'x-user-email': user?.email || '',
+        'x-user-role': user?.role || ''
+      }, 
       body: JSON.stringify(payload) 
     });
     
@@ -5553,12 +5576,17 @@ function Expeditions({ onSelectLot }) {
 
         const res = await fetch('/api/pertes', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'x-request-id': crypto.randomUUID(),
+            'x-user-email': user?.email || '',
+            'x-user-role': user?.role || ''
+          },
           body: JSON.stringify(payload)
         });
 
         const data = await res.json();
-        if (!res.ok) throw new Error(data.error || "Erreur de sauvegarde.");
+        if (!res.ok) throw new Error(data.message || data.error || "Erreur de sauvegarde.");
 
         // Si on vide la cuve, on la passe en nettoyage (API Cuverie existante)
         if (volNum >= selectedLot.currentVolume && selectedLot.currentContainerId) {
@@ -5931,12 +5959,17 @@ function StockMovementModal({ product, productsList, onSelectProduct, onClose })
 
       const res = await fetch('/api/inventory/movements', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-request-id': crypto.randomUUID(),
+          'x-user-email': user?.email || '',
+          'x-user-role': user?.role || ''
+        },
         body: JSON.stringify(payload)
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erreur de mouvement.");
+      if (!res.ok) throw new Error(data.message || data.error || "Erreur de mouvement.");
 
       dispatch({ type: "TOAST_ADD", payload: { msg: `Mouvement validé en base de données.`, color: type === "IN" ? T.green : T.accent } });
       if (refreshData) await refreshData();
@@ -7573,14 +7606,19 @@ function PerteCasseModal({ onClose }) {
 
       const res = await fetch('/api/pertes', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'x-request-id': crypto.randomUUID(),
+          'x-user-email': user?.email || '',
+          'x-user-role': user?.role || ''
+        },
         body: JSON.stringify(payload)
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Une erreur est survenue.");
+        throw new Error(data.message || data.error || "Une erreur est survenue.");
       }
 
       dispatch({ type: "TOAST_ADD", payload: { msg: "Déclaration enregistrée et validée pour les douanes.", color: T.green } });

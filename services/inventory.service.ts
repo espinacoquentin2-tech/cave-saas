@@ -43,12 +43,12 @@ export class InventoryService {
       const product = await tx.product.findUnique({ where: { id: data.productId } });
       if (!product) throw new Error("Produit introuvable.");
 
-      let newStock = product.currentStock;
+      let newStock = Number(product.currentStock);
       
       if (data.type === "IN") {
         newStock += data.quantity;
       } else {
-        if (product.currentStock < data.quantity) {
+        if (Number(product.currentStock) < data.quantity) {
           throw new Error(`Stock insuffisant. Dispo: ${product.currentStock} ${product.unit}, Requis: ${data.quantity}`);
         }
         newStock -= data.quantity;
