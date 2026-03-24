@@ -22,7 +22,7 @@ export class AdminService {
       for (const source of data.sources) {
         const lot = await tx.lot.findUnique({ where: { id: source.lotId } });
         if (!lot) throw new Error(`Lot source ID ${source.lotId} introuvable.`);
-        if ((lot.currentVolume || 0) < source.volume) {
+        if (Number(lot.currentVolume) < source.volume) {
           throw new Error(`Volume insuffisant dans le lot ${lot.businessCode}. Requis: ${source.volume}, Dispo: ${lot.currentVolume}`);
         }
       }
@@ -34,7 +34,7 @@ export class AdminService {
         
         const totalIncomingVolume = data.sources.reduce((sum, s) => sum + s.volume, 0);
         // Tolérance de 5% de débordement théorique tolérée dans la réalité, mais stricte en base
-        if (targetContainer.capacityValue < totalIncomingVolume) {
+        if (Number(targetContainer.capacityValue) < totalIncomingVolume) {
            throw new Error(`La cuve de destination est trop petite. Capacité: ${targetContainer.capacityValue}hL, Volume prévu: ${totalIncomingVolume}hL`);
         }
       }
