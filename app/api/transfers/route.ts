@@ -1,17 +1,38 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { BusinessLogicError } from '@/lib/errors';
-import { createTransferSchema } from '@/server/modules/transfers/transfer.schemas';
+import {
+  createTransferSchema,
+  transferActorSchema,
+} from '@/server/modules/transfers/transfer.schemas';
 import { TransferService } from '@/server/modules/transfers/transfer.service';
 import { logger } from '@/server/shared/logger';
-import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
+
+const normalizeRole = (roleHeader: string | null) => {
+  switch (roleHeader?.trim().toUpperCase()) {
+    case 'ADMIN':
+      return 'ADMIN';
+    case 'CHEF DE CAVE':
+    case 'CHEF_CAVE':
+      return 'CHEF_CAVE';
+    case 'CAVISTE':
+      return 'CAVISTE';
+    default:
+      return null;
+  }
+};
 
 export async function POST(request: Request) {
-  const requestId = getRequestId(request);
+  const requestId = request.headers.get('x-request-id') ?? crypto.randomUUID();
 
   try {
-    const actor = parseRequestActor(request);
+    const actor = transferActorSchema.parse({
+      email: request.headers.get('x-user-email'),
+      role: normalizeRole(request.headers.get('x-user-role')),
+    });
+
     const payload = createTransferSchema.parse(await request.json());
+
     const result = await TransferService.execute(payload, actor);
 
     logger.info({
