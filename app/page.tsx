@@ -23,6 +23,14 @@ const formatStatus = (s) => {
   return s.replace(/_/g, " ");
 };
 
+const buildApiHeaders = (user, extra = {}) => ({
+  'Content-Type': 'application/json',
+  'x-request-id': crypto.randomUUID(),
+  'x-user-email': user?.email || '',
+  'x-user-role': user?.role || '',
+  ...extra,
+});
+
 function MultiSelectDrop({ label, options, selected, onChange, format = v=>v, width=140 }) {
   const T = useTheme();
   const [open, setOpen] = useState(false);
@@ -210,7 +218,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
         const res = await fetch('/api/transfers', { 
           method:'POST', 
-          headers: { 'Content-Type': 'application/json' },
+          headers: buildApiHeaders(user),
           body: JSON.stringify({ 
             lotId: parseInt(lotSource.id), 
             fromId: parseInt(sourceContId), 
@@ -258,7 +266,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
         
         const res = await fetch('/api/lots/assemblage', { 
           method: 'POST', 
-          headers: { 'Content-Type': 'application/json' },
+          headers: buildApiHeaders(user),
           body: JSON.stringify({ 
             code: codeAssem, 
             volume: vMain, 
@@ -306,7 +314,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
       else if (["LEVURAGE", "SULFITAGE", "CHAPTALISATION", "ACIDIFICATION", "COLLAGE", "FILTRATION", "STABILISATION TARTRIQUE", "OUILLAGE", "AJOUT AUTRE PRODUIT"].includes(task.recette)) {
         const res = await fetch('/api/lots/intrants', { 
           method: 'POST', 
-          headers: { 'Content-Type': 'application/json' },
+          headers: buildApiHeaders(user),
           body: JSON.stringify({ 
             lotId: parseInt(task.targetLotId), 
             intrant: task.recette, quantity: 1, unit: "opération", 
@@ -737,7 +745,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
       // 1. Création du Lot de macération (API Transactionnelle)
       const res = await fetch('/api/lots', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           code: codeMac, millesime, cepage: pressing.cepage, lieu: pressing.cru || pressing.parcelle, 
           volume: parseFloat(form.volumeOccupe), containerId: parseInt(form.cuveId), 
@@ -751,7 +759,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
       // 2. MISE À JOUR DU QUAI (API)
       await fetch('/api/pressings', { 
         method: 'PATCH', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ id: pressing.id, status: "PRESSE" }) 
       }).catch(()=>{});
 
@@ -959,7 +967,7 @@ function Vendanges({ onSelectContainer }) {
     try {
       const res = await fetch('/api/pressings', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           date: new Date().toISOString(), 
           parcelle: finalParcelle, 
@@ -1003,7 +1011,7 @@ function Vendanges({ onSelectContainer }) {
     try {
       const res = await fetch('/api/pressoirs', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify(newPress) 
       });
       if (!res.ok) throw new Error("Erreur serveur");
@@ -1023,7 +1031,7 @@ function Vendanges({ onSelectContainer }) {
     try {
       const res = await fetch('/api/pressoirs', { 
         method: 'PUT', 
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify({ id, status, ...extraData }) 
       });
       if (!res.ok) throw new Error("Erreur serveur");
@@ -1067,7 +1075,7 @@ function Vendanges({ onSelectContainer }) {
     try {
       const res = await fetch('/api/pressings/load', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           pressId: p.id, 
           apportId: apport.id, 
@@ -1107,7 +1115,7 @@ function Vendanges({ onSelectContainer }) {
     try {
       const res = await fetch('/api/containers', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           name: newCuve.name, 
           type: newCuve.type, 
@@ -1231,7 +1239,7 @@ function Vendanges({ onSelectContainer }) {
 
       const res = await fetch('/api/pressings/ecoulement', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify(payload) 
       });
 
@@ -1268,7 +1276,7 @@ function Vendanges({ onSelectContainer }) {
     setIsSubmitting(true);
     const nextStatus = c.status === "NETTOYAGE" ? "VIDE" : "NETTOYAGE";
     try {
-        await fetch(`/api/containers`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: c.id, status: nextStatus }) });
+        await fetch(`/api/containers`, { method: 'PUT', headers: buildApiHeaders(user), body: JSON.stringify({ id: c.id, status: nextStatus }) });
         if (refreshData) await refreshData();
     } catch(e){}
     finally { setIsSubmitting(false); }
@@ -1887,7 +1895,7 @@ function CorrectVolumeModal({ container, lot, onClose }) {
     try {
       const res = await fetch('/api/lots/volume', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ lotId: lot.id, newVolume: parseFloat(vol), operator: user.name, note, idempotencyKey }) 
       });
       
@@ -1951,7 +1959,7 @@ function AddIntrantModal({ container, lot, onClose }) {
     try {
       const res = await fetch('/api/lots/intrants', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ lotId: lot.id, intrant, quantity: parseFloat(qty), unit, operator: user.name, idempotencyKey }) 
       });
       
@@ -2054,7 +2062,7 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
     try {
       const res = await fetch('/api/containers', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ ...form, type: finalType, capacity: parseFloat(form.capacity), idempotencyKey }) 
       });
       
@@ -2127,7 +2135,7 @@ function AddCompartmentModal({ container, onClose }) {
     try {
       const res = await fetch('/api/containers/compartment', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify({ originalContainerId: container.id, newCapacity: parsedCap, idempotencyKey })
       });
       if (!res.ok) throw new Error((await res.json()).error || "Erreur serveur");
@@ -2254,7 +2262,7 @@ function TransferModal({ container, onClose }) {
       // API UNIFIÉE ! Tout se passe en backend en 1 seule transaction
       const res = await fetch('/api/transfers', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           lotId: lotToTransfer.id, 
           fromId: container.id, 
@@ -2438,7 +2446,7 @@ function DecuvageModal({ container, lot, onClose }) {
       // API UNIFIÉE : Tout le cycle de décuvage d'un coup
       const res = await fetch('/api/lots/decuvage', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           sourceLotId: lot.id, 
           sourceContainerId: container.id, 
@@ -2664,7 +2672,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
     try {
       const res = await fetch(`/api/containers`, { // Adaptez à votre route API
         method: 'PUT', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ id: container.id, status: nextStatus }) 
       });
       if (!res.ok) throw new Error("Erreur serveur");
@@ -2961,7 +2969,7 @@ function TourFA({ onSelectLot }: any) {
     try {
       const res = await fetch('/api/fa', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify({
           readings: payloadReadings,
           idempotencyKey
@@ -3220,7 +3228,7 @@ function RenameContainerModal({ container, onClose }) {
     try {
       const res = await fetch('/api/containers', { 
         method: 'PUT', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ id: container.id, name: newName }) 
       });
       
@@ -3270,7 +3278,7 @@ function CreateLotModal({ container, onClose }) {
     try {
       const res = await fetch('/api/lots', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           code, millesime: parseInt(form.millesime), cepage: form.cepage, lieu: form.lieu.toUpperCase(), 
           volume: parseFloat(form.volume), containerId: container.id, status: form.status, 
@@ -3347,7 +3355,7 @@ function RemuageModal({ bl, actionType, onClose }) {
     try {
       const res = await fetch('/api/bottles/status', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           blId: parseInt(bl.id), 
           status: statusDest, 
@@ -3420,7 +3428,7 @@ function DegorgerModal({ bl, onClose }) {
     try {
       const res = await fetch('/api/bottles/degorger', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           blId: parseInt(bl.id), 
           count: qtyNum, 
@@ -3503,7 +3511,7 @@ function HabillerModal({ bl, onClose }) {
     try {
       const res = await fetch('/api/bottles/habiller', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           blId: parseInt(bl.id), count: qtyNum, 
           coiffeId: coiffeId ? parseInt(coiffeId) : null,
@@ -3597,7 +3605,7 @@ function ExpedierModal({ bl, onClose }) {
     try {
       const res = await fetch('/api/bottles/expedier', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           blId: parseInt(bl.id), count: qtyNum, clientName, idempotencyKey 
         }) 
@@ -4170,7 +4178,7 @@ function PlanificateurTirage() {
     try {
       const res = await fetch('/api/containers', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           name: "Cuve à Levain", displayName: "Cuve Levain (Actif)", 
           type: "CUVE_INOX", capacityValue: suggestedCap,
@@ -4765,7 +4773,7 @@ function Assemblages() {
     try {
       const res = await fetch('/api/lots/assemblage', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           code: proposedCode, millesime: finalMillesime, cepage: baseCepage, 
           volume: totalVol, sourceLots: sourceLotsData, sourceBottles: sourceBottlesData, 
@@ -5152,7 +5160,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
     try {
       const res = await fetch('/api/lots/statuts', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         // 👈 INJECTION DE LA CLÉ ICI :
         body: JSON.stringify({ lotId: lot.id, newStatus: statusForm.status, operator: user.name, note: statusForm.note, idempotencyKey }) 
       });
@@ -5489,7 +5497,7 @@ function Expeditions({ onSelectLot }) {
       // On met à jour le statut DIRECTEMENT en base de données
       const res = await fetch('/api/containers', { 
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' }, 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           id: parseInt(confirmDeliveryId), 
           status: 'LIVRE' // Le backend devient le seul juge du statut
@@ -5592,7 +5600,7 @@ function Expeditions({ onSelectLot }) {
         if (volNum >= selectedLot.currentVolume && selectedLot.currentContainerId) {
              await fetch('/api/containers', { 
                method: 'PUT', 
-               headers: { 'Content-Type': 'application/json' }, 
+               headers: buildApiHeaders(user), 
                body: JSON.stringify({ id: selectedLot.currentContainerId, status: 'NETTOYAGE' }) 
              }).catch(()=>{});
         }
@@ -5853,7 +5861,7 @@ function AddProductModal({ onClose }) {
 
       const res = await fetch('/api/inventory/products', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify(payload)
       });
 
@@ -6253,7 +6261,7 @@ function Tracabilite({ onSelectLot }) {
     try {
       const res = await fetch('/api/tracabilite', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify({ lotCode, type })
       });
 
@@ -6539,7 +6547,7 @@ function AnalyseModal({ initial, onClose, onSuccess, title }) {
 
       const res = await fetch('/api/analyses', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify(payload)
       });
 
@@ -6637,7 +6645,7 @@ function AIImportModal({ initialFile, onClose, onSuccess }) {
 
       const res = await fetch('/api/analyses', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify(payload)
       });
 
@@ -6862,7 +6870,7 @@ function WorkOrdersAdmin({ workOrders, setWorkOrders }) {
 
       const res = await fetch('/api/workorders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify(payload)
       });
 
@@ -7039,7 +7047,7 @@ function AdminUsers() {
       // 👈 VRAI APPEL API (Fini la simulation !)
       const res = await fetch('/api/users', { 
         method: isEdit ? 'PUT' : 'POST', 
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify(dataToSubmit) 
       });
       
@@ -7703,7 +7711,7 @@ function PlanificateurVendanges() {
       try {
         const res = await fetch('/api/vendanges/calculate', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: buildApiHeaders(user),
           body: JSON.stringify({ globalTarget, customTargets })
         });
         
@@ -7979,7 +7987,7 @@ function MaturationModal({ onClose, editData = null }) {
     try {
       const res = await fetch('/api/parcelles', { 
         method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify({ nom: newNom.trim(), departement: newDep, region: newReg, commune: newCom }) 
       });
       if (res.ok) {
@@ -8015,7 +8023,7 @@ function MaturationModal({ onClose, editData = null }) {
 
       const res = await fetch('/api/maturation', {
         method: 'POST', // L'API gère l'upsert si l'ID est présent
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify(payload)
       });
 
@@ -8710,7 +8718,7 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }) {
 
       const res = await fetch('/api/degustations', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildApiHeaders(user),
         body: JSON.stringify(payload)
       });
 
