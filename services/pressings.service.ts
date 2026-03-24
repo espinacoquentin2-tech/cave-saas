@@ -17,7 +17,7 @@ export class PressingService {
       const apport = await tx.pressing.findUnique({ where: { id: data.apportId } }); 
 
       if (!press || !apport) throw new Error("Pressoir ou Apport introuvable.");
-      if (data.weightToLoad > apport.weight) throw new Error("Poids demandé supérieur au disponible sur le quai.");
+      if (data.weightToLoad > Number(apport.weight)) throw new Error("Poids demandé supérieur au disponible sur le quai.");
 
       const currentLoad = press.loadKg || 0;
 
@@ -40,7 +40,7 @@ export class PressingService {
       }
 
       // Mise à jour du quai (Apport)
-      const remainingWeight = apport.weight - data.weightToLoad;
+      const remainingWeight = Number(apport.weight) - data.weightToLoad;
       await tx.pressing.update({
         where: { id: apport.id },
         data: { weight: remainingWeight, status: remainingWeight <= 0 ? "PRESSÉ" : "EN_ATTENTE" }

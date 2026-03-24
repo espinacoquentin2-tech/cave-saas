@@ -34,7 +34,7 @@ export async function DELETE(request: Request) {
           await tx.lot.update({
             where: { id: bottleLot.sourceLotId },
             data: { 
-              currentVolume: lot.currentVolume + volumeToRestore,
+              currentVolume: Number(lot.currentVolume) + volumeToRestore,
               status: lot.status === 'TIRE' ? 'ACTIF' : lot.status // Réanime le lot s'il était fini
             }
           });
