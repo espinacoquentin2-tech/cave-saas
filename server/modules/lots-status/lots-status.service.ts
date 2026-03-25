@@ -1,0 +1,20 @@
+import { BusinessLogicError } from '@/lib/errors';
+import { LotsService } from '@/services/lots.service';
+import { UpdateLotStatusInput } from '@/server/modules/lots-status/lots-status.schemas';
+import { RequestActor } from '@/server/shared/request-context';
+
+export class LotStatusModuleService {
+  static async update(input: UpdateLotStatusInput, actor: RequestActor) {
+    try {
+      return await LotsService.updateStatus(input, actor.email);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur serveur';
+
+      if (message.includes('ALREADY_APPLIED')) {
+        throw new BusinessLogicError(message, 409);
+      }
+
+      throw new BusinessLogicError(message, 400);
+    }
+  }
+}
