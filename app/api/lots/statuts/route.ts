@@ -1,45 +1,90 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { ZodError } from 'zod';
+import { BusinessLogicError } from '@/lib/errors';
+import { updateLotStatusSchema } from '@/server/modules/lots-status/lots-status.schemas';
+import { LotStatusModuleService } from '@/server/modules/lots-status/lots-status.service';
+import { logger } from '@/server/shared/logger';
+import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
 
 export async function POST(request: Request) {
+  const requestId = getRequestId(request);
+
   try {
-    const body = await request.json();
-    
-    await prisma.$transaction(async (tx) => {
-      // 1. Mettre à jour le statut dans la base de données
-      await tx.lot.update({
-        where: { id: parseInt(body.lotId) },
-        data: { status: body.newStatus }
-      });
+    const actor = parseRequestActor(request);
+    const payload = updateLotStatusSchema.parse(await request.json());
+    const result = await LotStatusModuleService.update(payload, actor);
 
-      // 2. Récupérer l'utilisateur (Pour l'audit)
-      const user = await tx.user.findFirst();
-      
-      // 3. Créer l'événement dans le journal d'audit
-      const lEvent = await tx.lotEvent.create({
-        data: {
-          eventType: 'CHANGEMENT_STATUT',
-          operatorUserId: user?.id || 1,
-          comment: `Nouveau statut : ${body.newStatus.replace(/_/g, " ")}${body.note ? ' - ' + body.note : ''}`,
-        }
-      });
-
-      // 4. Lier cet événement spécifiquement à ce lot de vin (Correction ici : lotEventLot !)
-      await tx.lotEventLot.create({
-        data: {
-          eventId: lEvent.id,
-          lotId: parseInt(body.lotId),
-          roleInEvent: 'CIBLE',
-          volumeChange: 0
-        }
-      });
+    logger.info({
+      action: 'lots.status.post.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { lotId: payload.lotId, status: payload.newStatus },
     });
 
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    console.error(error);
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      {
+        status: 'SUCCESS',
+        data: result,
+      },
+      {
+        status: 201,
+        headers: { 'x-request-id': requestId },
+      },
+    );
+  } catch (error) {
+    if (error instanceof ZodError) {
+      logger.warn({
+        action: 'lots.status.post.validation_failed',
+        requestId,
+        details: { issues: error.flatten() },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_ERROR',
+          details: error.flatten(),
+        },
+        {
+          status: 400,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    if (error instanceof BusinessLogicError) {
+      logger.warn({
+        action: 'lots.status.post.business_rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'BUSINESS_RULE_VIOLATION',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    logger.error({
+      action: 'lots.status.post.unhandled_error',
+      requestId,
+      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+    });
+
+    return NextResponse.json(
+      {
+        error: 'INTERNAL_SERVER_ERROR',
+      },
+      {
+        status: 500,
+        headers: { 'x-request-id': requestId },
+      },
+    );
   }
 }
