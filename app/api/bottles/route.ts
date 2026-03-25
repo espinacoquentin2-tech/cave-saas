@@ -1,19 +1,64 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { ZodError } from 'zod';
+import { BusinessLogicError } from '@/lib/errors';
+import { listBottleLotsQuerySchema } from '@/server/modules/bottles/bottle.schemas';
+import { BottleModuleService } from '@/server/modules/bottles/bottle.service';
+import { logger } from '@/server/shared/logger';
+import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
 
-const prisma = new PrismaClient();
+export async function GET(request: Request) {
+  const requestId = getRequestId(request);
 
-export async function GET() {
   try {
-    const bottles = await prisma.bottleLot.findMany();
-    return NextResponse.json(bottles);
+    const actor = parseRequestActor(request);
+    const { searchParams } = new URL(request.url);
+    const payload = listBottleLotsQuerySchema.parse({ id: searchParams.get('id') ?? undefined });
+    const bottles = await BottleModuleService.list(payload);
+
+    logger.info({
+      action: 'bottles.get.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { count: bottles.length },
+    });
+
+    return NextResponse.json(bottles, {
+      status: 200,
+      headers: { 'x-request-id': requestId },
+    });
   } catch (error) {
-    return NextResponse.json({ error: "Erreur lors de la lecture des bouteilles" }, { status: 500 });
+    if (error instanceof ZodError) {
+      logger.warn({
+        action: 'bottles.get.validation_failed',
+        requestId,
+        details: { issues: error.flatten() },
+      });
+
+      return NextResponse.json(
+        { error: 'VALIDATION_ERROR', details: error.flatten() },
+        { status: 400, headers: { 'x-request-id': requestId } },
+      );
+    }
+
+    logger.error({
+      action: 'bottles.get.unhandled_error',
+      requestId,
+      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+    });
+
+    return NextResponse.json(
+      { error: 'INTERNAL_SERVER_ERROR' },
+      { status: 500, headers: { 'x-request-id': requestId } },
+    );
   }
 }
 
 export async function DELETE(request: Request) {
+  const requestId = getRequestId(request);
+
   try {
+    const actor = parseRequestActor(request);
     const { searchParams } = new URL(request.url);
     const id = parseInt(searchParams.get('id') || '0');
 
@@ -45,8 +90,9 @@ export async function DELETE(request: Request) {
       await tx.bottleLot.delete({ where: { id } });
     });
 
-    return NextResponse.json({ success: true });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 });
+    return NextResponse.json(
+      { error: 'INTERNAL_SERVER_ERROR' },
+      { status: 500, headers: { 'x-request-id': requestId } },
+    );
   }
 }
