@@ -1,38 +1,94 @@
-// app/api/lots/decuvage/route.ts
 import { NextResponse } from 'next/server';
-import { DecuvageSchema } from '../../../../validations/cuverie.schema';
-import { CuverieService } from '../../../../services/cuverie.service';
+import { ZodError } from 'zod';
+import { BusinessLogicError } from '@/lib/errors';
+import { DecuvageService } from '@/server/modules/decuvage/decuvage.service';
+import { decuvageSchema } from '@/server/modules/decuvage/decuvage.schemas';
+import { logger } from '@/server/shared/logger';
+import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
+
   try {
-    const body = await req.json();
-    
-    // Nettoyage et conversion des types pour Zod
-    const payload = {
-      ...body,
-      sourceLotId: body.sourceLotId ? parseInt(body.sourceLotId) : undefined,
-      sourceContainerId: body.sourceContainerId ? parseInt(body.sourceContainerId) : undefined,
-      volGoutte: body.volGoutte ? parseFloat(body.volGoutte) : 0,
-      volPresse: body.volPresse ? parseFloat(body.volPresse) : 0,
-      cuveGoutteId: body.cuveGoutteId ? parseInt(body.cuveGoutteId) : undefined,
-      cuvePresseId: body.cuvePresseId ? parseInt(body.cuvePresseId) : undefined,
-    };
+    const actor = parseRequestActor(request);
+    const payload = decuvageSchema.parse(await request.json());
+    const result = await DecuvageService.execute(payload, actor);
 
-    // 1. Validation de sécurité stricte
-    const validation = DecuvageSchema.safeParse(payload);
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error.issues[0].message }, { status: 400 });
+    logger.info({
+      action: 'lots.decuvage.post.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: {
+        eventId: result.eventId,
+        sourceLotId: result.sourceLotId,
+        newLotIds: result.newLots.map((lot) => lot.id),
+      },
+    });
+
+    return NextResponse.json(
+      {
+        status: 'SUCCESS',
+        data: result,
+      },
+      {
+        status: 201,
+        headers: { 'x-request-id': requestId },
+      },
+    );
+  } catch (error) {
+    if (error instanceof ZodError) {
+      logger.warn({
+        action: 'lots.decuvage.post.validation_failed',
+        requestId,
+        details: { issues: error.flatten() },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_ERROR',
+          details: error.flatten(),
+        },
+        {
+          status: 400,
+          headers: { 'x-request-id': requestId },
+        },
+      );
     }
 
-    // 2. Exécution de la transaction ACID via le Service
-    // NB: Remplacer "system@cave.fr" par la session utilisateur
-    const result = await CuverieService.executeDecuvage(validation.data, "system@cave.fr");
-    
-    return NextResponse.json(result, { status: 200 });
+    if (error instanceof BusinessLogicError) {
+      logger.warn({
+        action: 'lots.decuvage.post.business_rejected',
+        requestId,
+        details: { message: error.message },
+      });
 
-  } catch (error: any) {
-    console.error("[DECUVAGE_API_ERROR]", error);
-    const status = error.message.includes("ALREADY_APPLIED") || error.message.includes("introuvable") ? 400 : 500;
-    return NextResponse.json({ error: error.message || "Erreur serveur interne lors du décuvage" }, { status });
+      return NextResponse.json(
+        {
+          error: 'BUSINESS_RULE_VIOLATION',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    logger.error({
+      action: 'lots.decuvage.post.unhandled_error',
+      requestId,
+      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+    });
+
+    return NextResponse.json(
+      {
+        error: 'INTERNAL_SERVER_ERROR',
+      },
+      {
+        status: 500,
+        headers: { 'x-request-id': requestId },
+      },
+    );
   }
 }

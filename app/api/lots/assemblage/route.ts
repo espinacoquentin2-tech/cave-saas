@@ -1,49 +1,90 @@
-// app/api/lots/assemblage/route.ts
 import { NextResponse } from 'next/server';
-import { AssemblageSchema } from '../../../../validations/assemblage.schema';
-import { AssemblageService } from '../../../../services/assemblage.service';
+import { ZodError } from 'zod';
+import { BusinessLogicError } from '@/lib/errors';
+import { createAssemblageSchema } from '@/server/modules/assemblage/assemblage.schemas';
+import { AssemblageModuleService } from '@/server/modules/assemblage/assemblage.service';
+import { logger } from '@/server/shared/logger';
+import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
+
   try {
-    const body = await req.json();
-    
-    // Nettoyage et conversion des types pour la validation Zod
-    const payload = {
-      ...body,
-      millesime: body.millesime === "SA" ? "SA" : parseInt(body.millesime),
-      volume: parseFloat(body.volume),
-      targetContainerId: parseInt(body.targetContainerId),
-      // Nettoyage des tableaux de sources (Vracs et Bouteilles)
-      sourceLots: Array.isArray(body.sourceLots) 
-        ? body.sourceLots.map((s: any) => ({
-            id: parseInt(s.id),
-            volumeUsed: parseFloat(s.volumeUsed)
-          }))
-        : [],
-      sourceBottles: Array.isArray(body.sourceBottles)
-        ? body.sourceBottles.map((b: any) => ({
-            id: parseInt(b.id),
-            countUsed: parseInt(b.countUsed),
-            format: String(b.format)
-          }))
-        : []
-    };
+    const actor = parseRequestActor(request);
+    const payload = createAssemblageSchema.parse(await request.json());
+    const result = await AssemblageModuleService.execute(payload, actor);
 
-    // 1. Validation de sécurité stricte
-    const validation = AssemblageSchema.safeParse(payload);
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error.issues[0].message }, { status: 400 });
+    logger.info({
+      action: 'lots.assemblage.post.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { lotId: result.lot?.id, businessCode: result.lot?.businessCode },
+    });
+
+    return NextResponse.json(
+      {
+        status: 'SUCCESS',
+        data: result,
+      },
+      {
+        status: 201,
+        headers: { 'x-request-id': requestId },
+      },
+    );
+  } catch (error) {
+    if (error instanceof ZodError) {
+      logger.warn({
+        action: 'lots.assemblage.post.validation_failed',
+        requestId,
+        details: { issues: error.flatten() },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_ERROR',
+          details: error.flatten(),
+        },
+        {
+          status: 400,
+          headers: { 'x-request-id': requestId },
+        },
+      );
     }
 
-    // 2. Exécution de la transaction ACID via le Service
-    // NB: En production, remplacez "system@cave.fr" par l'email récupéré via la session utilisateur
-    const result = await AssemblageService.execute(validation.data, "system@cave.fr");
-    
-    return NextResponse.json(result, { status: 200 });
+    if (error instanceof BusinessLogicError) {
+      logger.warn({
+        action: 'lots.assemblage.post.business_rejected',
+        requestId,
+        details: { message: error.message },
+      });
 
-  } catch (error: any) {
-    console.error("[ASSEMBLAGE_API_ERROR]", error);
-    const status = error.message.includes("ALREADY_APPLIED") || error.message.includes("insuffisant") ? 400 : 500;
-    return NextResponse.json({ error: error.message || "Erreur serveur interne lors de l'assemblage" }, { status });
+      return NextResponse.json(
+        {
+          error: 'BUSINESS_RULE_VIOLATION',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    logger.error({
+      action: 'lots.assemblage.post.unhandled_error',
+      requestId,
+      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+    });
+
+    return NextResponse.json(
+      {
+        error: 'INTERNAL_SERVER_ERROR',
+      },
+      {
+        status: 500,
+        headers: { 'x-request-id': requestId },
+      },
+    );
   }
 }
