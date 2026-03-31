@@ -1,49 +1,139 @@
-// app/api/users/route.ts
 import { NextResponse } from 'next/server';
-import { UserSchema } from '../../../validations/admin.schema';
-import { AdminService } from '../../../services/admin.service';
+import { ZodError } from 'zod';
+import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
+import { upsertUserSchema } from '@/server/modules/users/user.schemas';
+import { UserModuleService } from '@/server/modules/users/user.service';
+import { logger } from '@/server/shared/logger';
+import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
-// CRÉATION D'UN UTILISATEUR
-export async function POST(req: Request) {
+const handleUpsert = async (request: Request, method: 'POST' | 'PUT') => {
+  const requestId = getRequestId(request);
+
   try {
-    const body = await req.json();
-    
-    const validation = UserSchema.safeParse(body);
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error.issues[0].message }, { status: 400 });
+    const actor = await resolveAuthenticatedActor(request);
+    assertRole(actor, ['ADMIN', 'CHEF_CAVE']);
+    const payload = upsertUserSchema.parse(await request.json());
+    const result = await UserModuleService.upsert(payload, actor);
+
+    logger.info({
+      action: `users.${method.toLowerCase()}.success`,
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { userId: result.id, targetEmail: result.email },
+    });
+
+    return NextResponse.json(
+      {
+        status: 'SUCCESS',
+        data: result,
+      },
+      {
+        status: method === 'POST' ? 201 : 200,
+        headers: { 'x-request-id': requestId },
+      },
+    );
+  } catch (error) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
     }
 
-    // Remplacer "system@cave.fr" par l'email de l'Admin connecté (via la session)
-    const result = await AdminService.upsertUser(validation.data, "system@cave.fr");
-    
-    return NextResponse.json(result, { status: 200 });
+    if (error instanceof ZodError) {
+      logger.warn({
+        action: `users.${method.toLowerCase()}.validation_failed`,
+        requestId,
+        details: { issues: error.flatten() },
+      });
 
-  } catch (error: any) {
-    console.error("[USERS_API_POST_ERROR]", error);
-    // Si l'erreur vient des droits (définis dans le service), on renvoie 403 (Forbidden)
-    const status = error.message.includes("Droits") ? 403 : 400;
-    return NextResponse.json({ error: error.message || "Erreur serveur" }, { status });
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_ERROR',
+          details: error.flatten(),
+        },
+        {
+          status: 400,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    if (error instanceof BusinessLogicError) {
+      logger.warn({
+        action: `users.${method.toLowerCase()}.business_rejected`,
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'BUSINESS_RULE_VIOLATION',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    logger.error({
+      action: `users.${method.toLowerCase()}.unhandled_error`,
+      requestId,
+      details: {
+        error: error instanceof Error ? error.message : 'unknown_error',
+      },
+    });
+
+    return NextResponse.json(
+      {
+        error: 'INTERNAL_SERVER_ERROR',
+      },
+      {
+        status: 500,
+        headers: { 'x-request-id': requestId },
+      },
+    );
   }
+};
+
+export async function POST(request: Request) {
+  return handleUpsert(request, 'POST');
 }
 
-// MISE À JOUR D'UN UTILISATEUR EXISTANT
-export async function PUT(req: Request) {
-  try {
-    const body = await req.json();
-    
-    const validation = UserSchema.safeParse(body);
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error.issues[0].message }, { status: 400 });
-    }
-
-    // Le service upsertUser détectera la présence de data.id et fera un UPDATE
-    const result = await AdminService.upsertUser(validation.data, "system@cave.fr");
-    
-    return NextResponse.json(result, { status: 200 });
-
-  } catch (error: any) {
-    console.error("[USERS_API_PUT_ERROR]", error);
-    const status = error.message.includes("Droits") ? 403 : 400;
-    return NextResponse.json({ error: error.message || "Erreur serveur" }, { status });
-  }
+export async function PUT(request: Request) {
+  return handleUpsert(request, 'PUT');
 }

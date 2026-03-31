@@ -1,38 +1,139 @@
-// app/api/tirage/route.ts
 import { NextResponse } from 'next/server';
-import { TirageSchema } from '../../../validations/tirage.schema';
-import { TirageService } from '../../../services/tirage.service';
-import { BusinessLogicError } from '../../../lib/errors';
+import { ZodError } from 'zod';
+import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
+import { TirageModuleService } from '@/server/modules/tirage/tirage.service';
+import { createTirageSchema } from '@/server/modules/tirage/tirage.schemas';
+import { logger } from '@/server/shared/logger';
+import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
+
   try {
-    // NB: En production réelle, on récupérera l'utilisateur via la session
-    const userEmail = "system@cave.fr";
+    const actor = await resolveAuthenticatedActor(request);
+    assertRole(actor, WRITE_ROLES);
+    const payload = createTirageSchema.parse(await request.json());
+    const result = await TirageModuleService.execute(payload, actor);
 
-    const body = await req.json();
-    
-    // 1. Validation stricte et conversion automatique via Zod (z.coerce fait le travail de parseInt/parseFloat)
-    const payload = TirageSchema.parse(body);
+    logger.info({
+      action: 'tirage.post.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: {
+        bottleLotId: result.bottleLotId,
+        bottleLotCode: result.bottleLotCode,
+        remainingVolume: result.remainingVolume,
+      },
+    });
 
-    // 2. Exécution métier
-    const result = await TirageService.executeTirage(payload, userEmail);
-    
-    return NextResponse.json(result, { status: 200 });
+    return NextResponse.json(
+      {
+        status: 'SUCCESS',
+        ...result,
+      },
+      {
+        status: 201,
+        headers: { 'x-request-id': requestId },
+      },
+    );
+  } catch (error) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
 
-  } catch (error: any) {
-    console.error("[TIRAGE_API_ERROR]", error);
-    
-    // Erreur de validation des données (ex: volume négatif envoyé par un hackeur, ou texte à la place d'un chiffre)
-    if (error.name === 'ZodError') {
-      return NextResponse.json({ error: error.errors[0].message }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
     }
-    
-    // Erreur métier (ex: pas assez de vin dans la cuve, double-clic)
+
+    if (error instanceof ZodError) {
+      logger.warn({
+        action: 'tirage.post.validation_failed',
+        requestId,
+        details: {
+          issues: error.flatten(),
+        },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_ERROR',
+          details: error.flatten(),
+        },
+        {
+          status: 400,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
     if (error instanceof BusinessLogicError) {
-      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+      logger.warn({
+        action: 'tirage.post.business_rejected',
+        requestId,
+        details: {
+          message: error.message,
+        },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'BUSINESS_RULE_VIOLATION',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
     }
 
-    // Erreur système imprévue (Base de données hors ligne, etc.)
-    return NextResponse.json({ error: "Erreur serveur interne lors du tirage." }, { status: 500 });
+    logger.error({
+      action: 'tirage.post.unhandled_error',
+      requestId,
+      details: {
+        error: error instanceof Error ? error.message : 'unknown_error',
+      },
+    });
+
+    return NextResponse.json(
+      {
+        error: 'INTERNAL_SERVER_ERROR',
+      },
+      {
+        status: 500,
+        headers: { 'x-request-id': requestId },
+      },
+    );
   }
 }
