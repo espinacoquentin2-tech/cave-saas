@@ -4,14 +4,13 @@ import { BusinessLogicError } from '@/lib/errors';
 import { listBottleLotsQuerySchema } from '@/server/modules/bottles/bottle.schemas';
 import { BottleModuleService } from '@/server/modules/bottles/bottle.service';
 import { logger } from '@/server/shared/logger';
-import { assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
+import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
 
   try {
-    const actor = await resolveAuthenticatedActor(request);
-    assertRole(actor, ['ADMIN', 'CHEF_CAVE', 'CAVISTE', 'LECTURE_SEULE']);
+    const actor = parseRequestActor(request);
     const { searchParams } = new URL(request.url);
     const payload = listBottleLotsQuerySchema.parse({ id: searchParams.get('id') ?? undefined });
     const bottles = await BottleModuleService.list(payload);
@@ -59,8 +58,7 @@ export async function DELETE(request: Request) {
   const requestId = getRequestId(request);
 
   try {
-    const actor = await resolveAuthenticatedActor(request);
-    assertRole(actor, ['ADMIN', 'CHEF_CAVE']);
+    const actor = parseRequestActor(request);
     const { searchParams } = new URL(request.url);
     const payload = listBottleLotsQuerySchema.parse({ id: searchParams.get('id') ?? undefined });
 

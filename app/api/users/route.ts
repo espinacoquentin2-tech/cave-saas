@@ -4,14 +4,13 @@ import { BusinessLogicError } from '@/lib/errors';
 import { upsertUserSchema } from '@/server/modules/users/user.schemas';
 import { UserModuleService } from '@/server/modules/users/user.service';
 import { logger } from '@/server/shared/logger';
-import { assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
+import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
 
 const handleUpsert = async (request: Request, method: 'POST' | 'PUT') => {
   const requestId = getRequestId(request);
 
   try {
-    const actor = await resolveAuthenticatedActor(request);
-    assertRole(actor, ['ADMIN', 'CHEF_CAVE']);
+    const actor = parseRequestActor(request);
     const payload = upsertUserSchema.parse(await request.json());
     const result = await UserModuleService.upsert(payload, actor);
 
