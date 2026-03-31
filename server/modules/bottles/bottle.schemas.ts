@@ -1,5 +1,9 @@
 import { z } from 'zod';
 
+export const listBottleLotsQuerySchema = z.object({
+  id: z.coerce.number().int().positive().optional(),
+});
+
 export const updateBottleStatusSchema = z.object({
   blId: z.coerce.number().int().positive(),
   status: z.enum(['EN_REMUAGE', 'SUR_POINTES', 'A_DEGORGER']),
@@ -34,6 +38,7 @@ export const expedierSchema = z.object({
   idempotencyKey: z.string().trim().min(10),
 });
 
+export type ListBottleLotsQueryInput = z.infer<typeof listBottleLotsQuerySchema>;
 export type UpdateBottleStatusInput = z.infer<typeof updateBottleStatusSchema>;
 export type DegorgerInput = z.infer<typeof degorgerSchema>;
 export type HabillerInput = z.infer<typeof habillerSchema>;
