@@ -1,8 +1,7 @@
 // services/maturation.service.ts
-import { PrismaClient } from '@prisma/client';
 import { SaveMaturationPayload } from '../validations/maturation.schema';
+import { prisma } from '@/server/shared/prisma';
 
-const prisma = new PrismaClient();
 
 export class MaturationService {
   static async saveRecord(data: SaveMaturationPayload, userEmail: string) {
