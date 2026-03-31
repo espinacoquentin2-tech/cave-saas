@@ -1,6 +1,6 @@
 // services/lots.service.ts
-import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
+import { prisma } from '@/server/shared/prisma';
 import { 
   AddIntrantSchema, 
   SaveFaTourSchema,
@@ -9,7 +9,6 @@ import {
   UpdateLotVolumeSchema 
 } from '../validations/lots.schema';
 
-const prisma = new PrismaClient();
 
 export class LotsService {
   

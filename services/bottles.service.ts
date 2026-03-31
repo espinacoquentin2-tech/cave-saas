@@ -2,8 +2,8 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { UpdateBottleStatusSchema, DegorgerSchema, HabillerSchema, ExpedierSchema } from '../validations/bottles.schema';
 import { z } from 'zod';
+import { prisma } from '@/server/shared/prisma';
 
-const prisma = new PrismaClient();
 
 export class BottlesService {
   

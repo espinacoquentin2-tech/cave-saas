@@ -2,8 +2,8 @@
 import { Lot, PrismaClient } from '@prisma/client';
 import { LoadPressSchema, EcoulementSchema } from '../validations/pressings.schema';
 import { z } from 'zod';
+import { prisma } from '@/server/shared/prisma';
 
-const prisma = new PrismaClient();
 
 export class PressingService {
   

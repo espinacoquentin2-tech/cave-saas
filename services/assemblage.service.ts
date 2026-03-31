@@ -1,8 +1,7 @@
-import { PrismaClient } from '@prisma/client';
 import { AssemblageSchema } from '../validations/assemblage.schema';
 import { z } from 'zod';
+import { prisma } from '@/server/shared/prisma';
 
-const prisma = new PrismaClient();
 
 export class AssemblageService {
   static async execute(data: z.infer<typeof AssemblageSchema>, userEmail: string) {

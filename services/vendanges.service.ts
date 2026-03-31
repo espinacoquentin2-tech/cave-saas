@@ -1,6 +1,6 @@
 // services/vendanges.service.ts
-import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
+import { prisma } from '@/server/shared/prisma';
 import { 
   ProjectionsRequestPayload, 
   CreateApportSchema, 
@@ -8,7 +8,6 @@ import {
   UpdatePressoirSchema 
 } from '../validations/vendanges.schema';
 
-const prisma = new PrismaClient();
 
 export class VendangesService {
   

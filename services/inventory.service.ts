@@ -1,8 +1,7 @@
 // services/inventory.service.ts
-import { PrismaClient } from '@prisma/client';
 import { CreateProductPayload, StockMovementPayload } from '../validations/inventory.schema';
+import { prisma } from '@/server/shared/prisma';
 
-const prisma = new PrismaClient();
 
 export class InventoryService {
   

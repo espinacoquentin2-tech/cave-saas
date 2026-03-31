@@ -1,8 +1,7 @@
 // services/degustation.service.ts
-import { PrismaClient } from '@prisma/client';
 import { SaveDegustationPayload } from '../validations/degustation.schema';
+import { prisma } from '@/server/shared/prisma';
 
-const prisma = new PrismaClient();
 
 export class DegustationService {
   static async saveRecord(data: SaveDegustationPayload, userEmail: string) {

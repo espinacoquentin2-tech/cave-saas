@@ -1,8 +1,7 @@
 // services/admin.service.ts
-import { PrismaClient } from '@prisma/client';
 import { CreateWorkOrderPayload, UserPayload } from '../validations/admin.schema';
+import { prisma } from '@/server/shared/prisma';
 
-const prisma = new PrismaClient();
 
 export class AdminService {
   

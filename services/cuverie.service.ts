@@ -2,8 +2,8 @@
 import { Lot, Prisma, PrismaClient } from '@prisma/client';
 import { DecuvagePayload, TransferPayload } from '../validations/cuverie.schema';
 import { BusinessLogicError } from '../lib/errors';
+import { prisma } from '@/server/shared/prisma';
 
-const prisma = new PrismaClient();
 
 export class CuverieService {
   

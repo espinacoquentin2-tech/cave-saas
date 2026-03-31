@@ -1,7 +1,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { SaveAnalysesPayload } from '../validations/analyses.schema';
+import { prisma } from '@/server/shared/prisma';
 
-const prisma = new PrismaClient();
 
 export class AnalysesService {
   static async saveRecords(data: SaveAnalysesPayload, userEmail: string) {

@@ -1,8 +1,8 @@
 // services/tracabilite.service.ts
 import { BottleLot, Lot, LotEvent, PrismaClient } from '@prisma/client';
 import { TraceabilityRequestPayload } from '../validations/tracabilite.schema';
+import { prisma } from '@/server/shared/prisma';
 
-const prisma = new PrismaClient();
 
 export class TracabiliteService {
   static async getLineage(data: TraceabilityRequestPayload) {
