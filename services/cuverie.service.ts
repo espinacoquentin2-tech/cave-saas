@@ -1,5 +1,5 @@
 // services/cuverie.service.ts
-import { PrismaClient } from '@prisma/client';
+import { Lot, Prisma, PrismaClient } from '@prisma/client';
 import { DecuvagePayload, TransferPayload } from '../validations/cuverie.schema';
 import { BusinessLogicError } from '../lib/errors';
 
@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 export class CuverieService {
   
   // Fonction utilitaire pour récupérer l'ID utilisateur
-  private static async getUserId(tx: any, email: string) {
+  private static async getUserId(tx: Prisma.TransactionClient, email: string) {
     const user = await tx.user.findFirst({ where: { email } });
     if (!user) throw new BusinessLogicError("Utilisateur non autorisé.", 401);
     return user.id;
@@ -32,7 +32,7 @@ export class CuverieService {
       }
 
       const operatorId = await this.getUserId(tx, userEmail);
-      const newLots: any[] = [];
+      const newLots: Lot[] = [];
 
       const event = await tx.lotEvent.create({
         data: {
