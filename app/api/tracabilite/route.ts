@@ -18,7 +18,7 @@ export async function POST(request: Request) {
       requestId,
       userEmail: actor.email,
       role: actor.role,
-      details: { lotCode: payload.lotCode, type: payload.type },
+      details: { sourceType: payload.sourceType, sourceId: payload.sourceId },
     });
 
     return NextResponse.json(lineage, { status: 200, headers: { 'x-request-id': requestId } });

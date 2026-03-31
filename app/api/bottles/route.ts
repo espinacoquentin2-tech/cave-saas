@@ -60,66 +60,34 @@ export async function DELETE(request: Request) {
   try {
     const actor = parseRequestActor(request);
     const { searchParams } = new URL(request.url);
-    const payload = listBottleLotsQuerySchema.parse({ id: searchParams.get('id') ?? undefined });
+    const id = parseInt(searchParams.get('id') || '0');
 
-    if (!payload.id) {
-      return NextResponse.json(
-        { error: 'VALIDATION_ERROR', message: 'Paramètre id requis.' },
-        { status: 400, headers: { 'x-request-id': requestId } },
-      );
-    }
+    await prisma.$transaction(async (tx) => {
+      const bottleLot = await tx.bottleLot.findUnique({ where: { id } });
+      if (!bottleLot) return;
 
-    const result = await BottleModuleService.delete(payload.id, actor);
+      // 1. Nettoyer les liens d'historique
+      await tx.bottleEventLink.deleteMany({ where: { bottleLotId: id } });
 
-    logger.info({
-      action: 'bottles.delete.success',
-      requestId,
-      userEmail: actor.email,
-      role: actor.role,
-      details: { bottleLotId: payload.id },
-    });
+      // 2. Restituer le vin dans la cuve d'origine !
+      if (bottleLot.sourceLotId) {
+        const fmtHL = { "37.5cl":0.00375, "75cl":0.0075, "150cl":0.015, "300cl":0.03 };
+        const volumeToRestore = bottleLot.initialBottleCount * (fmtHL[bottleLot.formatCode as keyof typeof fmtHL] || 0.0075);
+        
+        const lot = await tx.lot.findUnique({ where: { id: bottleLot.sourceLotId } });
+        if (lot) {
+          await tx.lot.update({
+            where: { id: bottleLot.sourceLotId },
+            data: { 
+              currentVolume: Number(lot.currentVolume) + volumeToRestore,
+              status: lot.status === 'TIRE' ? 'ACTIF' : lot.status // Réanime le lot s'il était fini
+            }
+          });
+        }
+      }
 
-    return NextResponse.json(
-      {
-        status: 'SUCCESS',
-        data: result,
-      },
-      {
-        status: 200,
-        headers: { 'x-request-id': requestId },
-      },
-    );
-  } catch (error) {
-    if (error instanceof ZodError) {
-      logger.warn({
-        action: 'bottles.delete.validation_failed',
-        requestId,
-        details: { issues: error.flatten() },
-      });
-
-      return NextResponse.json(
-        { error: 'VALIDATION_ERROR', details: error.flatten() },
-        { status: 400, headers: { 'x-request-id': requestId } },
-      );
-    }
-
-    if (error instanceof BusinessLogicError) {
-      logger.warn({
-        action: 'bottles.delete.business_rejected',
-        requestId,
-        details: { message: error.message },
-      });
-
-      return NextResponse.json(
-        { error: 'BUSINESS_RULE_VIOLATION', message: error.message },
-        { status: error.statusCode, headers: { 'x-request-id': requestId } },
-      );
-    }
-
-    logger.error({
-      action: 'bottles.delete.unhandled_error',
-      requestId,
-      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+      // 3. Détruire le lot de bouteilles
+      await tx.bottleLot.delete({ where: { id } });
     });
 
     return NextResponse.json(
