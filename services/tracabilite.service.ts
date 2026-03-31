@@ -1,5 +1,5 @@
 // services/tracabilite.service.ts
-import { BottleLot, Lot, LotEvent } from '@prisma/client';
+import { BottleLot, Lot, LotEvent, PrismaClient } from '@prisma/client';
 import { TraceabilityRequestPayload } from '../validations/tracabilite.schema';
 import { prisma } from '@/server/shared/prisma';
 

@@ -64,33 +64,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
   }
 }
-
-export async function DELETE(request: Request) {
-  const requestId = getRequestId(request);
-
-  try {
-    const actor = parseRequestActor(request);
-    const { searchParams } = new URL(request.url);
-    const payload = deleteCompartmentQuerySchema.parse({ id: searchParams.get('id') });
-
-    await prisma.container.delete({ where: { id: payload.id } });
-
-    logger.info({
-      action: 'containers.compartment.delete.success',
-      requestId,
-      userEmail: actor.email,
-      role: actor.role,
-      details: { containerId: payload.id },
-    });
-
-    return NextResponse.json({ success: true }, { status: 200, headers: { 'x-request-id': requestId } });
-  } catch (error) {
-    if (error instanceof ZodError) {
-      logger.warn({ action: 'containers.compartment.delete.validation_failed', requestId, details: { issues: error.flatten() } });
-      return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });
-    }
-
-    logger.error({ action: 'containers.compartment.delete.unhandled_error', requestId, details: { error: error instanceof Error ? error.message : 'unknown_error' } });
-    return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
-  }
-}
