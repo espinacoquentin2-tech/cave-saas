@@ -1,96 +1,44 @@
+// app/api/containers/compartment/route.ts
 import { NextResponse } from 'next/server';
-import { z, ZodError } from 'zod';
-import { logger } from '@/server/shared/logger';
-import { prisma } from '@/server/shared/prisma';
-import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
+import { PrismaClient } from '@prisma/client';
 
-const createCompartmentSchema = z.object({
-  originalContainerId: z.coerce.number().int().positive(),
-  newCapacity: z.coerce.number().positive(),
-});
+const prisma = new PrismaClient();
 
-const deleteCompartmentQuerySchema = z.object({
-  id: z.coerce.number().int().positive(),
-});
-
-export async function POST(request: Request) {
-  const requestId = getRequestId(request);
-
+export async function POST(req: Request) {
   try {
-    const actor = parseRequestActor(request);
-    const payload = createCompartmentSchema.parse(await request.json());
+    const { originalContainerId, newCapacity } = await req.json();
 
     const result = await prisma.$transaction(async (tx) => {
-      const parentContainer = await tx.container.findUnique({
-        where: { id: payload.originalContainerId },
-        include: { children: true },
+      // On récupère la Citerne Mère et ses enfants actuels
+      const parentContainer = await tx.container.findUnique({ 
+        where: { id: parseInt(originalContainerId) },
+        include: { children: true } 
       });
+      
+      if (!parentContainer) throw new Error("Citerne introuvable");
 
-      if (!parentContainer) {
-        throw new Error('Citerne introuvable');
-      }
-
+      // On calcule le numéro du prochain compartiment
       const newCompNumber = parentContainer.children.length + 2;
       const baseName = parentContainer.displayName.replace(/ - Comp \d+$/, '');
 
-      return tx.container.create({
+      // On crée l'enfant, relié à sa mère
+      const newComp = await tx.container.create({
         data: {
-          code: `COMP-${Date.now()}-${Math.floor(Math.random() * 100)}`,
+          code: `COMP-${Date.now()}-${Math.floor(Math.random()*100)}`,
           displayName: `${baseName} - Comp ${newCompNumber}`,
-          type: 'COMPARTIMENT',
-          capacityValue: payload.newCapacity,
-          status: 'VIDE',
-          parentId: parentContainer.id,
-        },
+          type: "COMPARTIMENT", // <-- On le marque bien comme compartiment
+          capacityValue: newCapacity,
+          status: "VIDE",
+          parentId: parentContainer.id // <-- LA LIGNE MAGIQUE QUI MANQUAIT !
+        }
       });
+
+      return newComp;
     });
 
-    logger.info({
-      action: 'containers.compartment.post.success',
-      requestId,
-      userEmail: actor.email,
-      role: actor.role,
-      details: { containerId: result.id, parentId: result.parentId },
-    });
-
-    return NextResponse.json({ success: true, container: result }, { status: 200, headers: { 'x-request-id': requestId } });
-  } catch (error) {
-    if (error instanceof ZodError) {
-      logger.warn({ action: 'containers.compartment.post.validation_failed', requestId, details: { issues: error.flatten() } });
-      return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });
-    }
-
-    logger.error({ action: 'containers.compartment.post.unhandled_error', requestId, details: { error: error instanceof Error ? error.message : 'unknown_error' } });
-    return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
-  }
-}
-
-export async function DELETE(request: Request) {
-  const requestId = getRequestId(request);
-
-  try {
-    const actor = parseRequestActor(request);
-    const { searchParams } = new URL(request.url);
-    const payload = deleteCompartmentQuerySchema.parse({ id: searchParams.get('id') });
-
-    await prisma.container.delete({ where: { id: payload.id } });
-
-    logger.info({
-      action: 'containers.compartment.delete.success',
-      requestId,
-      userEmail: actor.email,
-      role: actor.role,
-      details: { containerId: payload.id },
-    });
-
-    return NextResponse.json({ success: true }, { status: 200, headers: { 'x-request-id': requestId } });
-  } catch (error) {
-    if (error instanceof ZodError) {
-      logger.warn({ action: 'containers.compartment.delete.validation_failed', requestId, details: { issues: error.flatten() } });
-      return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });
-    }
-
-    logger.error({ action: 'containers.compartment.delete.unhandled_error', requestId, details: { error: error instanceof Error ? error.message : 'unknown_error' } });
-    return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
+    return NextResponse.json({ success: true, container: result });
+  } catch (error: any) {
+    console.error("Erreur création compartiment:", error);
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }
