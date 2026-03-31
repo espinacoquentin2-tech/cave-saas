@@ -36,6 +36,15 @@ export async function POST(request: Request) {
       requestId,
       userEmail: actor.email,
       role: actor.role,
+      await tx.product.updateMany({ data: { currentStock: 0 } });
+      await tx.container.updateMany({ data: { status: 'VIDE', notes: null } });
+    });
+
+    logger.info({
+      action: 'reset.post.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
     });
 
     return NextResponse.json(
@@ -84,3 +93,4 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
   }
 }
+

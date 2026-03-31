@@ -37,7 +37,19 @@ export async function GET(request: Request) {
     const containers = await prisma.container.findMany({
       where: { status: { not: 'ARCHIVÉE' } },
       include: { currentLots: true },
+      where: { status: { not: 'ARCHIVÉE' } },
+      include: { currentLots: true },
     });
+
+    logger.info({
+      action: 'containers.get.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { count: containers.length },
+    });
+
+    return NextResponse.json(containers, { status: 200, headers: { 'x-request-id': requestId } });
 
     logger.info({
       action: 'containers.get.success',
@@ -97,6 +109,15 @@ export async function POST(request: Request) {
         status: payload.status ?? 'VIDE',
         notes: payload.notes ?? '',
       },
+        code: payload.code ?? payload.name ?? payload.displayName ?? 'CUVE-X',
+        displayName: payload.displayName ?? payload.name ?? 'Nouvelle Cuve',
+        type: payload.type ?? 'Cuve',
+        capacityValue: payload.capacityValue ?? payload.capacity ?? 0,
+        capacityUnit: 'hL',
+        zone: payload.zone ?? 'Cuverie',
+        status: payload.status ?? 'VIDE',
+        notes: payload.notes ?? '',
+      },
     });
 
     logger.info({
@@ -147,6 +168,19 @@ export async function PUT(request: Request) {
     const payload = updateContainerSchema.parse(await request.json());
 
     const updatedContainer = await prisma.container.update({
+      where: { id: payload.id },
+      data: {
+        ...(payload.status ? { status: payload.status } : {}),
+        ...(payload.name ? { displayName: payload.name } : {}),
+      },
+    });
+
+    logger.info({
+      action: 'containers.put.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { containerId: payload.id },
       where: { id: payload.id },
       data: {
         ...(payload.status ? { status: payload.status } : {}),
@@ -261,3 +295,4 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
   }
 }
+

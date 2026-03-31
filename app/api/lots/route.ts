@@ -86,6 +86,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
 
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
+
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
@@ -208,3 +211,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

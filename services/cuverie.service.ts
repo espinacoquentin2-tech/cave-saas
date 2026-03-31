@@ -3,11 +3,13 @@ import { Lot, Prisma } from '@prisma/client';
 import { DecuvagePayload, TransferPayload } from '../validations/cuverie.schema';
 import { BusinessLogicError } from '../lib/errors';
 import { prisma } from '@/server/shared/prisma';
+import { prisma } from '@/server/shared/prisma';
 
 
 export class CuverieService {
   
   // Fonction utilitaire pour récupérer l'ID utilisateur
+  private static async getUserId(tx: Prisma.TransactionClient, email: string) {
   private static async getUserId(tx: Prisma.TransactionClient, email: string) {
     const user = await tx.user.findFirst({ where: { email } });
     if (!user) throw new BusinessLogicError("Utilisateur non autorisé.", 401);
@@ -32,6 +34,7 @@ export class CuverieService {
       }
 
       const operatorId = await this.getUserId(tx, userEmail);
+      const newLots: Lot[] = [];
       const newLots: Lot[] = [];
 
       const event = await tx.lotEvent.create({
@@ -215,3 +218,4 @@ export class CuverieService {
     });
   }
 }
+

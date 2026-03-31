@@ -9,6 +9,9 @@ import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolv
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
 
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
+
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, ['ADMIN', 'CHEF_CAVE']);
@@ -132,3 +135,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

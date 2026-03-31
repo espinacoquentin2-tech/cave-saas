@@ -9,6 +9,8 @@ import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolv
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
+export async function GET(request: Request) {
+  const requestId = getRequestId(request);
 
   try {
     const actor = await resolveAuthenticatedActor(request);
@@ -53,6 +55,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
   }
 }
+
+const handleMutation = async (request: Request, method: 'POST' | 'PUT') => {
+  const requestId = getRequestId(request);
 
 const handleMutation = async (request: Request, method: 'POST' | 'PUT') => {
   const requestId = getRequestId(request);

@@ -9,6 +9,9 @@ import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolv
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
 
+export async function GET(request: Request) {
+  const requestId = getRequestId(request);
+
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, ['ADMIN', 'CHEF_CAVE', 'CAVISTE', 'LECTURE_SEULE']);
@@ -75,6 +78,8 @@ export async function GET(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const requestId = getRequestId(request);
+
   const requestId = getRequestId(request);
 
   try {
@@ -187,3 +192,4 @@ export async function DELETE(request: Request) {
     );
   }
 }
+
