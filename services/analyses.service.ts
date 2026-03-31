@@ -1,7 +1,7 @@
-import { PrismaClient } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { SaveAnalysesPayload } from '../validations/analyses.schema';
+import { prisma } from '@/server/shared/prisma';
 
-const prisma = new PrismaClient();
 
 export class AnalysesService {
   static async saveRecords(data: SaveAnalysesPayload, userEmail: string) {
@@ -36,7 +36,7 @@ export class AnalysesService {
         alcohol: a.alcohol || null,
         notes: a.notes || null,
         // 👈 UTILISATION DU TIROIR MAGIQUE : On y cache l'opérateur pour la traçabilité
-extraData: { operator: userEmail, source: "App Saisie", ...(a.extraData || {}) } as any
+        extraData: { operator: userEmail, source: "App Saisie", ...(a.extraData || {}) } as Prisma.JsonObject
       }));
 
       // Utilisation du modèle "analysis" (avec un Y) tel que défini dans Prisma

@@ -1,9 +1,8 @@
 // services/tirage.service.ts
-import { PrismaClient } from '@prisma/client';
 import { ExecuteMixtionPayload, TiragePayload } from '../validations/tirage.schema';
 import { BusinessLogicError } from '../lib/errors';
+import { prisma } from '@/server/shared/prisma';
 
-const prisma = new PrismaClient();
 
 export class TirageService {
   

@@ -1,35 +1,99 @@
-// app/api/transfers/route.ts
 import { NextResponse } from 'next/server';
-import { TransferSchema } from '../../../validations/cuverie.schema';
-import { CuverieService } from '../../../services/cuverie.service';
-import { BusinessLogicError } from '../../../lib/errors';
+import { ZodError } from 'zod';
+import { BusinessLogicError } from '@/lib/errors';
+import { createTransferSchema } from '@/server/modules/transfers/transfer.schemas';
+import { TransferService } from '@/server/modules/transfers/transfer.service';
+import { logger } from '@/server/shared/logger';
+import { assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
+
   try {
-    // NB: En production réelle, on récupérera l'utilisateur via la session
-    const userEmail = "system@cave.fr";
+    const actor = await resolveAuthenticatedActor(request);
+    assertRole(actor, ['ADMIN', 'CHEF_CAVE', 'CAVISTE']);
+    const payload = createTransferSchema.parse(await request.json());
+    const result = await TransferService.execute(payload, actor);
 
-    const body = await req.json();
-    
-    // 1. Validation de sécurité stricte et coercition via Zod
-    const payload = TransferSchema.parse(body);
+    logger.info({
+      action: 'transfer.post.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: {
+        eventId: result.eventId,
+        sourceLotId: result.sourceLotId,
+        createdLotIds: result.createdLotIds,
+      },
+    });
 
-    // 2. Exécution de la transaction ACID via le Service
-    const result = await CuverieService.executeTransfer(payload, userEmail);
-    
-    return NextResponse.json(result, { status: 200 });
+    return NextResponse.json(
+      {
+        status: 'SUCCESS',
+        data: result,
+      },
+      {
+        status: 201,
+        headers: { 'x-request-id': requestId },
+      },
+    );
+  } catch (error) {
+    if (error instanceof ZodError) {
+      logger.warn({
+        action: 'transfer.post.validation_failed',
+        requestId,
+        details: {
+          issues: error.flatten(),
+        },
+      });
 
-  } catch (error: any) {
-    console.error("[TRANSFER_API_ERROR]", error);
-    
-    if (error.name === 'ZodError') {
-      return NextResponse.json({ error: error.errors[0].message }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_ERROR',
+          details: error.flatten(),
+        },
+        {
+          status: 400,
+          headers: { 'x-request-id': requestId },
+        },
+      );
     }
-    
+
     if (error instanceof BusinessLogicError) {
-      return NextResponse.json({ error: error.message }, { status: error.statusCode });
+      logger.warn({
+        action: 'transfer.post.business_rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'BUSINESS_RULE_VIOLATION',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
     }
 
-    return NextResponse.json({ error: "Erreur serveur interne lors du transfert" }, { status: 500 });
+    logger.error({
+      action: 'transfer.post.unhandled_error',
+      requestId,
+      details: {
+        error: error instanceof Error ? error.message : 'unknown_error',
+      },
+    });
+
+    return NextResponse.json(
+      {
+        error: 'INTERNAL_SERVER_ERROR',
+      },
+      {
+        status: 500,
+        headers: { 'x-request-id': requestId },
+      },
+    );
   }
 }

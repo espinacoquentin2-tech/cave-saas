@@ -1,6 +1,6 @@
 // services/vendanges.service.ts
-import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
+import { prisma } from '@/server/shared/prisma';
 import { 
   ProjectionsRequestPayload, 
   CreateApportSchema, 
@@ -8,7 +8,6 @@ import {
   UpdatePressoirSchema 
 } from '../validations/vendanges.schema';
 
-const prisma = new PrismaClient();
 
 export class VendangesService {
   
@@ -20,7 +19,8 @@ export class VendangesService {
       orderBy: { date: 'asc' }
     });
 
-    const groupedMaturations: Record<string, any[]> = {};
+    type MaturationRecord = (typeof maturations)[number];
+    const groupedMaturations: Record<string, MaturationRecord[]> = {};
     for (const m of maturations) {
       const key = `${m.parcelle}_${m.cepage}`;
       if (!groupedMaturations[key]) groupedMaturations[key] = [];
