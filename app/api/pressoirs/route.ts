@@ -1,39 +1,72 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { ZodError } from 'zod';
 import { CreatePressoirSchema, UpdatePressoirSchema } from '../../../validations/vendanges.schema';
 import { VendangesService } from '../../../services/vendanges.service';
+import { logger } from '@/server/shared/logger';
+import { prisma } from '@/server/shared/prisma';
+import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
 
-const prisma = new PrismaClient();
+export async function GET(request: Request) {
+  const requestId = getRequestId(request);
 
-export async function GET() {
   try {
+    const actor = parseRequestActor(request);
     const pressoirs = await prisma.pressoir.findMany({ orderBy: { nom: 'asc' } });
-    return NextResponse.json(pressoirs);
-  } catch (e) {
-    return NextResponse.json({ error: "Erreur serveur" }, { status: 500 });
+
+    logger.info({
+      action: 'pressoirs.get.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { count: pressoirs.length },
+    });
+
+    return NextResponse.json(pressoirs, { status: 200, headers: { 'x-request-id': requestId } });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      logger.warn({ action: 'pressoirs.get.validation_failed', requestId, details: { issues: error.flatten() } });
+      return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });
+    }
+
+    logger.error({ action: 'pressoirs.get.unhandled_error', requestId, details: { error: error instanceof Error ? error.message : 'unknown_error' } });
+    return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
   }
 }
 
-export async function POST(req: Request) {
+const handleMutation = async (request: Request, method: 'POST' | 'PUT') => {
+  const requestId = getRequestId(request);
+
   try {
-    const body = await req.json();
-    const validation = CreatePressoirSchema.safeParse(body);
-    if (!validation.success) return NextResponse.json({ error: validation.error.issues[0].message }, { status: 400 });
-    const result = await VendangesService.createPressoir(validation.data);
-    return NextResponse.json(result, { status: 200 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: error.message.includes("ALREADY_APPLIED") ? 400 : 500 });
+    const actor = parseRequestActor(request);
+    const payload = method === 'POST' ? CreatePressoirSchema.parse(await request.json()) : UpdatePressoirSchema.parse(await request.json());
+    const result = method === 'POST' ? await VendangesService.createPressoir(payload) : await VendangesService.updatePressoir(payload);
+
+    logger.info({
+      action: `pressoirs.${method.toLowerCase()}.success`,
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { pressoirId: result.id, status: result.status },
+    });
+
+    return NextResponse.json(result, { status: 200, headers: { 'x-request-id': requestId } });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      logger.warn({ action: `pressoirs.${method.toLowerCase()}.validation_failed`, requestId, details: { issues: error.flatten() } });
+      return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });
+    }
+
+    const message = error instanceof Error ? error.message : 'unknown_error';
+    const status = message.includes('ALREADY_APPLIED') ? 400 : 500;
+    logger.error({ action: `pressoirs.${method.toLowerCase()}.unhandled_error`, requestId, details: { error: message } });
+    return NextResponse.json({ error: status === 400 ? 'BUSINESS_RULE_VIOLATION' : 'INTERNAL_SERVER_ERROR', message }, { status, headers: { 'x-request-id': requestId } });
   }
+};
+
+export async function POST(request: Request) {
+  return handleMutation(request, 'POST');
 }
 
-export async function PUT(req: Request) {
-  try {
-    const body = await req.json();
-    const validation = UpdatePressoirSchema.safeParse(body);
-    if (!validation.success) return NextResponse.json({ error: validation.error.issues[0].message }, { status: 400 });
-    const result = await VendangesService.updatePressoir(validation.data);
-    return NextResponse.json(result, { status: 200 });
-  } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: error.message.includes("ALREADY_APPLIED") ? 400 : 500 });
-  }
+export async function PUT(request: Request) {
+  return handleMutation(request, 'PUT');
 }

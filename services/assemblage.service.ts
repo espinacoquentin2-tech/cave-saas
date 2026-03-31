@@ -1,8 +1,7 @@
-import { PrismaClient } from '@prisma/client';
 import { AssemblageSchema } from '../validations/assemblage.schema';
 import { z } from 'zod';
+import { prisma } from '@/server/shared/prisma';
 
-const prisma = new PrismaClient();
 
 export class AssemblageService {
   static async execute(data: z.infer<typeof AssemblageSchema>, userEmail: string) {
@@ -25,9 +24,9 @@ export class AssemblageService {
       // 2. Déduction des Vracs (sourceLots)
       for (const src of data.sourceLots) {
         const lot = await tx.lot.findUnique({ where: { id: src.id } });
-        if (!lot || lot.currentVolume < src.volumeUsed) throw new Error(`Stock insuffisant sur le lot ${src.id}`);
+        if (!lot || Number(lot.currentVolume) < src.volumeUsed) throw new Error(`Stock insuffisant sur le lot ${src.id}`);
         
-        const newVol = lot.currentVolume - src.volumeUsed;
+        const newVol = Number(lot.currentVolume) - src.volumeUsed;
         await tx.lot.update({
           where: { id: lot.id },
           data: { currentVolume: newVol, status: newVol <= 0.05 ? "ARCHIVE" : lot.status }
