@@ -1,26 +1,92 @@
-// app/api/pertes/route.ts
 import { NextResponse } from 'next/server';
-import { ExecuteLossSchema } from '../../../validations/loss.schema';
-import { LossService } from '../../../services/loss.service';
+import { ZodError } from 'zod';
+import { BusinessLogicError } from '@/lib/errors';
+import { LossModuleService } from '@/server/modules/losses/loss.service';
+import { createLossSchema } from '@/server/modules/losses/loss.schemas';
+import { logger } from '@/server/shared/logger';
+import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
+
   try {
-    const body = await req.json();
-    
-    // 1. Validation Zod stricte
-    const validation = ExecuteLossSchema.safeParse(body);
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error.issues[0].message }, { status: 400 });
+    const actor = parseRequestActor(request);
+    const payload = createLossSchema.parse(await request.json());
+    const result = await LossModuleService.execute(payload, actor);
+
+    logger.info({
+      action: 'loss.post.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { ...result },
+    });
+
+    return NextResponse.json(
+      {
+        status: 'SUCCESS',
+        ...result,
+      },
+      {
+        status: 201,
+        headers: { 'x-request-id': requestId },
+      },
+    );
+  } catch (error) {
+    if (error instanceof ZodError) {
+      logger.warn({
+        action: 'loss.post.validation_failed',
+        requestId,
+        details: { issues: error.flatten() },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_ERROR',
+          details: error.flatten(),
+        },
+        {
+          status: 400,
+          headers: { 'x-request-id': requestId },
+        },
+      );
     }
 
-    // 2. Exécution Transactionnelle
-    const result = await LossService.executeLoss(validation.data, "system@cave.fr"); // Remplacer par la session utilisateur réelle
-    
-    return NextResponse.json(result, { status: 200 });
+    if (error instanceof BusinessLogicError) {
+      logger.warn({
+        action: 'loss.post.business_rejected',
+        requestId,
+        details: { message: error.message },
+      });
 
-  } catch (error: any) {
-    console.error("[LOSS_API_ERROR]", error);
-    const status = error.message.includes("ALREADY_APPLIED") || error.message.includes("insuffisant") ? 400 : 500;
-    return NextResponse.json({ error: error.message || "Erreur serveur interne" }, { status });
+      return NextResponse.json(
+        {
+          error: 'BUSINESS_RULE_VIOLATION',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    logger.error({
+      action: 'loss.post.unhandled_error',
+      requestId,
+      details: {
+        error: error instanceof Error ? error.message : 'unknown_error',
+      },
+    });
+
+    return NextResponse.json(
+      {
+        error: 'INTERNAL_SERVER_ERROR',
+      },
+      {
+        status: 500,
+        headers: { 'x-request-id': requestId },
+      },
+    );
   }
 }

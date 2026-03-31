@@ -1,23 +1,50 @@
-// app/api/tracabilite/route.ts
 import { NextResponse } from 'next/server';
+import { ZodError } from 'zod';
 import { TraceabilityRequestSchema } from '../../../validations/tracabilite.schema';
 import { TracabiliteService } from '../../../services/tracabilite.service';
+import { logger } from '@/server/shared/logger';
+import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
+
   try {
-    const body = await req.json();
-    
-    const validation = TraceabilityRequestSchema.safeParse(body);
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error.issues[0].message }, { status: 400 });
+    const actor = parseRequestActor(request);
+    const payload = TraceabilityRequestSchema.parse(await request.json());
+    const lineage = await TracabiliteService.getLineage(payload);
+
+    logger.info({
+      action: 'tracabilite.post.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { lotCode: payload.lotCode, type: payload.type },
+    });
+
+    return NextResponse.json(lineage, { status: 200, headers: { 'x-request-id': requestId } });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      logger.warn({
+        action: 'tracabilite.post.validation_failed',
+        requestId,
+        details: { issues: error.flatten() },
+      });
+
+      return NextResponse.json(
+        { error: 'VALIDATION_ERROR', details: error.flatten() },
+        { status: 400, headers: { 'x-request-id': requestId } },
+      );
     }
 
-    const lineage = await TracabiliteService.getLineage(validation.data);
-    
-    return NextResponse.json(lineage, { status: 200 });
+    logger.error({
+      action: 'tracabilite.post.unhandled_error',
+      requestId,
+      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+    });
 
-  } catch (error: any) {
-    console.error("[TRACABILITE_API_ERROR]", error);
-    return NextResponse.json({ error: error.message || "Erreur serveur interne" }, { status: 500 });
+    return NextResponse.json(
+      { error: 'INTERNAL_SERVER_ERROR' },
+      { status: 500, headers: { 'x-request-id': requestId } },
+    );
   }
 }

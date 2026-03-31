@@ -1,13 +1,29 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
+import { logger } from '@/server/shared/logger';
+import { prisma } from '@/server/shared/prisma';
+import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
 
-const prisma = new PrismaClient();
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
 
-export async function POST() {
   try {
-    // TRANSACTION ATOMIQUE : Tout passe ou tout échoue
+    const actor = parseRequestActor(request);
+
+    if (actor.role !== 'ADMIN') {
+      logger.warn({
+        action: 'reset.post.forbidden',
+        requestId,
+        userEmail: actor.email,
+        role: actor.role,
+      });
+
+      return NextResponse.json(
+        { error: 'BUSINESS_RULE_VIOLATION', message: 'Seul un administrateur peut réinitialiser la base.' },
+        { status: 403, headers: { 'x-request-id': requestId } },
+      );
+    }
+
     await prisma.$transaction(async (tx) => {
-      // 1. Supprimer les relations de traçabilité en premier (Clés étrangères)
       await tx.lotEventLot.deleteMany();
       await tx.lotEventContainer.deleteMany();
       await tx.lotEvent.deleteMany();
@@ -16,39 +32,35 @@ export async function POST() {
       await tx.idempotencyRecord.deleteMany();
       await tx.degustation.deleteMany();
 
-      // 2. Supprimer les lots (Vrac et Bouteilles)
       await tx.bottleLot.deleteMany();
       await tx.lot.deleteMany();
 
-      // 3. Supprimer les données de campagne
       await tx.pressing.deleteMany();
       await tx.pressoir.deleteMany();
       await tx.maturation.deleteMany();
 
-      // 4. RÉINITIALISATION PHYSIQUE (On garde les structures mais vide le contenu)
-      // On remet les stocks à 0
-      await tx.product.updateMany({
-        data: { currentStock: 0 }
-      });
-
-      // On vide les cuves
-      await tx.container.updateMany({
-        data: { 
-          status: 'VIDE',
-          notes: null
-        }
-      });
+      await tx.product.updateMany({ data: { currentStock: 0 } });
+      await tx.container.updateMany({ data: { status: 'VIDE', notes: null } });
     });
 
-    return NextResponse.json({ 
-      success: true, 
-      message: "Réinitialisation complète effectuée. Base de données synchronisée." 
-    }, { status: 200 });
+    logger.info({
+      action: 'reset.post.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+    });
 
-  } catch (error: any) {
-    console.error("[CRITICAL_RESET_ERROR]", error);
-    return NextResponse.json({ 
-      error: "Échec de la réinitialisation : " + error.message 
-    }, { status: 500 });
+    return NextResponse.json(
+      { success: true, message: 'Réinitialisation complète effectuée. Base de données synchronisée.' },
+      { status: 200, headers: { 'x-request-id': requestId } },
+    );
+  } catch (error) {
+    logger.error({
+      action: 'reset.post.unhandled_error',
+      requestId,
+      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+    });
+
+    return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
   }
 }

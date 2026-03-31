@@ -1,62 +1,149 @@
 import { NextResponse } from 'next/server';
-import { PrismaClient } from '@prisma/client';
-import { SaveMaturationSchema } from '../../../validations/maturation.schema';
-import { MaturationService } from '../../../services/maturation.service';
+import { ZodError } from 'zod';
+import { BusinessLogicError } from '@/lib/errors';
+import { saveMaturationSchema } from '@/server/modules/maturation/maturation.schemas';
+import { MaturationModuleService } from '@/server/modules/maturation/maturation.service';
+import { logger } from '@/server/shared/logger';
+import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
 
 export const dynamic = 'force-dynamic';
-const prisma = new PrismaClient();
 
-// =========================================================================
-// 1. LECTURE (GET) - Votre code conservé pour charger l'historique
-// =========================================================================
-export async function GET() {
+export async function GET(request: Request) {
+  const requestId = getRequestId(request);
+
   try {
-    const maturations = await prisma.maturation.findMany({
-      orderBy: { date: 'asc' }
+    const actor = parseRequestActor(request);
+    const records = await MaturationModuleService.list();
+
+    logger.info({
+      action: 'maturation.get.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { count: records.length },
     });
-    return NextResponse.json(maturations);
-  } catch (error: any) {
-    console.error("ERREUR GET MATURATION :", error);
-    return NextResponse.json({ error: "Erreur lecture base de données" }, { status: 500 });
-  }
-}
 
-// =========================================================================
-// 2. CRÉATION & MISE À JOUR (POST SÉCURISÉ)
-// =========================================================================
-export async function POST(req: Request) {
-  try {
-    const body = await req.json();
-    
-    // Nettoyage rapide pour Zod (Conversion des chaines vides en undefined)
-    const parsedBody = {
-      ...body,
-      sucre: body.sucre ? parseFloat(body.sucre) : undefined,
-      ph: body.ph ? parseFloat(body.ph) : undefined,
-      at: body.at ? parseFloat(body.at) : undefined,
-      malique: body.malique ? parseFloat(body.malique) : undefined,
-      tartrique: body.tartrique ? parseFloat(body.tartrique) : undefined,
-      intensite: body.intensite ? parseFloat(body.intensite) : undefined,
-    };
+    return NextResponse.json(records, {
+      status: 200,
+      headers: { 'x-request-id': requestId },
+    });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      logger.warn({
+        action: 'maturation.get.validation_failed',
+        requestId,
+        details: { issues: error.flatten() },
+      });
 
-    // 1. Validation de sécurité stricte
-    const validation = SaveMaturationSchema.safeParse(parsedBody);
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error.issues[0].message }, { status: 400 });
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_ERROR',
+          details: error.flatten(),
+        },
+        {
+          status: 400,
+          headers: { 'x-request-id': requestId },
+        },
+      );
     }
 
-    // 2. Exécution dans le Cerveau (Transaction, Calculs, Idempotence, Audit)
-    // NB: En production, récupérez l'email depuis la session (ex: getServerSession)
-    const result = await MaturationService.saveRecord(validation.data, "system@cave.fr");
-    
-    // 3. Réponse propre
-    return NextResponse.json(result.record, { status: 200 });
+    logger.error({
+      action: 'maturation.get.unhandled_error',
+      requestId,
+      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+    });
 
-  } catch (error: any) {
-    console.error("[MATURATION_API_ERROR]", error);
-    const status = error.message.includes("ALREADY_APPLIED") ? 400 : 500;
-    return NextResponse.json({ error: error.message || "Erreur serveur interne" }, { status });
+    return NextResponse.json(
+      {
+        error: 'INTERNAL_SERVER_ERROR',
+      },
+      {
+        status: 500,
+        headers: { 'x-request-id': requestId },
+      },
+    );
   }
 }
 
-// NB: Plus besoin de PUT, le POST gère l'Upsert grâce au Service !
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
+
+  try {
+    const actor = parseRequestActor(request);
+    const payload = saveMaturationSchema.parse(await request.json());
+    const result = await MaturationModuleService.save(payload, actor);
+
+    logger.info({
+      action: 'maturation.post.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { recordId: result.record.id, parcelle: result.record.parcelle },
+    });
+
+    return NextResponse.json(
+      {
+        status: 'SUCCESS',
+        data: result.record,
+      },
+      {
+        status: 201,
+        headers: { 'x-request-id': requestId },
+      },
+    );
+  } catch (error) {
+    if (error instanceof ZodError) {
+      logger.warn({
+        action: 'maturation.post.validation_failed',
+        requestId,
+        details: { issues: error.flatten() },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_ERROR',
+          details: error.flatten(),
+        },
+        {
+          status: 400,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    if (error instanceof BusinessLogicError) {
+      logger.warn({
+        action: 'maturation.post.business_rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'BUSINESS_RULE_VIOLATION',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    logger.error({
+      action: 'maturation.post.unhandled_error',
+      requestId,
+      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+    });
+
+    return NextResponse.json(
+      {
+        error: 'INTERNAL_SERVER_ERROR',
+      },
+      {
+        status: 500,
+        headers: { 'x-request-id': requestId },
+      },
+    );
+  }
+}

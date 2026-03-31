@@ -160,8 +160,8 @@ export class BottlesService {
       const deductProd = async (id: number | null | undefined, qty: number, note: string) => {
         if (!id) return;
         const prod = await tx.product.findUnique({ where: { id } });
-        if (!prod || prod.currentStock < qty) throw new Error(`Stock insuffisant pour la matière sèche ID ${id}`);
-        await tx.product.update({ where: { id }, data: { currentStock: prod.currentStock - qty } });
+        if (!prod || Number(prod.currentStock) < qty) throw new Error(`Stock insuffisant pour la matière sèche ID ${id}`);
+        await tx.product.update({ where: { id }, data: { currentStock: Number(prod.currentStock) - qty } });
         await tx.stockMovement.create({
           data: { productId: id, type: "OUT", quantity: qty, note, operator: userEmail }
         });
