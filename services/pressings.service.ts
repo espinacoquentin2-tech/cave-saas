@@ -1,5 +1,5 @@
 // services/pressings.service.ts
-import { PrismaClient } from '@prisma/client';
+import { Lot, PrismaClient } from '@prisma/client';
 import { LoadPressSchema, EcoulementSchema } from '../validations/pressings.schema';
 import { z } from 'zod';
 
@@ -76,8 +76,7 @@ export class PressingService {
       const cruFormatted = (press.parcelle || "Inconnu").toUpperCase().replace(/\s+/g,"-");
       let counter = 0;
       
-      // Correction 1 : On indique à TypeScript que c'est un tableau de n'importe quel objet
-      const newLots: any[] = [];
+      const newLots: Lot[] = [];
 
       // Définition d'un type local pour les paramètres de destination
       type DestinationInput = { cuveId: number; vol: number };
