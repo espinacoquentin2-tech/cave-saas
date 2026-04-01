@@ -1,15 +1,39 @@
 import { NextResponse } from 'next/server';
+<<<<<<< HEAD
 import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { logger } from '@/server/shared/logger';
 import { prisma } from '@/server/shared/prisma';
 import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
+=======
+import { logger } from '@/server/shared/logger';
+import { prisma } from '@/server/shared/prisma';
+import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
+>>>>>>> main
 
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
 
   try {
+<<<<<<< HEAD
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, ['ADMIN']);
+=======
+    const actor = parseRequestActor(request);
+
+    if (actor.role !== 'ADMIN') {
+      logger.warn({
+        action: 'reset.post.forbidden',
+        requestId,
+        userEmail: actor.email,
+        role: actor.role,
+      });
+
+      return NextResponse.json(
+        { error: 'BUSINESS_RULE_VIOLATION', message: 'Seul un administrateur peut réinitialiser la base.' },
+        { status: 403, headers: { 'x-request-id': requestId } },
+      );
+    }
+>>>>>>> main
 
     await prisma.$transaction(async (tx) => {
       await tx.lotEventLot.deleteMany();
@@ -30,6 +54,7 @@ export async function POST(request: Request) {
       await tx.product.updateMany({ data: { currentStock: 0 } });
       await tx.container.updateMany({ data: { status: 'VIDE', notes: null } });
     });
+<<<<<<< HEAD
 
     logger.info({
       action: 'reset.post.success',
@@ -75,6 +100,21 @@ export async function POST(request: Request) {
       );
     }
 
+=======
+
+    logger.info({
+      action: 'reset.post.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+    });
+
+    return NextResponse.json(
+      { success: true, message: 'Réinitialisation complète effectuée. Base de données synchronisée.' },
+      { status: 200, headers: { 'x-request-id': requestId } },
+    );
+  } catch (error) {
+>>>>>>> main
     logger.error({
       action: 'reset.post.unhandled_error',
       requestId,

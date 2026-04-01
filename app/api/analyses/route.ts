@@ -1,10 +1,18 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
+<<<<<<< HEAD
 import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { saveAnalysesSchema } from '@/server/modules/analyses/analyses.schemas';
 import { AnalysesModuleService } from '@/server/modules/analyses/analyses.service';
 import { logger } from '@/server/shared/logger';
 import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
+=======
+import { BusinessLogicError } from '@/lib/errors';
+import { saveAnalysesSchema } from '@/server/modules/analyses/analyses.schemas';
+import { AnalysesModuleService } from '@/server/modules/analyses/analyses.service';
+import { logger } from '@/server/shared/logger';
+import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
+>>>>>>> main
 
 export const dynamic = 'force-dynamic';
 
@@ -12,8 +20,12 @@ export async function GET(request: Request) {
   const requestId = getRequestId(request);
 
   try {
+<<<<<<< HEAD
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
+=======
+    const actor = parseRequestActor(request);
+>>>>>>> main
     const records = await AnalysesModuleService.list();
 
     logger.info({
@@ -27,6 +39,7 @@ export async function GET(request: Request) {
     return NextResponse.json(records, {
       status: 200,
       headers: { 'x-request-id': requestId },
+<<<<<<< HEAD
     });
   } catch (error) {
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
@@ -72,6 +85,34 @@ export async function GET(request: Request) {
       requestId,
       details: { error: error instanceof Error ? error.message : 'unknown_error' },
     });
+=======
+    });
+  } catch (error) {
+    if (error instanceof ZodError) {
+      logger.warn({
+        action: 'analyses.get.validation_failed',
+        requestId,
+        details: { issues: error.flatten() },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_ERROR',
+          details: error.flatten(),
+        },
+        {
+          status: 400,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    logger.error({
+      action: 'analyses.get.unhandled_error',
+      requestId,
+      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+    });
+>>>>>>> main
 
     return NextResponse.json(
       {
@@ -89,8 +130,12 @@ export async function POST(request: Request) {
   const requestId = getRequestId(request);
 
   try {
+<<<<<<< HEAD
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
+=======
+    const actor = parseRequestActor(request);
+>>>>>>> main
     const payload = saveAnalysesSchema.parse(await request.json());
     const result = await AnalysesModuleService.save(payload, actor);
 
@@ -113,6 +158,7 @@ export async function POST(request: Request) {
       },
     );
   } catch (error) {
+<<<<<<< HEAD
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
         action: 'auth.rejected',
@@ -132,6 +178,8 @@ export async function POST(request: Request) {
       );
     }
 
+=======
+>>>>>>> main
     if (error instanceof ZodError) {
       logger.warn({
         action: 'analyses.post.validation_failed',
@@ -151,6 +199,7 @@ export async function POST(request: Request) {
       );
     }
 
+<<<<<<< HEAD
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
         action: 'auth.rejected',
@@ -170,6 +219,8 @@ export async function POST(request: Request) {
       );
     }
 
+=======
+>>>>>>> main
     if (error instanceof BusinessLogicError) {
       logger.warn({
         action: 'analyses.post.business_rejected',

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
+<<<<<<< HEAD
 import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { createTransferSchema } from '@/server/modules/transfers/transfer.schemas';
 import { TransferService } from '@/server/modules/transfers/transfer.service';
@@ -13,6 +14,41 @@ export async function POST(request: Request) {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, ['ADMIN', 'CHEF_CAVE', 'CAVISTE']);
     const payload = createTransferSchema.parse(await request.json());
+=======
+import { BusinessLogicError } from '@/lib/errors';
+import {
+  createTransferSchema,
+  transferActorSchema,
+} from '@/server/modules/transfers/transfer.schemas';
+import { TransferService } from '@/server/modules/transfers/transfer.service';
+import { logger } from '@/server/shared/logger';
+
+const normalizeRole = (roleHeader: string | null) => {
+  switch (roleHeader?.trim().toUpperCase()) {
+    case 'ADMIN':
+      return 'ADMIN';
+    case 'CHEF DE CAVE':
+    case 'CHEF_CAVE':
+      return 'CHEF_CAVE';
+    case 'CAVISTE':
+      return 'CAVISTE';
+    default:
+      return null;
+  }
+};
+
+export async function POST(request: Request) {
+  const requestId = request.headers.get('x-request-id') ?? crypto.randomUUID();
+
+  try {
+    const actor = transferActorSchema.parse({
+      email: request.headers.get('x-user-email'),
+      role: normalizeRole(request.headers.get('x-user-role')),
+    });
+
+    const payload = createTransferSchema.parse(await request.json());
+
+>>>>>>> main
     const result = await TransferService.execute(payload, actor);
 
     logger.info({
@@ -38,6 +74,7 @@ export async function POST(request: Request) {
       },
     );
   } catch (error) {
+<<<<<<< HEAD
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
         action: 'auth.rejected',
@@ -57,6 +94,8 @@ export async function POST(request: Request) {
       );
     }
 
+=======
+>>>>>>> main
     if (error instanceof ZodError) {
       logger.warn({
         action: 'transfer.post.validation_failed',
@@ -78,6 +117,7 @@ export async function POST(request: Request) {
       );
     }
 
+<<<<<<< HEAD
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
         action: 'auth.rejected',
@@ -97,6 +137,8 @@ export async function POST(request: Request) {
       );
     }
 
+=======
+>>>>>>> main
     if (error instanceof BusinessLogicError) {
       logger.warn({
         action: 'transfer.post.business_rejected',

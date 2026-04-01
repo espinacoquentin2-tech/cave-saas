@@ -26,7 +26,12 @@ const formatStatus = (s) => {
 const buildApiHeaders = (user, extra = {}) => ({
   'Content-Type': 'application/json',
   'x-request-id': crypto.randomUUID(),
+<<<<<<< HEAD
   ...(user?.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {}),
+=======
+  'x-user-email': user?.email || '',
+  'x-user-role': user?.role || '',
+>>>>>>> main
   ...extra,
 });
 
