@@ -184,7 +184,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   const { state, dispatch } = useStore();
   const { user } = useAuth();
 
-  const plannedVol = task.volume || (task.sources ? task.sources.reduce((sum, s) => sum + (parseFloat(s.volume) || 0), 0) : 0);
+  const plannedVol = task.volume || (task.sources ? task.sources.reduce((sum: number, s: any) => sum + (parseFloat(s.volume) || 0), 0) : 0);
   
   const [volMain, setVolMain] = useState(plannedVol.toString());
   const [remVol, setRemVol] = useState("");
