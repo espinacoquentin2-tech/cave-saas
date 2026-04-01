@@ -3,7 +3,7 @@ import { ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { z, ZodError } from 'zod';
 import { logger } from '@/server/shared/logger';
 import { prisma } from '@/server/shared/prisma';
-import { DELETE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor, WRITE_ROLES } from '@/server/shared/request-context';
+import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
 const createCompartmentSchema = z.object({
   originalContainerId: z.coerce.number().int().positive(),
