@@ -1,9 +1,5 @@
 // services/cuverie.service.ts
-<<<<<<< HEAD
 import { Lot, Prisma } from '@prisma/client';
-=======
-import { Lot, Prisma, PrismaClient } from '@prisma/client';
->>>>>>> main
 import { DecuvagePayload, TransferPayload } from '../validations/cuverie.schema';
 import { BusinessLogicError } from '../lib/errors';
 import { prisma } from '@/server/shared/prisma';

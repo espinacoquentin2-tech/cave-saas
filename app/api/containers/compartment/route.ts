@@ -1,16 +1,9 @@
 import { NextResponse } from 'next/server';
-<<<<<<< HEAD
 import { ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { z, ZodError } from 'zod';
 import { logger } from '@/server/shared/logger';
 import { prisma } from '@/server/shared/prisma';
 import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
-=======
-import { z, ZodError } from 'zod';
-import { logger } from '@/server/shared/logger';
-import { prisma } from '@/server/shared/prisma';
-import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
->>>>>>> main
 
 const createCompartmentSchema = z.object({
   originalContainerId: z.coerce.number().int().positive(),
@@ -36,12 +29,8 @@ export async function POST(request: Request) {
   const requestId = getRequestId(request);
 
   try {
-<<<<<<< HEAD
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
-=======
-    const actor = parseRequestActor(request);
->>>>>>> main
     const payload = createCompartmentSchema.parse(await request.json());
 
     const result = await prisma.$transaction(async (tx) => {
@@ -76,7 +65,6 @@ export async function POST(request: Request) {
           parentId: parentContainer.id,
         },
       });
-<<<<<<< HEAD
     });
 
     logger.info({
@@ -164,45 +152,6 @@ export async function DELETE(request: Request) {
     }
 
     logger.error({ action: 'containers.compartment.delete.unhandled_error', requestId, details: { error: error instanceof Error ? error.message : 'unknown_error' } });
-=======
-    });
-
-    logger.info({
-      action: 'containers.compartment.post.success',
-      requestId,
-      userEmail: actor.email,
-      role: actor.role,
-      details: { containerId: result.id, parentId: result.parentId },
-    });
-
-    return NextResponse.json({ success: true, container: result }, { status: 200, headers: { 'x-request-id': requestId } });
-  } catch (error) {
-    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
-      logger.warn({
-        action: 'auth.rejected',
-        requestId,
-        details: { message: error.message },
-      });
-
-      return NextResponse.json(
-        {
-          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
-          message: error.message,
-        },
-        {
-          status: error.statusCode,
-          headers: { 'x-request-id': requestId },
-        },
-      );
-    }
-
-    if (error instanceof ZodError) {
-      logger.warn({ action: 'containers.compartment.post.validation_failed', requestId, details: { issues: error.flatten() } });
-      return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });
-    }
-
-    logger.error({ action: 'containers.compartment.post.unhandled_error', requestId, details: { error: error instanceof Error ? error.message : 'unknown_error' } });
->>>>>>> main
     return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
   }
 }
