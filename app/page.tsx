@@ -15,7 +15,7 @@ import { CHAMPAGNE_GEODATA } from '../lib/geodata';
 // =============================================================================
 // HELPERS & COMPOSANTS SUR-MESURE
 // =============================================================================
-const formatStatus = (s) => {
+const formatStatus = (s: string | null | undefined) => {
   if (!s) return "";
   if (s === "FERMENTATION_ALCOOLIQUE") return "FA";
   if (s === "FERMENTATION_MALOLACTIQUE") return "FML";
@@ -81,15 +81,17 @@ const buildApiHeaders = (user, extra = {}) => ({
 function MultiSelectDrop({ label, options, selected, onChange, format = (v: any) => v, width = 140 }: MultiSelectDropProps) {
   const T = useTheme();
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const handleOutside = (e) => { if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const handleOutside = (e: MouseEvent) => {
+      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target)) setOpen(false);
+    };
     document.addEventListener("mousedown", handleOutside);
     return () => document.removeEventListener("mousedown", handleOutside);
   }, []);
 
-  const toggle = (opt) => {
+  const toggle = (opt: any) => {
     if (selected.includes(opt)) onChange(selected.filter(x => x !== opt));
     else onChange([...selected, opt]);
   };
@@ -140,11 +142,18 @@ function LoginScreen({ onLogin }: LoginScreenProps) {
       setErr("Identifiants incorrects ou utilisateur non trouvé."); 
       setLoading(false); 
     } else {
-      const foundUser = (state.users || []).find(u => u.email === data.user.email);
-      const fullName = foundUser ? foundUser.name : data.user.email.split('@')[0].toUpperCase();
+      const authUser = data.user;
+      if (!authUser) {
+        setErr("Utilisateur introuvable.");
+        setLoading(false);
+        return;
+      }
+
+      const foundUser = (state.users || []).find((u: any) => u.email === authUser.email);
+      const fullName = foundUser ? foundUser.name : authUser.email.split('@')[0].toUpperCase();
       const role = foundUser ? foundUser.role : "Chef de cave";
 
-      onLogin({ id: data.user.id, email: data.user.email, name: fullName, role: role, initials: fullName.substring(0, 2).toUpperCase(), accessToken: data.session?.access_token });
+      onLogin({ id: authUser.id, email: authUser.email, name: fullName, role: role, initials: fullName.substring(0, 2).toUpperCase(), accessToken: data.session?.access_token });
     }
   };
 
@@ -157,8 +166,8 @@ function LoginScreen({ onLogin }: LoginScreenProps) {
           <div style={{ fontSize:9, color:T.textDim, letterSpacing:4, marginTop:4, textTransform:"uppercase" }}>Gestion viticole sécurisée</div>
         </div>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:"32px 32px 24px", borderTop:`2px solid ${T.accent}` }}>
-          <FF label="Adresse e-mail"><Input type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={loading} placeholder="vous@domaine.fr" /></FF>
-          <FF label="Mot de passe"><Input type="password" value={pwd} onChange={e => setPwd(e.target.value)} disabled={loading} placeholder="••••••••" /></FF>
+          <FF label="Adresse e-mail"><Input type="email" value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} disabled={loading} placeholder="vous@domaine.fr" /></FF>
+          <FF label="Mot de passe"><Input type="password" value={pwd} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPwd(e.target.value)} disabled={loading} placeholder="••••••••" /></FF>
           {err && <div style={{ background:T.red+"22", border:`1px solid ${T.red}44`, borderRadius:3, padding:"8px 12px", fontSize:12, color:T.red, marginBottom:14 }}>{err}</div>}
           <Btn onClick={submit} disabled={loading || !email || !pwd} style={{ width:"100%", padding:13, marginTop:6 }}>{loading ? "Vérification..." : "Se connecter ->"}</Btn>
         </div>
