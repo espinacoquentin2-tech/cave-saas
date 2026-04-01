@@ -1,16 +1,20 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
-import { BusinessLogicError } from '@/lib/errors';
+import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { createWorkOrderSchema } from '@/server/modules/workorders/workorder.schemas';
 import { WorkOrderModuleService } from '@/server/modules/workorders/workorder.service';
 import { logger } from '@/server/shared/logger';
-import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
+import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
+
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
 
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
 
   try {
-    const actor = parseRequestActor(request);
+    const actor = await resolveAuthenticatedActor(request);
+    assertRole(actor, ['ADMIN', 'CHEF_CAVE']);
     const payload = createWorkOrderSchema.parse(await request.json());
     const result = await WorkOrderModuleService.create(payload, actor);
 
@@ -36,6 +40,25 @@ export async function POST(request: Request) {
       },
     );
   } catch (error) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
     if (error instanceof ZodError) {
       logger.warn({
         action: 'workorders.post.validation_failed',
@@ -50,6 +73,25 @@ export async function POST(request: Request) {
         },
         {
           status: 400,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
           headers: { 'x-request-id': requestId },
         },
       );
@@ -93,3 +135,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

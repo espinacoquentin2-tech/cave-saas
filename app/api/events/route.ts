@@ -1,10 +1,20 @@
 import { NextResponse } from 'next/server';
+import { ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { z, ZodError } from 'zod';
 import { logger } from '@/server/shared/logger';
 import { prisma } from '@/server/shared/prisma';
-import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
+import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
 export const dynamic = 'force-dynamic';
+
+const listEventsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(200).default(50),
+  year: z
+    .string()
+    .regex(/^\d{4}$/)
+    .optional(),
+});
 
 const listEventsQuerySchema = z.object({
   page: z.coerce.number().int().positive().default(1),
@@ -19,7 +29,8 @@ export async function GET(request: Request) {
   const requestId = getRequestId(request);
 
   try {
-    const actor = parseRequestActor(request);
+    const actor = await resolveAuthenticatedActor(request);
+    assertRole(actor, READ_ROLES);
     const { searchParams } = new URL(request.url);
     const payload = listEventsQuerySchema.parse({
       page: searchParams.get('page') ?? undefined,
@@ -40,12 +51,24 @@ export async function GET(request: Request) {
     const events = await prisma.lotEvent.findMany({
       where: whereClause,
       include: { lots: true, containers: true },
+      include: { lots: true, containers: true },
       orderBy: { eventDatetime: 'desc' },
+      skip,
+      take: payload.limit,
       skip,
       take: payload.limit,
     });
 
     const totalEvents = await prisma.lotEvent.count({ where: whereClause });
+    const totalPages = Math.ceil(totalEvents / payload.limit);
+
+    logger.info({
+      action: 'events.get.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { page: payload.page, limit: payload.limit, total: totalEvents },
+    });
     const totalPages = Math.ceil(totalEvents / payload.limit);
 
     logger.info({
@@ -68,7 +91,38 @@ export async function GET(request: Request) {
       },
       { status: 200, headers: { 'x-request-id': requestId } },
     );
+    return NextResponse.json(
+      {
+        data: events,
+        meta: {
+          total: totalEvents,
+          page: payload.page,
+          totalPages,
+          hasMore: payload.page < totalPages,
+        },
+      },
+      { status: 200, headers: { 'x-request-id': requestId } },
+    );
   } catch (error) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
     if (error instanceof ZodError) {
       logger.warn({ action: 'events.get.validation_failed', requestId, details: { issues: error.flatten() } });
       return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });
@@ -78,3 +132,4 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
   }
 }
+

@@ -1,7 +1,8 @@
 // services/pressings.service.ts
-import { Lot, PrismaClient } from '@prisma/client';
+import { Lot } from '@prisma/client';
 import { LoadPressSchema, EcoulementSchema } from '../validations/pressings.schema';
 import { z } from 'zod';
+import { prisma } from '@/server/shared/prisma';
 import { prisma } from '@/server/shared/prisma';
 
 
@@ -17,6 +18,7 @@ export class PressingService {
       const apport = await tx.pressing.findUnique({ where: { id: data.apportId } }); 
 
       if (!press || !apport) throw new Error("Pressoir ou Apport introuvable.");
+      if (data.weightToLoad > Number(apport.weight)) throw new Error("Poids demandé supérieur au disponible sur le quai.");
       if (data.weightToLoad > Number(apport.weight)) throw new Error("Poids demandé supérieur au disponible sur le quai.");
 
       const currentLoad = press.loadKg || 0;
@@ -40,6 +42,7 @@ export class PressingService {
       }
 
       // Mise à jour du quai (Apport)
+      const remainingWeight = Number(apport.weight) - data.weightToLoad;
       const remainingWeight = Number(apport.weight) - data.weightToLoad;
       await tx.pressing.update({
         where: { id: apport.id },
@@ -76,6 +79,7 @@ export class PressingService {
       const cruFormatted = (press.parcelle || "Inconnu").toUpperCase().replace(/\s+/g,"-");
       let counter = 0;
       
+      const newLots: Lot[] = [];
       const newLots: Lot[] = [];
 
       // Définition d'un type local pour les paramètres de destination
@@ -143,3 +147,4 @@ export class PressingService {
     });
   }
 }
+

@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
-import { BusinessLogicError } from '@/lib/errors';
+import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { upsertUserSchema } from '@/server/modules/users/user.schemas';
 import { UserModuleService } from '@/server/modules/users/user.service';
 import { logger } from '@/server/shared/logger';
-import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
+import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
 const handleUpsert = async (request: Request, method: 'POST' | 'PUT') => {
   const requestId = getRequestId(request);
 
   try {
-    const actor = parseRequestActor(request);
+    const actor = await resolveAuthenticatedActor(request);
+    assertRole(actor, ['ADMIN', 'CHEF_CAVE']);
     const payload = upsertUserSchema.parse(await request.json());
     const result = await UserModuleService.upsert(payload, actor);
 
@@ -33,6 +34,25 @@ const handleUpsert = async (request: Request, method: 'POST' | 'PUT') => {
       },
     );
   } catch (error) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
     if (error instanceof ZodError) {
       logger.warn({
         action: `users.${method.toLowerCase()}.validation_failed`,
@@ -47,6 +67,25 @@ const handleUpsert = async (request: Request, method: 'POST' | 'PUT') => {
         },
         {
           status: 400,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
           headers: { 'x-request-id': requestId },
         },
       );

@@ -1,16 +1,17 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
-import { BusinessLogicError } from '@/lib/errors';
+import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { TirageService } from '@/services/tirage.service';
 import { logger } from '@/server/shared/logger';
-import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
+import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 import { ExecuteMixtionSchema } from '@/validations/tirage.schema';
 
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
 
   try {
-    const actor = parseRequestActor(request);
+    const actor = await resolveAuthenticatedActor(request);
+    assertRole(actor, WRITE_ROLES);
     const payload = ExecuteMixtionSchema.parse(await request.json());
     const result = await TirageService.executeMixtion(payload, actor.email);
 
@@ -30,6 +31,25 @@ export async function POST(request: Request) {
       headers: { 'x-request-id': requestId },
     });
   } catch (error) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
     if (error instanceof ZodError) {
       logger.warn({
         action: 'mixtion.post.validation_failed',
@@ -44,6 +64,25 @@ export async function POST(request: Request) {
         },
         {
           status: 400,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
           headers: { 'x-request-id': requestId },
         },
       );
@@ -87,3 +126,4 @@ export async function POST(request: Request) {
     );
   }
 }
+
