@@ -71,7 +71,7 @@ type VendangesProps = {
   onSelectContainer: (container: any) => void;
 };
 
-const buildApiHeaders = (user: { accessToken?: string } | null | undefined, extra: Record<string, string> = {}) => ({
+const buildApiHeaders = (user, extra = {}) => ({
   'Content-Type': 'application/json',
   'x-request-id': crypto.randomUUID(),
   ...(user?.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {}),
