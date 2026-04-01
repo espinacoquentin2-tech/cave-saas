@@ -201,13 +201,13 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   const [tirageZone, setTirageZone] = useState("");
   const [tirageCount, setTirageCount] = useState(plannedVol > 0 ? Math.floor(plannedVol / fmtHL["75cl"]).toString() : "");
 
-  const targetContainer = (state.containers || []).find(c => String(c.id) === String(task.targetContainerId));
+  const targetContainer = (state.containers || []).find((c: any) => String(c.id) === String(task.targetContainerId));
   const freeSpace = targetContainer ? Math.round(((targetContainer.capacityValue || targetContainer.capacity || 0) - (targetContainer.currentVolume || 0)) * 100) / 100 : 0;
   const isTankCapacityIssue = targetContainer && task.recette !== "TIRAGE" ? (parseFloat(volMain) || 0) > freeSpace : false;
 
   const btlNeeded = task.recette === "TIRAGE" ? (parseInt(tirageCount) || 0) : 0;
-  const bottleProduct = (state.products || []).find(p => p.subCategory === "Bouteilles" && p.name.includes(tirageFormat));
-  const bouchageProduct = (state.products || []).find(p => p.subCategory === (tirageBouchage === "Capsule" ? "Capsules" : "Bouchons"));
+  const bottleProduct = (state.products || []).find((p: any) => p.subCategory === "Bouteilles" && p.name.includes(tirageFormat));
+  const bouchageProduct = (state.products || []).find((p: any) => p.subCategory === (tirageBouchage === "Capsule" ? "Capsules" : "Bouchons"));
 
   const bottleStock = bottleProduct ? bottleProduct.currentStock : 0;
   const bouchageStock = bouchageProduct ? bouchageProduct.currentStock : 0;
@@ -216,7 +216,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   const isBouchageShortage = btlNeeded > bouchageStock;
   const isStockShortage = task.recette === "TIRAGE" && (isBottleShortage || isBouchageShortage || !bottleProduct || !bouchageProduct);
 
-  const recoveryTanks = (state.containers || []).filter(c => 
+  const recoveryTanks = (state.containers || []).filter((c: any) => 
     c.status !== "ARCHIVÉE" && (remType === "LIES" ? c.type === "CUVE_LIES" : c.type === "CUVE_BOURBES")
   );
 
@@ -224,7 +224,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   let baseYear = new Date().getFullYear();
   let nextYear = baseYear + 1;
   const lotSourceId = task.lotId || (task.sources && task.sources[0]?.lotId);
-  const lotSource = (state.lots || []).find(l => String(l.id) === String(lotSourceId));
+  const lotSource = (state.lots || []).find((l: any) => String(l.id) === String(lotSourceId));
   
   if (task.recette === "TIRAGE" && tirageTypeMise === "EFFERVESCENT" && lotSource) {
       baseYear = parseInt(lotSource.year || lotSource.millesime) || parseInt((lotSource.businessCode || lotSource.code).substring(0,4)) || baseYear;
