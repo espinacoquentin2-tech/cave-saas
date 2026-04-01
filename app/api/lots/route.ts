@@ -4,7 +4,7 @@ import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/err
 import { LotModuleService } from '@/server/modules/lots/lot.service';
 import { createLotSchema } from '@/server/modules/lots/lot.schemas';
 import { logger } from '@/server/shared/logger';
-import { READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
+import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
@@ -148,6 +148,25 @@ export async function POST(request: Request) {
         },
         {
           status: 400,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
           headers: { 'x-request-id': requestId },
         },
       );
