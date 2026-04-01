@@ -101,6 +101,9 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
 
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
+
   try {
 <<<<<<< HEAD
     const actor = await resolveAuthenticatedActor(request);
@@ -233,3 +236,4 @@ export async function POST(request: Request) {
     );
   }
 }
+

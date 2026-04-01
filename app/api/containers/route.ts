@@ -81,7 +81,19 @@ export async function GET(request: Request) {
     const containers = await prisma.container.findMany({
       where: { status: { not: 'ARCHIVÉE' } },
       include: { currentLots: true },
+      where: { status: { not: 'ARCHIVÉE' } },
+      include: { currentLots: true },
     });
+
+    logger.info({
+      action: 'containers.get.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { count: containers.length },
+    });
+
+    return NextResponse.json(containers, { status: 200, headers: { 'x-request-id': requestId } });
 
     logger.info({
       action: 'containers.get.success',
@@ -332,3 +344,4 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
   }
 }
+

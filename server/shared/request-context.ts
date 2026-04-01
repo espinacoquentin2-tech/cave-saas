@@ -9,6 +9,8 @@ export const requestActorSchema = z.object({
   role: z.enum(['ADMIN', 'CHEF_CAVE', 'CAVISTE', 'LECTURE_SEULE']),
 =======
 import { z } from 'zod';
+import { ForbiddenError, UnauthorizedError } from '@/lib/errors';
+import { prisma } from '@/server/shared/prisma';
 
 export const requestActorSchema = z.object({
   email: z.string().trim().email(),

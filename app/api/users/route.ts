@@ -119,6 +119,25 @@ const handleUpsert = async (request: Request, method: 'POST' | 'PUT') => {
       },
     );
   } catch (error) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
     if (error instanceof ZodError) {
       logger.warn({
         action: `users.${method.toLowerCase()}.validation_failed`,

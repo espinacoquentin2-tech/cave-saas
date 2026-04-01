@@ -20,6 +20,10 @@ const deletePressingQuerySchema = z.object({
   id: z.coerce.number().int().positive(),
 });
 
+const deletePressingQuerySchema = z.object({
+  id: z.coerce.number().int().positive(),
+});
+
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
 
@@ -31,6 +35,17 @@ export async function GET(request: Request) {
     const actor = parseRequestActor(request);
 >>>>>>> main
     const pressings = await prisma.pressing.findMany({ orderBy: { createdAt: 'desc' } });
+    const formatted = pressings.map((pressing) => ({ ...pressing, parcelle: pressing.cru, poids: pressing.weight }));
+
+    logger.info({
+      action: 'pressings.get.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { count: formatted.length },
+    });
+
+    return NextResponse.json(formatted, { status: 200, headers: { 'x-request-id': requestId } });
     const formatted = pressings.map((pressing) => ({ ...pressing, parcelle: pressing.cru, poids: pressing.weight }));
 
     logger.info({
@@ -74,6 +89,9 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
   }
 }
+
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
 
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
@@ -151,6 +169,12 @@ export async function DELETE(request: Request) {
         { error: 'BUSINESS_RULE_VIOLATION', message: 'Impossible de supprimer un apport déjà pressé.' },
         { status: 403, headers: { 'x-request-id': requestId } },
       );
+    const existing = await prisma.pressing.findUnique({ where: { id: payload.id } });
+    if (existing && existing.status !== 'EN_ATTENTE') {
+      return NextResponse.json(
+        { error: 'BUSINESS_RULE_VIOLATION', message: 'Impossible de supprimer un apport déjà pressé.' },
+        { status: 403, headers: { 'x-request-id': requestId } },
+      );
     }
 <<<<<<< HEAD
 
@@ -207,3 +231,4 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
   }
 }
+

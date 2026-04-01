@@ -22,30 +22,14 @@ import {
 } from '@/server/modules/transfers/transfer.schemas';
 import { TransferService } from '@/server/modules/transfers/transfer.service';
 import { logger } from '@/server/shared/logger';
-
-const normalizeRole = (roleHeader: string | null) => {
-  switch (roleHeader?.trim().toUpperCase()) {
-    case 'ADMIN':
-      return 'ADMIN';
-    case 'CHEF DE CAVE':
-    case 'CHEF_CAVE':
-      return 'CHEF_CAVE';
-    case 'CAVISTE':
-      return 'CAVISTE';
-    default:
-      return null;
-  }
-};
+import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
 export async function POST(request: Request) {
-  const requestId = request.headers.get('x-request-id') ?? crypto.randomUUID();
+  const requestId = getRequestId(request);
 
   try {
-    const actor = transferActorSchema.parse({
-      email: request.headers.get('x-user-email'),
-      role: normalizeRole(request.headers.get('x-user-role')),
-    });
-
+    const actor = await resolveAuthenticatedActor(request);
+    assertRole(actor, ['ADMIN', 'CHEF_CAVE', 'CAVISTE']);
     const payload = createTransferSchema.parse(await request.json());
 
 >>>>>>> main
@@ -156,6 +140,22 @@ export async function POST(request: Request) {
           headers: { 'x-request-id': requestId },
         },
       );
+      logger.warn({
+        action: 'transfer.post.business_rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'BUSINESS_RULE_VIOLATION',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
     }
 
     logger.error({
@@ -175,5 +175,23 @@ export async function POST(request: Request) {
         headers: { 'x-request-id': requestId },
       },
     );
+    logger.error({
+      action: 'transfer.post.unhandled_error',
+      requestId,
+      details: {
+        error: error instanceof Error ? error.message : 'unknown_error',
+      },
+    });
+
+    return NextResponse.json(
+      {
+        error: 'INTERNAL_SERVER_ERROR',
+      },
+      {
+        status: 500,
+        headers: { 'x-request-id': requestId },
+      },
+    );
   }
 }
+

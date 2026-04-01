@@ -88,6 +88,25 @@ export async function GET(request: Request) {
 =======
     });
   } catch (error) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
     if (error instanceof ZodError) {
       logger.warn({
         action: 'maturation.get.validation_failed',

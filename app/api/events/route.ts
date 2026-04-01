@@ -23,6 +23,15 @@ const listEventsQuerySchema = z.object({
     .optional(),
 });
 
+const listEventsQuerySchema = z.object({
+  page: z.coerce.number().int().positive().default(1),
+  limit: z.coerce.number().int().positive().max(200).default(50),
+  year: z
+    .string()
+    .regex(/^\d{4}$/)
+    .optional(),
+});
+
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
 
@@ -53,7 +62,10 @@ export async function GET(request: Request) {
     const events = await prisma.lotEvent.findMany({
       where: whereClause,
       include: { lots: true, containers: true },
+      include: { lots: true, containers: true },
       orderBy: { eventDatetime: 'desc' },
+      skip,
+      take: payload.limit,
       skip,
       take: payload.limit,
     });
@@ -125,3 +137,4 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
   }
 }
+

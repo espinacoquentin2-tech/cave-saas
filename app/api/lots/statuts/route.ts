@@ -130,7 +130,9 @@ export async function POST(request: Request) {
 import { UpdateLotStatusSchema } from '../../../../validations/lots.schema';
 import { LotsService } from '../../../../services/lots.service';
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
+
   try {
     const body = await req.json();
     const payload = { ...body, lotId: parseInt(body.lotId) };
@@ -145,3 +147,4 @@ export async function POST(req: Request) {
 >>>>>>> main
   }
 }
+
