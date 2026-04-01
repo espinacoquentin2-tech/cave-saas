@@ -13,17 +13,6 @@ const createCompartmentSchema = z.object({
 const deleteCompartmentQuerySchema = z.object({
   id: z.coerce.number().int().positive(),
 });
-const createCompartmentSchema = z.object({
-  originalContainerId: z.coerce.number().int().positive(),
-  newCapacity: z.coerce.number().positive(),
-});
-
-const deleteCompartmentQuerySchema = z.object({
-  id: z.coerce.number().int().positive(),
-});
-
-export async function POST(request: Request) {
-  const requestId = getRequestId(request);
 
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
@@ -37,14 +26,7 @@ export async function POST(request: Request) {
       const parentContainer = await tx.container.findUnique({
         where: { id: payload.originalContainerId },
         include: { children: true },
-      const parentContainer = await tx.container.findUnique({
-        where: { id: payload.originalContainerId },
-        include: { children: true },
       });
-
-      if (!parentContainer) {
-        throw new Error('Citerne introuvable');
-      }
 
       if (!parentContainer) {
         throw new Error('Citerne introuvable');
@@ -54,9 +36,7 @@ export async function POST(request: Request) {
       const baseName = parentContainer.displayName.replace(/ - Comp \d+$/, '');
 
       return tx.container.create({
-      return tx.container.create({
         data: {
-          code: `COMP-${Date.now()}-${Math.floor(Math.random() * 100)}`,
           code: `COMP-${Date.now()}-${Math.floor(Math.random() * 100)}`,
           displayName: `${baseName} - Comp ${newCompNumber}`,
           type: 'COMPARTIMENT',
