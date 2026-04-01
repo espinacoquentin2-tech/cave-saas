@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
+import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { listBottleLotsQuerySchema } from '@/server/modules/bottles/bottle.schemas';
 import { BottleModuleService } from '@/server/modules/bottles/bottle.service';
 import { logger } from '@/server/shared/logger';
@@ -9,10 +10,9 @@ import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolv
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
 
-export async function GET(request: Request) {
-  const requestId = getRequestId(request);
-
   try {
+    const actor = await resolveAuthenticatedActor(request);
+    assertRole(actor, ['ADMIN', 'CHEF_CAVE', 'CAVISTE', 'LECTURE_SEULE']);
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, ['ADMIN', 'CHEF_CAVE', 'CAVISTE', 'LECTURE_SEULE']);
     const { searchParams } = new URL(request.url);
@@ -32,6 +32,25 @@ export async function GET(request: Request) {
       headers: { 'x-request-id': requestId },
     });
   } catch (error) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
         action: 'auth.rejected',
@@ -85,6 +104,8 @@ export async function DELETE(request: Request) {
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, ['ADMIN', 'CHEF_CAVE']);
+    const actor = await resolveAuthenticatedActor(request);
+    assertRole(actor, ['ADMIN', 'CHEF_CAVE']);
     const { searchParams } = new URL(request.url);
     const payload = listBottleLotsQuerySchema.parse({ id: searchParams.get('id') ?? undefined });
 
@@ -135,6 +156,25 @@ export async function DELETE(request: Request) {
       );
     }
 
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
     if (error instanceof ZodError) {
       logger.warn({
         action: 'bottles.delete.validation_failed',
@@ -145,6 +185,25 @@ export async function DELETE(request: Request) {
       return NextResponse.json(
         { error: 'VALIDATION_ERROR', details: error.flatten() },
         { status: 400, headers: { 'x-request-id': requestId } },
+      );
+    }
+
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
       );
     }
 

@@ -1,11 +1,18 @@
 import { NextResponse } from 'next/server';
+<<<<<<< HEAD
 import { ForbiddenError, UnauthorizedError } from '@/lib/errors';
+=======
+>>>>>>> main
 import { ZodError } from 'zod';
 import { CreatePressoirSchema, UpdatePressoirSchema } from '../../../validations/vendanges.schema';
 import { VendangesService } from '../../../services/vendanges.service';
 import { logger } from '@/server/shared/logger';
 import { prisma } from '@/server/shared/prisma';
+<<<<<<< HEAD
 import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
+=======
+import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
+>>>>>>> main
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
@@ -13,8 +20,12 @@ export async function GET(request: Request) {
   const requestId = getRequestId(request);
 
   try {
+<<<<<<< HEAD
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
+=======
+    const actor = parseRequestActor(request);
+>>>>>>> main
     const pressoirs = await prisma.pressoir.findMany({ orderBy: { nom: 'asc' } });
 
     logger.info({
@@ -27,6 +38,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json(pressoirs, { status: 200, headers: { 'x-request-id': requestId } });
   } catch (error) {
+<<<<<<< HEAD
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
         action: 'auth.rejected',
@@ -46,6 +58,8 @@ export async function GET(request: Request) {
       );
     }
 
+=======
+>>>>>>> main
     if (error instanceof ZodError) {
       logger.warn({ action: 'pressoirs.get.validation_failed', requestId, details: { issues: error.flatten() } });
       return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });
@@ -63,10 +77,24 @@ const handleMutation = async (request: Request, method: 'POST' | 'PUT') => {
   const requestId = getRequestId(request);
 
   try {
+<<<<<<< HEAD
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
+    const body = await request.json();
+
+    let result;
+    if (method === 'POST') {
+      const payload = CreatePressoirSchema.parse(body);
+      result = await VendangesService.createPressoir(payload);
+    } else {
+      const payload = UpdatePressoirSchema.parse(body);
+      result = await VendangesService.updatePressoir(payload);
+    }
+=======
+    const actor = parseRequestActor(request);
     const payload = method === 'POST' ? CreatePressoirSchema.parse(await request.json()) : UpdatePressoirSchema.parse(await request.json());
     const result = method === 'POST' ? await VendangesService.createPressoir(payload) : await VendangesService.updatePressoir(payload);
+>>>>>>> main
 
     logger.info({
       action: `pressoirs.${method.toLowerCase()}.success`,
@@ -78,6 +106,7 @@ const handleMutation = async (request: Request, method: 'POST' | 'PUT') => {
 
     return NextResponse.json(result, { status: 200, headers: { 'x-request-id': requestId } });
   } catch (error) {
+<<<<<<< HEAD
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
         action: 'auth.rejected',
@@ -97,6 +126,8 @@ const handleMutation = async (request: Request, method: 'POST' | 'PUT') => {
       );
     }
 
+=======
+>>>>>>> main
     if (error instanceof ZodError) {
       logger.warn({ action: `pressoirs.${method.toLowerCase()}.validation_failed`, requestId, details: { issues: error.flatten() } });
       return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });

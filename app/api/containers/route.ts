@@ -1,10 +1,17 @@
 import { NextResponse } from 'next/server';
+<<<<<<< HEAD
 import { ForbiddenError, UnauthorizedError } from '@/lib/errors';
+=======
+>>>>>>> main
 import { Prisma } from '@prisma/client';
 import { z, ZodError } from 'zod';
 import { logger } from '@/server/shared/logger';
 import { prisma } from '@/server/shared/prisma';
+<<<<<<< HEAD
 import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
+=======
+import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
+>>>>>>> main
 
 const createContainerSchema = z.object({
   code: z.string().trim().optional(),
@@ -32,24 +39,13 @@ export async function GET(request: Request) {
   const requestId = getRequestId(request);
 
   try {
+<<<<<<< HEAD
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
     const containers = await prisma.container.findMany({
       where: { status: { not: 'ARCHIVÉE' } },
       include: { currentLots: true },
-      where: { status: { not: 'ARCHIVÉE' } },
-      include: { currentLots: true },
     });
-
-    logger.info({
-      action: 'containers.get.success',
-      requestId,
-      userEmail: actor.email,
-      role: actor.role,
-      details: { count: containers.length },
-    });
-
-    return NextResponse.json(containers, { status: 200, headers: { 'x-request-id': requestId } });
 
     logger.info({
       action: 'containers.get.success',
@@ -80,6 +76,36 @@ export async function GET(request: Request) {
       );
     }
 
+=======
+    const actor = parseRequestActor(request);
+    const containers = await prisma.container.findMany({
+      where: { status: { not: 'ARCHIVÉE' } },
+      include: { currentLots: true },
+      where: { status: { not: 'ARCHIVÉE' } },
+      include: { currentLots: true },
+    });
+
+    logger.info({
+      action: 'containers.get.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { count: containers.length },
+    });
+
+    return NextResponse.json(containers, { status: 200, headers: { 'x-request-id': requestId } });
+
+    logger.info({
+      action: 'containers.get.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { count: containers.length },
+    });
+
+    return NextResponse.json(containers, { status: 200, headers: { 'x-request-id': requestId } });
+  } catch (error) {
+>>>>>>> main
     if (error instanceof ZodError) {
       logger.warn({ action: 'containers.get.validation_failed', requestId, details: { issues: error.flatten() } });
       return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });
@@ -94,8 +120,12 @@ export async function POST(request: Request) {
   const requestId = getRequestId(request);
 
   try {
+<<<<<<< HEAD
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
+=======
+    const actor = parseRequestActor(request);
+>>>>>>> main
     const payload = createContainerSchema.parse(await request.json());
 
     const container = await prisma.container.create({
@@ -109,15 +139,7 @@ export async function POST(request: Request) {
         status: payload.status ?? 'VIDE',
         notes: payload.notes ?? '',
       },
-        code: payload.code ?? payload.name ?? payload.displayName ?? 'CUVE-X',
-        displayName: payload.displayName ?? payload.name ?? 'Nouvelle Cuve',
-        type: payload.type ?? 'Cuve',
-        capacityValue: payload.capacityValue ?? payload.capacity ?? 0,
-        capacityUnit: 'hL',
-        zone: payload.zone ?? 'Cuverie',
-        status: payload.status ?? 'VIDE',
-        notes: payload.notes ?? '',
-      },
+<<<<<<< HEAD
     });
 
     logger.info({
@@ -149,6 +171,20 @@ export async function POST(request: Request) {
       );
     }
 
+=======
+    });
+
+    logger.info({
+      action: 'containers.post.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { containerId: container.id },
+    });
+
+    return NextResponse.json(container, { status: 201, headers: { 'x-request-id': requestId } });
+  } catch (error) {
+>>>>>>> main
     if (error instanceof ZodError) {
       logger.warn({ action: 'containers.post.validation_failed', requestId, details: { issues: error.flatten() } });
       return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });
@@ -163,8 +199,12 @@ export async function PUT(request: Request) {
   const requestId = getRequestId(request);
 
   try {
+<<<<<<< HEAD
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
+=======
+    const actor = parseRequestActor(request);
+>>>>>>> main
     const payload = updateContainerSchema.parse(await request.json());
 
     const updatedContainer = await prisma.container.update({
@@ -173,19 +213,7 @@ export async function PUT(request: Request) {
         ...(payload.status ? { status: payload.status } : {}),
         ...(payload.name ? { displayName: payload.name } : {}),
       },
-    });
-
-    logger.info({
-      action: 'containers.put.success',
-      requestId,
-      userEmail: actor.email,
-      role: actor.role,
-      details: { containerId: payload.id },
-      where: { id: payload.id },
-      data: {
-        ...(payload.status ? { status: payload.status } : {}),
-        ...(payload.name ? { displayName: payload.name } : {}),
-      },
+<<<<<<< HEAD
     });
 
     logger.info({
@@ -217,6 +245,20 @@ export async function PUT(request: Request) {
       );
     }
 
+=======
+    });
+
+    logger.info({
+      action: 'containers.put.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { containerId: payload.id },
+    });
+
+    return NextResponse.json({ success: true, container: updatedContainer }, { status: 200, headers: { 'x-request-id': requestId } });
+  } catch (error) {
+>>>>>>> main
     if (error instanceof ZodError) {
       logger.warn({ action: 'containers.put.validation_failed', requestId, details: { issues: error.flatten() } });
       return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });
@@ -231,8 +273,12 @@ export async function DELETE(request: Request) {
   const requestId = getRequestId(request);
 
   try {
+<<<<<<< HEAD
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, DELETE_ROLES);
+=======
+    const actor = parseRequestActor(request);
+>>>>>>> main
     const { searchParams } = new URL(request.url);
     const payload = deleteContainerQuerySchema.parse({ id: searchParams.get('id') });
 
@@ -267,6 +313,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ success: true, note: 'Cuve archivée' }, { status: 200, headers: { 'x-request-id': requestId } });
     }
   } catch (error) {
+<<<<<<< HEAD
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
         action: 'auth.rejected',
@@ -286,6 +333,8 @@ export async function DELETE(request: Request) {
       );
     }
 
+=======
+>>>>>>> main
     if (error instanceof ZodError) {
       logger.warn({ action: 'containers.delete.validation_failed', requestId, details: { issues: error.flatten() } });
       return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });
