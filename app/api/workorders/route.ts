@@ -1,34 +1,134 @@
 import { NextResponse } from 'next/server';
-import { CreateWorkOrderSchema } from '../../../validations/admin.schema';
-import { AdminService } from '../../../services/admin.service';
+import { ZodError } from 'zod';
+import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
+import { createWorkOrderSchema } from '@/server/modules/workorders/workorder.schemas';
+import { WorkOrderModuleService } from '@/server/modules/workorders/workorder.service';
+import { logger } from '@/server/shared/logger';
+import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
-export async function POST(req: Request) {
+export async function POST(request: Request) {
+  const requestId = getRequestId(request);
+
   try {
-    const body = await req.json();
-    
-    // Nettoyage et conversion des types pour Zod
-    const parsedBody = {
-      ...body,
-      targetContainerId: body.targetContainerId ? parseInt(body.targetContainerId) : undefined,
-      targetLotId: body.targetLotId ? parseInt(body.targetLotId) : undefined,
-      sources: body.sources ? body.sources.map((s: any) => ({
-        lotId: parseInt(s.lotId),
-        volume: parseFloat(s.volume)
-      })) : []
-    };
+    const actor = await resolveAuthenticatedActor(request);
+    assertRole(actor, ['ADMIN', 'CHEF_CAVE']);
+    const payload = createWorkOrderSchema.parse(await request.json());
+    const result = await WorkOrderModuleService.create(payload, actor);
 
-    const validation = CreateWorkOrderSchema.safeParse(parsedBody);
-    if (!validation.success) {
-      return NextResponse.json({ error: validation.error.issues[0].message }, { status: 400 });
+    logger.info({
+      action: 'workorders.post.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: {
+        workOrderId: result.workOrder.id,
+        recette: result.workOrder.recette,
+      },
+    });
+
+    return NextResponse.json(
+      {
+        status: 'SUCCESS',
+        data: result.workOrder,
+      },
+      {
+        status: 201,
+        headers: { 'x-request-id': requestId },
+      },
+    );
+  } catch (error) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
     }
 
-    const result = await AdminService.createWorkOrder(validation.data, "system@cave.fr"); // Remplacer par session utilisateur
-    
-    return NextResponse.json(result.workOrder, { status: 200 });
+    if (error instanceof ZodError) {
+      logger.warn({
+        action: 'workorders.post.validation_failed',
+        requestId,
+        details: { issues: error.flatten() },
+      });
 
-  } catch (error: any) {
-    console.error("[WORKORDER_API_ERROR]", error);
-    const status = error.message.includes("ALREADY_APPLIED") || error.message.includes("insuffisant") ? 400 : 500;
-    return NextResponse.json({ error: error.message || "Erreur serveur interne" }, { status });
+      return NextResponse.json(
+        {
+          error: 'VALIDATION_ERROR',
+          details: error.flatten(),
+        },
+        {
+          status: 400,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    if (error instanceof BusinessLogicError) {
+      logger.warn({
+        action: 'workorders.post.business_rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'BUSINESS_RULE_VIOLATION',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    logger.error({
+      action: 'workorders.post.unhandled_error',
+      requestId,
+      details: {
+        error: error instanceof Error ? error.message : 'unknown_error',
+      },
+    });
+
+    return NextResponse.json(
+      {
+        error: 'INTERNAL_SERVER_ERROR',
+      },
+      {
+        status: 500,
+        headers: { 'x-request-id': requestId },
+      },
+    );
   }
 }

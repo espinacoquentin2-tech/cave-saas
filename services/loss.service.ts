@@ -1,8 +1,7 @@
 // services/loss.service.ts
-import { PrismaClient } from '@prisma/client';
 import { ExecuteLossPayload } from '../validations/loss.schema';
+import { prisma } from '@/server/shared/prisma';
 
-const prisma = new PrismaClient();
 
 export class LossService {
   static async executeLoss(data: ExecuteLossPayload, userEmail: string) {
@@ -21,11 +20,11 @@ export class LossService {
       if (data.entityType === "BULK") {
         const lot = await tx.lot.findUnique({ where: { id: parseInt(data.entityId) } });
         if (!lot) throw new Error("Lot Vrac introuvable.");
-        if ((lot.currentVolume || 0) < data.amount) throw new Error(`Volume insuffisant. Dispo: ${lot.currentVolume} hL.`);
+        if (Number(lot.currentVolume) < data.amount) throw new Error(`Volume insuffisant. Dispo: ${lot.currentVolume} hL.`);
 
         updatedLot = await tx.lot.update({
           where: { id: lot.id },
-          data: { currentVolume: (lot.currentVolume || 0) - data.amount }
+          data: { currentVolume: Number(lot.currentVolume) - data.amount }
         });
 
         // 3. LOGIQUE BOUTEILLES (BOTTLE)

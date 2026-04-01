@@ -1,6 +1,6 @@
 // services/lots.service.ts
-import { PrismaClient } from '@prisma/client';
 import { z } from 'zod';
+import { prisma } from '@/server/shared/prisma';
 import { 
   AddIntrantSchema, 
   SaveFaTourSchema,
@@ -9,7 +9,6 @@ import {
   UpdateLotVolumeSchema 
 } from '../validations/lots.schema';
 
-const prisma = new PrismaClient();
 
 export class LotsService {
   
@@ -123,9 +122,9 @@ export class LotsService {
       const container = await tx.container.findUnique({ where: { id: data.containerId }, include: { currentLots: true } });
       if (!container) throw new Error("Cuve introuvable.");
 
-      const currentVol = container.currentLots?.reduce((sum, l) => sum + (l.currentVolume || 0), 0) || 0;
+      const currentVol = container.currentLots?.reduce((sum, l) => sum + Number(l.currentVolume), 0) || 0;
       
-      if (currentVol + data.volume > (container.capacityValue || 0)) {
+      if (currentVol + data.volume > Number(container.capacityValue)) {
         throw new Error(`Débordement ! La cuve ne peut pas accueillir ${data.volume} hL supplémentaires.`);
       }
 
@@ -195,7 +194,7 @@ export class LotsService {
       const lot = await tx.lot.findUnique({ where: { id: data.lotId } });
       if (!lot) throw new Error("Lot introuvable.");
 
-      const diff = data.newVolume - lot.currentVolume;
+      const diff = data.newVolume - Number(lot.currentVolume);
       const eventType = diff > 0 ? 'CORRECTION_HAUSSE' : 'CORRECTION_BAISSE';
 
       const updatedLot = await tx.lot.update({ where: { id: data.lotId }, data: { currentVolume: data.newVolume } });
