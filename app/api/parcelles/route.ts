@@ -11,12 +11,6 @@ const createParcelleSchema = z.object({
   region: z.string().trim().optional().nullable(),
   commune: z.string().trim().optional().nullable(),
 });
-const createParcelleSchema = z.object({
-  nom: z.string().trim().min(1),
-  departement: z.string().trim().optional().nullable(),
-  region: z.string().trim().optional().nullable(),
-  commune: z.string().trim().optional().nullable(),
-});
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
@@ -75,8 +69,6 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
 
-  const requestId = getRequestId(request);
-
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
@@ -128,4 +120,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
   }
 }
-

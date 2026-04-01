@@ -2,18 +2,11 @@
 import { BottleLot, Lot, LotEvent } from '@prisma/client';
 import { TraceabilityRequestPayload } from '../validations/tracabilite.schema';
 import { prisma } from '@/server/shared/prisma';
-import { prisma } from '@/server/shared/prisma';
 
 
 export class TracabiliteService {
   static async getLineage(data: TraceabilityRequestPayload) {
     const { lotCode, type } = data;
-
-    type TraceableLot = (Lot | BottleLot) & { _type: 'bulk' | 'bottle' };
-    let focusedLot: TraceableLot;
-    let parents: TraceableLot[] = [];
-    let children: TraceableLot[] = [];
-    let expeditions: LotEvent[] = [];
 
     type TraceableLot = (Lot | BottleLot) & { _type: 'bulk' | 'bottle' };
     let focusedLot: TraceableLot;
@@ -61,7 +54,6 @@ export class TracabiliteService {
     
     // Recherche des Bouteilles enfants
     let childBottles: BottleLot[] = [];
-    let childBottles: BottleLot[] = [];
     if (type === "bulk") {
       // Uniquement si le parent est un vrac, il peut avoir des bouteilles enfants via sourceLotId
       childBottles = await prisma.bottleLot.findMany({
@@ -91,4 +83,3 @@ export class TracabiliteService {
     };
   }
 }
-
