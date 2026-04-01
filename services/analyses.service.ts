@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 import { Prisma } from '@prisma/client';
-=======
-import { Prisma, PrismaClient } from '@prisma/client';
->>>>>>> main
 import { SaveAnalysesPayload } from '../validations/analyses.schema';
 import { prisma } from '@/server/shared/prisma';
 import { prisma } from '@/server/shared/prisma';
