@@ -1,9 +1,5 @@
 // services/tracabilite.service.ts
-<<<<<<< HEAD
 import { BottleLot, Lot, LotEvent } from '@prisma/client';
-=======
-import { BottleLot, Lot, LotEvent, PrismaClient } from '@prisma/client';
->>>>>>> main
 import { TraceabilityRequestPayload } from '../validations/tracabilite.schema';
 import { prisma } from '@/server/shared/prisma';
 import { prisma } from '@/server/shared/prisma';

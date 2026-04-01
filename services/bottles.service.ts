@@ -1,9 +1,5 @@
 // services/bottles.service.ts
-<<<<<<< HEAD
 import { Prisma } from '@prisma/client';
-=======
-import { Prisma, PrismaClient } from '@prisma/client';
->>>>>>> main
 import { UpdateBottleStatusSchema, DegorgerSchema, HabillerSchema, ExpedierSchema } from '../validations/bottles.schema';
 import { z } from 'zod';
 import { prisma } from '@/server/shared/prisma';

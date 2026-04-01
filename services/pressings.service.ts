@@ -1,9 +1,5 @@
 // services/pressings.service.ts
-<<<<<<< HEAD
 import { Lot } from '@prisma/client';
-=======
-import { Lot, PrismaClient } from '@prisma/client';
->>>>>>> main
 import { LoadPressSchema, EcoulementSchema } from '../validations/pressings.schema';
 import { z } from 'zod';
 import { prisma } from '@/server/shared/prisma';
