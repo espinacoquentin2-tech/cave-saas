@@ -78,25 +78,6 @@ export async function POST(request: Request) {
       );
     }
 
-    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
-      logger.warn({
-        action: 'auth.rejected',
-        requestId,
-        details: { message: error.message },
-      });
-
-      return NextResponse.json(
-        {
-          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
-          message: error.message,
-        },
-        {
-          status: error.statusCode,
-          headers: { 'x-request-id': requestId },
-        },
-      );
-    }
-
     if (error instanceof BusinessLogicError) {
       logger.warn({
         action: 'transfer.post.business_rejected',

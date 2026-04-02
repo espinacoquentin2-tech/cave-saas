@@ -14,6 +14,11 @@ export class TracabiliteService {
     const toBulkTraceable = (lot: Lot): BulkTraceableLot => ({ ...lot, _type: 'bulk' });
     const toBottleTraceable = (lot: BottleLot): BottleTraceableLot => ({ ...lot, _type: 'bottle' });
 
+    let focusedLot: TraceableLot;
+    let parents: TraceableLot[] = [];
+    let children: TraceableLot[] = [];
+    let expeditions: LotEvent[] = [];
+
     // 1. TROUVER LE LOT CIBLE
     if (type === "bulk") {
       const lot = await prisma.lot.findFirst({ where: { businessCode: lotCode } });

@@ -71,7 +71,7 @@ type VendangesProps = {
   onSelectContainer: (container: any) => void;
 };
 
-const buildApiHeaders = (user, extra = {}) => ({
+const buildApiHeaders = (user: { accessToken?: string } | null | undefined, extra: Record<string, string> = {}) => ({
   'Content-Type': 'application/json',
   'x-request-id': crypto.randomUUID(),
   ...(user?.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {}),
@@ -143,7 +143,7 @@ function LoginScreen({ onLogin }: LoginScreenProps) {
       setLoading(false); 
     } else {
       const authUser = data.user;
-      if (!authUser) {
+      if (!authUser || !authUser.email) {
         setErr("Utilisateur introuvable.");
         setLoading(false);
         return;
@@ -265,7 +265,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
         if (!lotSource) throw new Error("Lot source introuvable.");
 
         if (targetContainer && (targetContainer.currentVolume || 0) > 0) {
-          const targetLot = (state.lots || []).find(l => String(l.currentContainerId || l.containerId) === String(targetContainer.id));
+          const targetLot = (state.lots || []).find((l: any) => String(l.currentContainerId || l.containerId) === String(targetContainer.id));
           const isMustTransfer = lotSource.status.includes("MOUT") || lotSource.status.includes("FERMENTATION");
           if (isMustTransfer && targetLot && (targetLot.mainGrapeCode || targetLot.cepage) !== "MULTI" && (targetLot.mainGrapeCode || targetLot.cepage) !== (lotSource.mainGrapeCode || lotSource.cepage)) {
             throw new Error(`🚨 Règle AOC : Impossible de mélanger des cépages au stade de moût.`);
