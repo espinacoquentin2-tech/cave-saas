@@ -236,9 +236,9 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   }
 
   // VÉRIFICATION AOC
-  const lotEvents = (state.events || []).filter(e => String(e.lotId) === String(task.targetLotId) && (e.type === "INTRANT" || e.eventType === "INTRANT"));
-  const hasChaptalise = lotEvents.some(e => (e.note || e.comment)?.toLowerCase().includes("sucre") || (e.note || e.comment)?.toLowerCase().includes("chaptalisation"));
-  const hasAcidifie = lotEvents.some(e => (e.note || e.comment)?.toLowerCase().includes("acide") || (e.note || e.comment)?.toLowerCase().includes("acidification"));
+  const lotEvents = (state.events || []).filter((e: any) => String(e.lotId) === String(task.targetLotId) && (e.type === "INTRANT" || e.eventType === "INTRANT"));
+  const hasChaptalise = lotEvents.some((e: any) => (e.note || e.comment)?.toLowerCase().includes("sucre") || (e.note || e.comment)?.toLowerCase().includes("chaptalisation"));
+  const hasAcidifie = lotEvents.some((e: any) => (e.note || e.comment)?.toLowerCase().includes("acide") || (e.note || e.comment)?.toLowerCase().includes("acidification"));
   
   const isChaptalisationBlocked = task.recette === "CHAPTALISATION" && hasAcidifie;
   const isAcidificationBlocked = task.recette === "ACIDIFICATION" && hasChaptalise;
