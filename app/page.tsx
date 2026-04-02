@@ -293,7 +293,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
       // 2. ASSEMBLAGE MULTIPLE (API ASSEMBLAGE)
       else if (task.recette === "ASSEMBLAGE") {
         const sourcesToProcess = task.sources || [{ lotId: task.lotId, volume: task.volume }];
-        const fullSourceLots = sourcesToProcess.map(s => (state.lots || []).find(l => String(l.id) === String(s.lotId))).filter(Boolean);
+        const fullSourceLots: any[] = sourcesToProcess.map((s: any) => (state.lots || []).find((l: any) => String(l.id) === String(s.lotId))).filter(Boolean);
 
         const hasCoteaux = fullSourceLots.some(l => l.status === "COTEAUX");
         const hasVinDeBase = fullSourceLots.some(l => l.status === "VIN_DE_BASE" || l.status === "FA_ET_FML" || l.status === "MOUT_DEBOURBE");
