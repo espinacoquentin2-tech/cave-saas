@@ -275,7 +275,6 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
         const res = await fetch('/api/transfers', { 
           method:'POST', 
           headers: buildApiHeaders(user),
-          headers: buildApiHeaders(user),
           body: JSON.stringify({ 
             lotId: parseInt(lotSource.id), 
             fromId: parseInt(sourceContId), 
