@@ -1,11 +1,6 @@
 // services/tracabilite.service.ts
-<<<<<<< HEAD
 import { BottleLot, Lot, LotEvent } from '@prisma/client';
-=======
-import { BottleLot, Lot, LotEvent, PrismaClient } from '@prisma/client';
->>>>>>> main
 import { TraceabilityRequestPayload } from '../validations/tracabilite.schema';
-import { prisma } from '@/server/shared/prisma';
 import { prisma } from '@/server/shared/prisma';
 
 
@@ -13,13 +8,12 @@ export class TracabiliteService {
   static async getLineage(data: TraceabilityRequestPayload) {
     const { lotCode, type } = data;
 
-    type TraceableLot = (Lot | BottleLot) & { _type: 'bulk' | 'bottle' };
-    let focusedLot: TraceableLot;
-    let parents: TraceableLot[] = [];
-    let children: TraceableLot[] = [];
-    let expeditions: LotEvent[] = [];
+    type BulkTraceableLot = Lot & { _type: 'bulk' };
+    type BottleTraceableLot = BottleLot & { _type: 'bottle' };
+    type TraceableLot = BulkTraceableLot | BottleTraceableLot;
+    const toBulkTraceable = (lot: Lot): BulkTraceableLot => ({ ...lot, _type: 'bulk' });
+    const toBottleTraceable = (lot: BottleLot): BottleTraceableLot => ({ ...lot, _type: 'bottle' });
 
-    type TraceableLot = (Lot | BottleLot) & { _type: 'bulk' | 'bottle' };
     let focusedLot: TraceableLot;
     let parents: TraceableLot[] = [];
     let children: TraceableLot[] = [];
@@ -29,20 +23,20 @@ export class TracabiliteService {
     if (type === "bulk") {
       const lot = await prisma.lot.findFirst({ where: { businessCode: lotCode } });
       if (!lot) throw new Error("Lot Vrac introuvable.");
-      focusedLot = { ...lot, _type: 'bulk' };
+      focusedLot = toBulkTraceable(lot);
     } else {
       const bLot = await prisma.bottleLot.findFirst({ where: { businessCode: lotCode } });
       if (!bLot) throw new Error("Lot Bouteille introuvable.");
-      focusedLot = { ...bLot, _type: 'bottle' };
+      focusedLot = toBottleTraceable(bLot);
     }
 
     // 2. RECHERCHE DES PARENTS (Ascendance)
-    if (type === "bottle" && focusedLot.sourceLotId) {
+    if (focusedLot._type === 'bottle' && focusedLot.sourceLotId) {
       const parent = await prisma.lot.findUnique({ where: { id: focusedLot.sourceLotId } });
-      if (parent) parents.push({ ...parent, _type: 'bulk' });
+      if (parent) parents.push(toBulkTraceable(parent));
       
     // 👈 CORRECTION : On vérifie bien que notes existe ET que c'est une string
-    } else if (focusedLot.notes && typeof focusedLot.notes === 'string' && focusedLot.notes.includes("Sources:")) {
+    } else if (focusedLot._type === 'bulk' && focusedLot.notes && focusedLot.notes.includes("Sources:")) {
       
       // 👈 CORRECTION : Typage explicite du (c: string)
       const sourceCodes = focusedLot.notes.split("Sources:")[1].split(",").map((c: string) => c.trim());
@@ -51,8 +45,8 @@ export class TracabiliteService {
       const parentBottles = await prisma.bottleLot.findMany({ where: { businessCode: { in: sourceCodes } } });
       
       parents = [
-        ...parentBulks.map(p => ({ ...p, _type: 'bulk' })),
-        ...parentBottles.map(p => ({ ...p, _type: 'bottle' }))
+        ...parentBulks.map((p) => toBulkTraceable(p)),
+        ...parentBottles.map((p) => toBottleTraceable(p))
       ];
     }
 
@@ -65,7 +59,6 @@ export class TracabiliteService {
     
     // Recherche des Bouteilles enfants
     let childBottles: BottleLot[] = [];
-    let childBottles: BottleLot[] = [];
     if (type === "bulk") {
       // Uniquement si le parent est un vrac, il peut avoir des bouteilles enfants via sourceLotId
       childBottles = await prisma.bottleLot.findMany({
@@ -74,8 +67,8 @@ export class TracabiliteService {
     }
 
     children = [
-      ...childBulks.map(c => ({ ...c, _type: 'bulk' })),
-      ...childBottles.map(c => ({ ...c, _type: 'bottle' }))
+      ...childBulks.map((c) => toBulkTraceable(c)),
+      ...childBottles.map((c) => toBottleTraceable(c))
     ];
 
     // Recherche des expéditions
@@ -95,4 +88,3 @@ export class TracabiliteService {
     };
   }
 }
-

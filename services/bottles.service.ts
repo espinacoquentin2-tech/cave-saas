@@ -1,19 +1,12 @@
 // services/bottles.service.ts
-<<<<<<< HEAD
 import { Prisma } from '@prisma/client';
-=======
-import { Prisma, PrismaClient } from '@prisma/client';
->>>>>>> main
 import { UpdateBottleStatusSchema, DegorgerSchema, HabillerSchema, ExpedierSchema } from '../validations/bottles.schema';
 import { z } from 'zod';
 import { prisma } from '@/server/shared/prisma';
-import { prisma } from '@/server/shared/prisma';
-
 
 export class BottlesService {
   
   // Fonction utilitaire pour récupérer l'ID utilisateur (sécurité)
-  private static async getUserId(tx: Prisma.TransactionClient, email: string) {
   private static async getUserId(tx: Prisma.TransactionClient, email: string) {
     const user = await tx.user.findUnique({ where: { email } });
     if (!user) throw new Error("Utilisateur non autorisé.");
@@ -166,8 +159,6 @@ export class BottlesService {
       const deductProd = async (id: number | null | undefined, qty: number, note: string) => {
         if (!id) return;
         const prod = await tx.product.findUnique({ where: { id } });
-        if (!prod || Number(prod.currentStock) < qty) throw new Error(`Stock insuffisant pour la matière sèche ID ${id}`);
-        await tx.product.update({ where: { id }, data: { currentStock: Number(prod.currentStock) - qty } });
         if (!prod || Number(prod.currentStock) < qty) throw new Error(`Stock insuffisant pour la matière sèche ID ${id}`);
         await tx.product.update({ where: { id }, data: { currentStock: Number(prod.currentStock) - qty } });
         await tx.stockMovement.create({
