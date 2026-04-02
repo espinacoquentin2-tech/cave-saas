@@ -1,18 +1,10 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
-<<<<<<< HEAD
 import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { saveDegustationSchema } from '@/server/modules/degustations/degustation.schemas';
 import { DegustationModuleService } from '@/server/modules/degustations/degustation.service';
 import { logger } from '@/server/shared/logger';
 import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
-=======
-import { BusinessLogicError } from '@/lib/errors';
-import { saveDegustationSchema } from '@/server/modules/degustations/degustation.schemas';
-import { DegustationModuleService } from '@/server/modules/degustations/degustation.service';
-import { logger } from '@/server/shared/logger';
-import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
->>>>>>> main
 
 export const dynamic = 'force-dynamic';
 
@@ -20,12 +12,8 @@ export async function GET(request: Request) {
   const requestId = getRequestId(request);
 
   try {
-<<<<<<< HEAD
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
-=======
-    const actor = parseRequestActor(request);
->>>>>>> main
     const records = await DegustationModuleService.list();
 
     logger.info({
@@ -41,7 +29,6 @@ export async function GET(request: Request) {
       headers: { 'x-request-id': requestId },
     });
   } catch (error) {
-<<<<<<< HEAD
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
         action: 'auth.rejected',
@@ -61,8 +48,6 @@ export async function GET(request: Request) {
       );
     }
 
-=======
->>>>>>> main
     if (error instanceof ZodError) {
       logger.warn({
         action: 'degustations.get.validation_failed',
@@ -104,12 +89,8 @@ export async function POST(request: Request) {
   const requestId = getRequestId(request);
 
   try {
-<<<<<<< HEAD
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
-=======
-    const actor = parseRequestActor(request);
->>>>>>> main
     const payload = saveDegustationSchema.parse(await request.json());
     const result = await DegustationModuleService.save(payload, actor);
 
@@ -132,7 +113,6 @@ export async function POST(request: Request) {
       },
     );
   } catch (error) {
-<<<<<<< HEAD
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
         action: 'auth.rejected',
@@ -152,8 +132,6 @@ export async function POST(request: Request) {
       );
     }
 
-=======
->>>>>>> main
     if (error instanceof ZodError) {
       logger.warn({
         action: 'degustations.post.validation_failed',
@@ -171,7 +149,6 @@ export async function POST(request: Request) {
           headers: { 'x-request-id': requestId },
         },
       );
-<<<<<<< HEAD
     }
 
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
@@ -191,8 +168,6 @@ export async function POST(request: Request) {
           headers: { 'x-request-id': requestId },
         },
       );
-=======
->>>>>>> main
     }
 
     if (error instanceof BusinessLogicError) {
@@ -201,7 +176,6 @@ export async function POST(request: Request) {
         requestId,
         details: { message: error.message },
       });
-<<<<<<< HEAD
 
       return NextResponse.json(
         {
@@ -215,21 +189,6 @@ export async function POST(request: Request) {
       );
     }
 
-=======
-
-      return NextResponse.json(
-        {
-          error: 'BUSINESS_RULE_VIOLATION',
-          message: error.message,
-        },
-        {
-          status: error.statusCode,
-          headers: { 'x-request-id': requestId },
-        },
-      );
-    }
-
->>>>>>> main
     logger.error({
       action: 'degustations.post.unhandled_error',
       requestId,
