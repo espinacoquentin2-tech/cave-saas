@@ -318,7 +318,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
         const baseCode = `${anneeLabel}-ASSEM-${String((state.lots || []).length+1).padStart(3,"0")}`;
         const codeAssem = isRose ? `${baseCode}-Rosé` : baseCode;
 
-        const sourceLotsData = sourcesToProcess.map(s => ({ id: parseInt(s.lotId), volumeUsed: parseFloat(s.volume) || 0 }));
+        const sourceLotsData = sourcesToProcess.map((s: any) => ({ id: parseInt(s.lotId), volumeUsed: parseFloat(s.volume) || 0 }));
         
         const res = await fetch('/api/lots/assemblage', { 
           method: 'POST', 
