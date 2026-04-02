@@ -15,7 +15,7 @@ import { CHAMPAGNE_GEODATA } from '../lib/geodata';
 // =============================================================================
 // HELPERS & COMPOSANTS SUR-MESURE
 // =============================================================================
-const formatStatus = (s) => {
+const formatStatus = (s: string | null | undefined) => {
   if (!s) return "";
   if (s === "FERMENTATION_ALCOOLIQUE") return "FA";
   if (s === "FERMENTATION_MALOLACTIQUE") return "FML";
@@ -23,25 +23,75 @@ const formatStatus = (s) => {
   return s.replace(/_/g, " ");
 };
 
-const buildApiHeaders = (user, extra = {}) => ({
+type MultiSelectDropProps = {
+  label: string;
+  options: any[];
+  selected: any[];
+  onChange: (next: any[]) => void;
+  format?: (value: any) => any;
+  width?: number;
+};
+
+type LoginScreenProps = {
+  onLogin: (user: any) => void;
+};
+
+type TaskExecutionModalProps = {
+  task: any;
+  onClose: () => void;
+  workOrders: any[];
+  setWorkOrders: (next: any[]) => void;
+  refreshData: () => Promise<void> | void;
+};
+
+type DashboardProps = {
+  setNav: (nav: string) => void;
+  workOrders: any[];
+  setWorkOrders: (next: any[]) => void;
+  onRefresh: () => Promise<void> | void;
+};
+
+type MacerationModalProps = {
+  pressing: any;
+  onClose: () => void;
+  dispatch: (action: any) => void;
+  refreshData: () => Promise<void> | void;
+  user: any;
+  state: any;
+};
+
+type TankFillPreviewProps = {
+  container: any;
+  incomingVolume: any;
+  T: any;
+  colorOverride?: string;
+};
+
+type VendangesProps = {
+  onSelectContainer: (container: any) => void;
+};
+
+const buildApiHeaders = (user: { accessToken?: string } | null | undefined, extra: Record<string, string> = {}) => ({
   'Content-Type': 'application/json',
   'x-request-id': crypto.randomUUID(),
   ...(user?.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {}),
   ...extra,
 });
 
-function MultiSelectDrop({ label, options, selected, onChange, format = v=>v, width=140 }) {
+function MultiSelectDrop({ label, options, selected, onChange, format = (v: any) => v, width = 140 }: MultiSelectDropProps) {
   const T = useTheme();
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const handleOutside = (e) => { if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const handleOutside = (e: MouseEvent) => {
+      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target)) setOpen(false);
+    };
     document.addEventListener("mousedown", handleOutside);
     return () => document.removeEventListener("mousedown", handleOutside);
   }, []);
 
-  const toggle = (opt) => {
+  const toggle = (opt: any) => {
     if (selected.includes(opt)) onChange(selected.filter(x => x !== opt));
     else onChange([...selected, opt]);
   };
@@ -75,7 +125,7 @@ function MultiSelectDrop({ label, options, selected, onChange, format = v=>v, wi
 // =============================================================================
 // LOGIN
 // =============================================================================
-function LoginScreen({ onLogin }) {
+function LoginScreen({ onLogin }: LoginScreenProps) {
   const T = useTheme();
   const { state } = useStore();
   const [email, setEmail] = useState(""); 
@@ -92,11 +142,18 @@ function LoginScreen({ onLogin }) {
       setErr("Identifiants incorrects ou utilisateur non trouvé."); 
       setLoading(false); 
     } else {
-      const foundUser = (state.users || []).find(u => u.email === data.user.email);
-      const fullName = foundUser ? foundUser.name : data.user.email.split('@')[0].toUpperCase();
+      const authUser = data.user;
+      if (!authUser || !authUser.email) {
+        setErr("Utilisateur introuvable.");
+        setLoading(false);
+        return;
+      }
+
+      const foundUser = (state.users || []).find((u: any) => u.email === authUser.email);
+      const fullName = foundUser ? foundUser.name : authUser.email.split('@')[0].toUpperCase();
       const role = foundUser ? foundUser.role : "Chef de cave";
 
-      onLogin({ id: data.user.id, email: data.user.email, name: fullName, role: role, initials: fullName.substring(0, 2).toUpperCase(), accessToken: data.session?.access_token });
+      onLogin({ id: authUser.id, email: authUser.email, name: fullName, role: role, initials: fullName.substring(0, 2).toUpperCase(), accessToken: data.session?.access_token });
     }
   };
 
@@ -109,8 +166,8 @@ function LoginScreen({ onLogin }) {
           <div style={{ fontSize:9, color:T.textDim, letterSpacing:4, marginTop:4, textTransform:"uppercase" }}>Gestion viticole sécurisée</div>
         </div>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:"32px 32px 24px", borderTop:`2px solid ${T.accent}` }}>
-          <FF label="Adresse e-mail"><Input type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={loading} placeholder="vous@domaine.fr" /></FF>
-          <FF label="Mot de passe"><Input type="password" value={pwd} onChange={e => setPwd(e.target.value)} disabled={loading} placeholder="••••••••" /></FF>
+          <FF label="Adresse e-mail"><Input type="email" value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} disabled={loading} placeholder="vous@domaine.fr" /></FF>
+          <FF label="Mot de passe"><Input type="password" value={pwd} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPwd(e.target.value)} disabled={loading} placeholder="••••••••" /></FF>
           {err && <div style={{ background:T.red+"22", border:`1px solid ${T.red}44`, borderRadius:3, padding:"8px 12px", fontSize:12, color:T.red, marginBottom:14 }}>{err}</div>}
           <Btn onClick={submit} disabled={loading || !email || !pwd} style={{ width:"100%", padding:13, marginTop:6 }}>{loading ? "Vérification..." : "Se connecter ->"}</Btn>
         </div>
@@ -122,12 +179,12 @@ function LoginScreen({ onLogin }) {
 // =============================================================================
 // MODALE D'EXÉCUTION DES ORDRES DE TRAVAIL (CAVISTE) - SÉCURISÉE API
 // =============================================================================
-function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshData }) {
+function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshData }: TaskExecutionModalProps) {
   const T = useTheme();
   const { state, dispatch } = useStore();
   const { user } = useAuth();
 
-  const plannedVol = task.volume || (task.sources ? task.sources.reduce((sum, s) => sum + (parseFloat(s.volume) || 0), 0) : 0);
+  const plannedVol = task.volume || (task.sources ? task.sources.reduce((sum: number, s: any) => sum + (parseFloat(s.volume) || 0), 0) : 0);
   
   const [volMain, setVolMain] = useState(plannedVol.toString());
   const [remVol, setRemVol] = useState("");
@@ -144,13 +201,13 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   const [tirageZone, setTirageZone] = useState("");
   const [tirageCount, setTirageCount] = useState(plannedVol > 0 ? Math.floor(plannedVol / fmtHL["75cl"]).toString() : "");
 
-  const targetContainer = (state.containers || []).find(c => String(c.id) === String(task.targetContainerId));
+  const targetContainer = (state.containers || []).find((c: any) => String(c.id) === String(task.targetContainerId));
   const freeSpace = targetContainer ? Math.round(((targetContainer.capacityValue || targetContainer.capacity || 0) - (targetContainer.currentVolume || 0)) * 100) / 100 : 0;
   const isTankCapacityIssue = targetContainer && task.recette !== "TIRAGE" ? (parseFloat(volMain) || 0) > freeSpace : false;
 
   const btlNeeded = task.recette === "TIRAGE" ? (parseInt(tirageCount) || 0) : 0;
-  const bottleProduct = (state.products || []).find(p => p.subCategory === "Bouteilles" && p.name.includes(tirageFormat));
-  const bouchageProduct = (state.products || []).find(p => p.subCategory === (tirageBouchage === "Capsule" ? "Capsules" : "Bouchons"));
+  const bottleProduct = (state.products || []).find((p: any) => p.subCategory === "Bouteilles" && p.name.includes(tirageFormat));
+  const bouchageProduct = (state.products || []).find((p: any) => p.subCategory === (tirageBouchage === "Capsule" ? "Capsules" : "Bouchons"));
 
   const bottleStock = bottleProduct ? bottleProduct.currentStock : 0;
   const bouchageStock = bouchageProduct ? bouchageProduct.currentStock : 0;
@@ -159,7 +216,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   const isBouchageShortage = btlNeeded > bouchageStock;
   const isStockShortage = task.recette === "TIRAGE" && (isBottleShortage || isBouchageShortage || !bottleProduct || !bouchageProduct);
 
-  const recoveryTanks = (state.containers || []).filter(c => 
+  const recoveryTanks = (state.containers || []).filter((c: any) => 
     c.status !== "ARCHIVÉE" && (remType === "LIES" ? c.type === "CUVE_LIES" : c.type === "CUVE_BOURBES")
   );
 
@@ -167,7 +224,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   let baseYear = new Date().getFullYear();
   let nextYear = baseYear + 1;
   const lotSourceId = task.lotId || (task.sources && task.sources[0]?.lotId);
-  const lotSource = (state.lots || []).find(l => String(l.id) === String(lotSourceId));
+  const lotSource = (state.lots || []).find((l: any) => String(l.id) === String(lotSourceId));
   
   if (task.recette === "TIRAGE" && tirageTypeMise === "EFFERVESCENT" && lotSource) {
       baseYear = parseInt(lotSource.year || lotSource.millesime) || parseInt((lotSource.businessCode || lotSource.code).substring(0,4)) || baseYear;
@@ -179,9 +236,9 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   }
 
   // VÉRIFICATION AOC
-  const lotEvents = (state.events || []).filter(e => String(e.lotId) === String(task.targetLotId) && (e.type === "INTRANT" || e.eventType === "INTRANT"));
-  const hasChaptalise = lotEvents.some(e => (e.note || e.comment)?.toLowerCase().includes("sucre") || (e.note || e.comment)?.toLowerCase().includes("chaptalisation"));
-  const hasAcidifie = lotEvents.some(e => (e.note || e.comment)?.toLowerCase().includes("acide") || (e.note || e.comment)?.toLowerCase().includes("acidification"));
+  const lotEvents = (state.events || []).filter((e: any) => String(e.lotId) === String(task.targetLotId) && (e.type === "INTRANT" || e.eventType === "INTRANT"));
+  const hasChaptalise = lotEvents.some((e: any) => (e.note || e.comment)?.toLowerCase().includes("sucre") || (e.note || e.comment)?.toLowerCase().includes("chaptalisation"));
+  const hasAcidifie = lotEvents.some((e: any) => (e.note || e.comment)?.toLowerCase().includes("acide") || (e.note || e.comment)?.toLowerCase().includes("acidification"));
   
   const isChaptalisationBlocked = task.recette === "CHAPTALISATION" && hasAcidifie;
   const isAcidificationBlocked = task.recette === "ACIDIFICATION" && hasChaptalise;
@@ -494,7 +551,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 // =============================================================================
 // DASHBOARD (Avec intégration des alertes d'inventaire)
 // =============================================================================
-function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }) {
+function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }: DashboardProps) {
   const T = useTheme(); 
   const { user } = useAuth(); 
   const { state } = useStore();
@@ -561,7 +618,7 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }) {
     { label:"Stock",   sub:`${surLattes.toLocaleString("fr-FR")} btl`, nav:"stock", color:T.green },
   ];
 
-  const formatVolStr = (vol) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
+  const formatVolStr = (vol: any) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
 
   return (
     <div>
@@ -710,7 +767,7 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }) {
 // =============================================================================
 // MODALE D'ENCUVAGE (Macération Rouge / Rosé de Saignée) - SÉCURISÉE
 // =============================================================================
-function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state }) {
+function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state }: MacerationModalProps) {
   const T = useTheme();
   // On estime que 1000 kg de vendange entière/égrappée prennent environ 10 hL à 12 hL de volume en cuve
   const volumeEstime = ((pressing.weight / 1000) * 11).toFixed(1);
@@ -849,7 +906,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
 // =============================================================================
 // COMPOSANT VISUEL RÉUTILISABLE : APERÇU DE REMPLISSAGE DE CUVE
 // =============================================================================
-function TankFillPreview({ container, incomingVolume, T, colorOverride }) {
+function TankFillPreview({ container, incomingVolume, T, colorOverride }: TankFillPreviewProps) {
   if (!container) return null;
 
   const currentV = parseFloat(container.currentVolume || container.volume) || 0;
@@ -897,7 +954,7 @@ function TankFillPreview({ container, incomingVolume, T, colorOverride }) {
 // =============================================================================
 // MODULE VENDANGES (QUAI, PRESSOIRS & DÉBOURBAGE) - PRODUCTION READY
 // =============================================================================
-function Vendanges({ onSelectContainer }) {
+function Vendanges({ onSelectContainer }: VendangesProps) {
   const T = useTheme();
   const { state, dispatch, refreshData } = useStore();
   const { user } = useAuth(); 
