@@ -323,7 +323,6 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
         const res = await fetch('/api/lots/assemblage', { 
           method: 'POST', 
           headers: buildApiHeaders(user),
-          headers: buildApiHeaders(user),
           body: JSON.stringify({ 
             code: codeAssem, 
             volume: vMain, 
