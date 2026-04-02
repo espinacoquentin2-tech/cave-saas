@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
-import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import {
   createStockMovementSchema,
   listStockMovementsQuerySchema,
@@ -14,8 +13,6 @@ export async function POST(request: Request) {
   const requestId = getRequestId(request);
 
   try {
-    const actor = await resolveAuthenticatedActor(request);
-    assertRole(actor, WRITE_ROLES);
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
     const payload = createStockMovementSchema.parse(await request.json());
@@ -59,25 +56,6 @@ export async function POST(request: Request) {
       );
     }
 
-    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
-      logger.warn({
-        action: 'auth.rejected',
-        requestId,
-        details: { message: error.message },
-      });
-
-      return NextResponse.json(
-        {
-          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
-          message: error.message,
-        },
-        {
-          status: error.statusCode,
-          headers: { 'x-request-id': requestId },
-        },
-      );
-    }
-
     if (error instanceof ZodError) {
       logger.warn({
         action: 'inventory-movements.post.validation_failed',
@@ -92,44 +70,6 @@ export async function POST(request: Request) {
         },
         {
           status: 400,
-          headers: { 'x-request-id': requestId },
-        },
-      );
-    }
-
-    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
-      logger.warn({
-        action: 'auth.rejected',
-        requestId,
-        details: { message: error.message },
-      });
-
-      return NextResponse.json(
-        {
-          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
-          message: error.message,
-        },
-        {
-          status: error.statusCode,
-          headers: { 'x-request-id': requestId },
-        },
-      );
-    }
-
-    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
-      logger.warn({
-        action: 'auth.rejected',
-        requestId,
-        details: { message: error.message },
-      });
-
-      return NextResponse.json(
-        {
-          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
-          message: error.message,
-        },
-        {
-          status: error.statusCode,
           headers: { 'x-request-id': requestId },
         },
       );
@@ -180,8 +120,6 @@ export async function GET(request: Request) {
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
-    const actor = await resolveAuthenticatedActor(request);
-    assertRole(actor, READ_ROLES);
     const { searchParams } = new URL(request.url);
     const query = listStockMovementsQuerySchema.parse({
       page: searchParams.get('page') ?? '1',
@@ -201,25 +139,6 @@ export async function GET(request: Request) {
       },
     });
   } catch (error) {
-    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
-      logger.warn({
-        action: 'auth.rejected',
-        requestId,
-        details: { message: error.message },
-      });
-
-      return NextResponse.json(
-        {
-          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
-          message: error.message,
-        },
-        {
-          status: error.statusCode,
-          headers: { 'x-request-id': requestId },
-        },
-      );
-    }
-
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
         action: 'auth.rejected',
@@ -271,4 +190,3 @@ export async function GET(request: Request) {
     );
   }
 }
-
