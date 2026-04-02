@@ -5,7 +5,7 @@ import { CreatePressoirSchema, UpdatePressoirSchema } from '../../../validations
 import { VendangesService } from '../../../services/vendanges.service';
 import { logger } from '@/server/shared/logger';
 import { prisma } from '@/server/shared/prisma';
-import { READ_ROLES, assertRole, getRequestId, resolveAuthenticatedActor, WRITE_ROLES } from '@/server/shared/request-context';
+import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
