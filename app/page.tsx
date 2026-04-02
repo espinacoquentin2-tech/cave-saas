@@ -340,7 +340,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
       // 3. TIRAGE (API TIRAGE SÉCURISÉE)
       else if (task.recette === "TIRAGE") {
         const execDate = new Date().toISOString(); 
-        const volUsed = btlNeeded * (fmtHL[tirageFormat] || 0.0075);
+        const volUsed = btlNeeded * ((fmtHL as Record<string, number>)[tirageFormat] || 0.0075);
         const detailBouchage = `${tirageBouchage} (${tirageModele || "Non précisé"})`;
         const isTranquille = tirageTypeMise === "TRANQUILLE";
         const finalNote = isTranquille ? `Mise en bouteille vin tranquille sous ${detailBouchage}.` : `Exécution OT Tirage effervescent sous ${detailBouchage}.`;
