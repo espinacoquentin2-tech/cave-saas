@@ -478,12 +478,12 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
               </Select>
             </FF>
             <FF label="Modèle (Marque - Réf)">
-              <Input value={tirageModele} onChange={e => setTirageModele(e.target.value)} placeholder="Ex: Trescases - 29x29" disabled={isSubmitting} />
+              <Input value={tirageModele} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageModele(e.target.value)} placeholder="Ex: Trescases - 29x29" disabled={isSubmitting} />
             </FF>
           </div>
 
           <FF label="Emplacement de stockage">
-            <Input value={tirageZone} onChange={e => setTirageZone(e.target.value)} placeholder="Ex: Cave 2 - Palette 15" disabled={isSubmitting} />
+            <Input value={tirageZone} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageZone(e.target.value)} placeholder="Ex: Cave 2 - Palette 15" disabled={isSubmitting} />
           </FF>
         </div>
       ) : (
