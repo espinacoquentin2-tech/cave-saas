@@ -563,18 +563,18 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }: DashboardPr
   
   const [executingTask, setExecutingTask] = useState(null);
 
-  const totalCapacity = containers.reduce((s, c) => s + (c.capacityValue || c.capacity || 0), 0);
-  const totalVol      = containers.reduce((s, c) => s + (c.currentVolume || 0), 0);
-  const lotsActifs    = lots.filter(l => l.status !== "TIRE" && l.status !== "ARCHIVE").length;
-  const cuvesPleines  = containers.filter(c => (c.currentVolume || 0) > 0).length;
-  const cuvesVides    = containers.filter(c => (c.currentVolume || 0) === 0).length;
+  const totalCapacity = containers.reduce((s: any, c: any) => s + (c.capacityValue || c.capacity || 0), 0);
+  const totalVol      = containers.reduce((s: any, c: any) => s + (c.currentVolume || 0), 0);
+  const lotsActifs    = lots.filter((l: any) => l.status !== "TIRE" && l.status !== "ARCHIVE").length;
+  const cuvesPleines  = containers.filter((c: any) => (c.currentVolume || 0) > 0).length;
+  const cuvesVides    = containers.filter((c: any) => (c.currentVolume || 0) === 0).length;
   
   // Utilisation des bons champs BDD (currentBottleCount)
-  const surLattes     = bottleLots.filter(b => b.status === "SUR_LATTES" || b.status === "A_DEGORGER").reduce((s, b) => s + (b.currentBottleCount || b.currentCount || 0), 0);
-  const prodFinis     = bottleLots.filter(b => b.status === "PRET_EXPEDITION").reduce((s, b) => s + (b.currentBottleCount || b.currentCount || 0), 0);
+  const surLattes     = bottleLots.filter((b: any) => b.status === "SUR_LATTES" || b.status === "A_DEGORGER").reduce((s: any, b: any) => s + (b.currentBottleCount || b.currentCount || 0), 0);
+  const prodFinis     = bottleLots.filter((b: any) => b.status === "PRET_EXPEDITION").reduce((s: any, b: any) => s + (b.currentBottleCount || b.currentCount || 0), 0);
   
   const fillRate      = totalCapacity > 0 ? Math.round(totalVol / totalCapacity * 100) : 0;
-  const lotsByStatus  = LOT_STATUSES.map(s => ({ s, count: lots.filter(l => l.status === s).length })).filter(x => x.count > 0);
+  const lotsByStatus  = LOT_STATUSES.map((s: any) => ({ s, count: lots.filter((l: any) => l.status === s).length })).filter((x: any) => x.count > 0);
 
   const pendingTasks = workOrders.filter(w => w.status === "PENDING" || w.status === "BLOCKED").sort((a,b) => {
     if (a.status === "BLOCKED" && b.status !== "BLOCKED") return -1;
@@ -584,17 +584,17 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }: DashboardPr
 
   // 🚨 1. ALERTES CUVERIE & LOTS
   const caveAlerts = [
-    ...workOrders.filter(w => w.status === "BLOCKED").map(w => ({ level: "red", msg: `Blocage OT: ${w.recette} impossible (Capacité)`, nav: "admin_wo" })),
-    ...containers.filter(c => c.status === "VIDE" && c.notes).map(c => ({ level:"warn", msg:`${c.displayName || c.name} : ${c.notes}`, nav:"cuverie" })),
-    ...containers.filter(c => c.status === "NETTOYAGE").map(c => ({ level:"info", msg:`${c.displayName || c.name} en nettoyage`, nav:"cuverie" })),
-    ...lots.filter(l => l.notes && l.notes.includes("sans suivi")).map(l => ({ level:"warn", msg:`${l.businessCode || l.code} : ${l.notes}`, nav:"lots" })),
-    ...bottleLots.filter(b => b.status === "A_DEGORGER").map(b => ({ level:"action", msg:`${b.businessCode || b.code} prêt à dégorger (${((b.currentBottleCount || b.currentCount) || 0).toLocaleString("fr-FR")} btl)`, nav:"stock" })),
+    ...workOrders.filter((w: any) => w.status === "BLOCKED").map((w: any) => ({ level: "red", msg: `Blocage OT: ${w.recette} impossible (Capacité)`, nav: "admin_wo" })),
+    ...containers.filter((c: any) => c.status === "VIDE" && c.notes).map((c: any) => ({ level:"warn", msg:`${c.displayName || c.name} : ${c.notes}`, nav:"cuverie" })),
+    ...containers.filter((c: any) => c.status === "NETTOYAGE").map((c: any) => ({ level:"info", msg:`${c.displayName || c.name} en nettoyage`, nav:"cuverie" })),
+    ...lots.filter((l: any) => l.notes && l.notes.includes("sans suivi")).map((l: any) => ({ level:"warn", msg:`${l.businessCode || l.code} : ${l.notes}`, nav:"lots" })),
+    ...bottleLots.filter((b: any) => b.status === "A_DEGORGER").map((b: any) => ({ level:"action", msg:`${b.businessCode || b.code} prêt à dégorger (${((b.currentBottleCount || b.currentCount) || 0).toLocaleString("fr-FR")} btl)`, nav:"stock" })),
   ];
 
   // 📦 2. ALERTES MATIÈRES SÈCHES (NOUVEAU)
   const stockAlerts = products
-    .filter(p => p.currentStock <= p.minStock)
-    .map(p => ({
+    .filter((p: any) => p.currentStock <= p.minStock)
+    .map((p: any) => ({
       level: p.currentStock === 0 ? "red" : "warn",
       msg: p.currentStock === 0 ? `RUPTURE : ${p.name}` : `Stock critique : ${p.name} (Reste ${p.currentStock.toLocaleString('fr-FR')} ${p.unit})`,
       nav: "inventaire"
@@ -603,9 +603,9 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }: DashboardPr
   const totalAlertsCount = caveAlerts.length + stockAlerts.length;
   
   // Utilisation des createdAt BDD
-  const recentEvts = [...events].sort((a,b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()).slice(0, 6);
-  const getLotCode = id => lots.find(l => String(l.id) === String(id))?.businessCode || lots.find(l => String(l.id) === String(id))?.code || id;
-  const getContainerName = id => containers.find(c => String(c.id) === String(id))?.displayName || containers.find(c => String(c.id) === String(id))?.name || id;
+  const recentEvts = [...events].sort((a: any, b: any) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()).slice(0, 6);
+  const getLotCode = (id: any) => lots.find((l: any) => String(l.id) === String(id))?.businessCode || lots.find((l: any) => String(l.id) === String(id))?.code || id;
+  const getContainerName = (id: any) => containers.find((c: any) => String(c.id) === String(id))?.displayName || containers.find((c: any) => String(c.id) === String(id))?.name || id;
   
   const alertColors = { warn: "#d98b2b", info: T.blue, action: T.green, red: T.red };
 
