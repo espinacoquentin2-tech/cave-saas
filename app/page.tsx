@@ -15,7 +15,7 @@ import { CHAMPAGNE_GEODATA } from '../lib/geodata';
 // =============================================================================
 // HELPERS & COMPOSANTS SUR-MESURE
 // =============================================================================
-const formatStatus = (s) => {
+const formatStatus = (s: string | null | undefined) => {
   if (!s) return "";
   if (s === "FERMENTATION_ALCOOLIQUE") return "FA";
   if (s === "FERMENTATION_MALOLACTIQUE") return "FML";
@@ -23,25 +23,75 @@ const formatStatus = (s) => {
   return s.replace(/_/g, " ");
 };
 
-const buildApiHeaders = (user, extra = {}) => ({
+type MultiSelectDropProps = {
+  label: string;
+  options: any[];
+  selected: any[];
+  onChange: (next: any[]) => void;
+  format?: (value: any) => any;
+  width?: number;
+};
+
+type LoginScreenProps = {
+  onLogin: (user: any) => void;
+};
+
+type TaskExecutionModalProps = {
+  task: any;
+  onClose: () => void;
+  workOrders: any[];
+  setWorkOrders: (next: any[]) => void;
+  refreshData: () => Promise<void> | void;
+};
+
+type DashboardProps = {
+  setNav: (nav: string) => void;
+  workOrders: any[];
+  setWorkOrders: (next: any[]) => void;
+  onRefresh: () => Promise<void> | void;
+};
+
+type MacerationModalProps = {
+  pressing: any;
+  onClose: () => void;
+  dispatch: (action: any) => void;
+  refreshData: () => Promise<void> | void;
+  user: any;
+  state: any;
+};
+
+type TankFillPreviewProps = {
+  container: any;
+  incomingVolume: any;
+  T: any;
+  colorOverride?: string;
+};
+
+type VendangesProps = {
+  onSelectContainer: (container: any) => void;
+};
+
+const buildApiHeaders = (user: { accessToken?: string } | null | undefined, extra: Record<string, string> = {}) => ({
   'Content-Type': 'application/json',
   'x-request-id': crypto.randomUUID(),
   ...(user?.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {}),
   ...extra,
 });
 
-function MultiSelectDrop({ label, options, selected, onChange, format = v=>v, width=140 }) {
+function MultiSelectDrop({ label, options, selected, onChange, format = (v: any) => v, width = 140 }: MultiSelectDropProps) {
   const T = useTheme();
   const [open, setOpen] = useState(false);
-  const ref = useRef(null);
+  const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    const handleOutside = (e) => { if(ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    const handleOutside = (e: MouseEvent) => {
+      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target)) setOpen(false);
+    };
     document.addEventListener("mousedown", handleOutside);
     return () => document.removeEventListener("mousedown", handleOutside);
   }, []);
 
-  const toggle = (opt) => {
+  const toggle = (opt: any) => {
     if (selected.includes(opt)) onChange(selected.filter(x => x !== opt));
     else onChange([...selected, opt]);
   };
@@ -75,7 +125,7 @@ function MultiSelectDrop({ label, options, selected, onChange, format = v=>v, wi
 // =============================================================================
 // LOGIN
 // =============================================================================
-function LoginScreen({ onLogin }) {
+function LoginScreen({ onLogin }: LoginScreenProps) {
   const T = useTheme();
   const { state } = useStore();
   const [email, setEmail] = useState(""); 
@@ -92,11 +142,18 @@ function LoginScreen({ onLogin }) {
       setErr("Identifiants incorrects ou utilisateur non trouvé."); 
       setLoading(false); 
     } else {
-      const foundUser = (state.users || []).find(u => u.email === data.user.email);
-      const fullName = foundUser ? foundUser.name : data.user.email.split('@')[0].toUpperCase();
+      const authUser = data.user;
+      if (!authUser || !authUser.email) {
+        setErr("Utilisateur introuvable.");
+        setLoading(false);
+        return;
+      }
+
+      const foundUser = (state.users || []).find((u: any) => u.email === authUser.email);
+      const fullName = foundUser ? foundUser.name : authUser.email.split('@')[0].toUpperCase();
       const role = foundUser ? foundUser.role : "Chef de cave";
 
-      onLogin({ id: data.user.id, email: data.user.email, name: fullName, role: role, initials: fullName.substring(0, 2).toUpperCase(), accessToken: data.session?.access_token });
+      onLogin({ id: authUser.id, email: authUser.email, name: fullName, role: role, initials: fullName.substring(0, 2).toUpperCase(), accessToken: data.session?.access_token });
     }
   };
 
@@ -109,8 +166,8 @@ function LoginScreen({ onLogin }) {
           <div style={{ fontSize:9, color:T.textDim, letterSpacing:4, marginTop:4, textTransform:"uppercase" }}>Gestion viticole sécurisée</div>
         </div>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:"32px 32px 24px", borderTop:`2px solid ${T.accent}` }}>
-          <FF label="Adresse e-mail"><Input type="email" value={email} onChange={e => setEmail(e.target.value)} disabled={loading} placeholder="vous@domaine.fr" /></FF>
-          <FF label="Mot de passe"><Input type="password" value={pwd} onChange={e => setPwd(e.target.value)} disabled={loading} placeholder="••••••••" /></FF>
+          <FF label="Adresse e-mail"><Input type="email" value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} disabled={loading} placeholder="vous@domaine.fr" /></FF>
+          <FF label="Mot de passe"><Input type="password" value={pwd} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPwd(e.target.value)} disabled={loading} placeholder="••••••••" /></FF>
           {err && <div style={{ background:T.red+"22", border:`1px solid ${T.red}44`, borderRadius:3, padding:"8px 12px", fontSize:12, color:T.red, marginBottom:14 }}>{err}</div>}
           <Btn onClick={submit} disabled={loading || !email || !pwd} style={{ width:"100%", padding:13, marginTop:6 }}>{loading ? "Vérification..." : "Se connecter ->"}</Btn>
         </div>
@@ -122,12 +179,12 @@ function LoginScreen({ onLogin }) {
 // =============================================================================
 // MODALE D'EXÉCUTION DES ORDRES DE TRAVAIL (CAVISTE) - SÉCURISÉE API
 // =============================================================================
-function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshData }) {
+function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshData }: TaskExecutionModalProps) {
   const T = useTheme();
   const { state, dispatch } = useStore();
   const { user } = useAuth();
 
-  const plannedVol = task.volume || (task.sources ? task.sources.reduce((sum, s) => sum + (parseFloat(s.volume) || 0), 0) : 0);
+  const plannedVol = task.volume || (task.sources ? task.sources.reduce((sum: number, s: any) => sum + (parseFloat(s.volume) || 0), 0) : 0);
   
   const [volMain, setVolMain] = useState(plannedVol.toString());
   const [remVol, setRemVol] = useState("");
@@ -144,13 +201,13 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   const [tirageZone, setTirageZone] = useState("");
   const [tirageCount, setTirageCount] = useState(plannedVol > 0 ? Math.floor(plannedVol / fmtHL["75cl"]).toString() : "");
 
-  const targetContainer = (state.containers || []).find(c => String(c.id) === String(task.targetContainerId));
+  const targetContainer = (state.containers || []).find((c: any) => String(c.id) === String(task.targetContainerId));
   const freeSpace = targetContainer ? Math.round(((targetContainer.capacityValue || targetContainer.capacity || 0) - (targetContainer.currentVolume || 0)) * 100) / 100 : 0;
   const isTankCapacityIssue = targetContainer && task.recette !== "TIRAGE" ? (parseFloat(volMain) || 0) > freeSpace : false;
 
   const btlNeeded = task.recette === "TIRAGE" ? (parseInt(tirageCount) || 0) : 0;
-  const bottleProduct = (state.products || []).find(p => p.subCategory === "Bouteilles" && p.name.includes(tirageFormat));
-  const bouchageProduct = (state.products || []).find(p => p.subCategory === (tirageBouchage === "Capsule" ? "Capsules" : "Bouchons"));
+  const bottleProduct = (state.products || []).find((p: any) => p.subCategory === "Bouteilles" && p.name.includes(tirageFormat));
+  const bouchageProduct = (state.products || []).find((p: any) => p.subCategory === (tirageBouchage === "Capsule" ? "Capsules" : "Bouchons"));
 
   const bottleStock = bottleProduct ? bottleProduct.currentStock : 0;
   const bouchageStock = bouchageProduct ? bouchageProduct.currentStock : 0;
@@ -159,7 +216,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   const isBouchageShortage = btlNeeded > bouchageStock;
   const isStockShortage = task.recette === "TIRAGE" && (isBottleShortage || isBouchageShortage || !bottleProduct || !bouchageProduct);
 
-  const recoveryTanks = (state.containers || []).filter(c => 
+  const recoveryTanks = (state.containers || []).filter((c: any) => 
     c.status !== "ARCHIVÉE" && (remType === "LIES" ? c.type === "CUVE_LIES" : c.type === "CUVE_BOURBES")
   );
 
@@ -167,7 +224,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   let baseYear = new Date().getFullYear();
   let nextYear = baseYear + 1;
   const lotSourceId = task.lotId || (task.sources && task.sources[0]?.lotId);
-  const lotSource = (state.lots || []).find(l => String(l.id) === String(lotSourceId));
+  const lotSource = (state.lots || []).find((l: any) => String(l.id) === String(lotSourceId));
   
   if (task.recette === "TIRAGE" && tirageTypeMise === "EFFERVESCENT" && lotSource) {
       baseYear = parseInt(lotSource.year || lotSource.millesime) || parseInt((lotSource.businessCode || lotSource.code).substring(0,4)) || baseYear;
@@ -179,9 +236,9 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   }
 
   // VÉRIFICATION AOC
-  const lotEvents = (state.events || []).filter(e => String(e.lotId) === String(task.targetLotId) && (e.type === "INTRANT" || e.eventType === "INTRANT"));
-  const hasChaptalise = lotEvents.some(e => (e.note || e.comment)?.toLowerCase().includes("sucre") || (e.note || e.comment)?.toLowerCase().includes("chaptalisation"));
-  const hasAcidifie = lotEvents.some(e => (e.note || e.comment)?.toLowerCase().includes("acide") || (e.note || e.comment)?.toLowerCase().includes("acidification"));
+  const lotEvents = (state.events || []).filter((e: any) => String(e.lotId) === String(task.targetLotId) && (e.type === "INTRANT" || e.eventType === "INTRANT"));
+  const hasChaptalise = lotEvents.some((e: any) => (e.note || e.comment)?.toLowerCase().includes("sucre") || (e.note || e.comment)?.toLowerCase().includes("chaptalisation"));
+  const hasAcidifie = lotEvents.some((e: any) => (e.note || e.comment)?.toLowerCase().includes("acide") || (e.note || e.comment)?.toLowerCase().includes("acidification"));
   
   const isChaptalisationBlocked = task.recette === "CHAPTALISATION" && hasAcidifie;
   const isAcidificationBlocked = task.recette === "ACIDIFICATION" && hasChaptalise;
@@ -208,7 +265,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
         if (!lotSource) throw new Error("Lot source introuvable.");
 
         if (targetContainer && (targetContainer.currentVolume || 0) > 0) {
-          const targetLot = (state.lots || []).find(l => String(l.currentContainerId || l.containerId) === String(targetContainer.id));
+          const targetLot = (state.lots || []).find((l: any) => String(l.currentContainerId || l.containerId) === String(targetContainer.id));
           const isMustTransfer = lotSource.status.includes("MOUT") || lotSource.status.includes("FERMENTATION");
           if (isMustTransfer && targetLot && (targetLot.mainGrapeCode || targetLot.cepage) !== "MULTI" && (targetLot.mainGrapeCode || targetLot.cepage) !== (lotSource.mainGrapeCode || lotSource.cepage)) {
             throw new Error(`🚨 Règle AOC : Impossible de mélanger des cépages au stade de moût.`);
@@ -217,7 +274,6 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
         const res = await fetch('/api/transfers', { 
           method:'POST', 
-          headers: buildApiHeaders(user),
           headers: buildApiHeaders(user),
           body: JSON.stringify({ 
             lotId: parseInt(lotSource.id), 
@@ -237,7 +293,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
       // 2. ASSEMBLAGE MULTIPLE (API ASSEMBLAGE)
       else if (task.recette === "ASSEMBLAGE") {
         const sourcesToProcess = task.sources || [{ lotId: task.lotId, volume: task.volume }];
-        const fullSourceLots = sourcesToProcess.map(s => (state.lots || []).find(l => String(l.id) === String(s.lotId))).filter(Boolean);
+        const fullSourceLots: any[] = sourcesToProcess.map((s: any) => (state.lots || []).find((l: any) => String(l.id) === String(s.lotId))).filter(Boolean);
 
         const hasCoteaux = fullSourceLots.some(l => l.status === "COTEAUX");
         const hasVinDeBase = fullSourceLots.some(l => l.status === "VIN_DE_BASE" || l.status === "FA_ET_FML" || l.status === "MOUT_DEBOURBE");
@@ -262,11 +318,10 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
         const baseCode = `${anneeLabel}-ASSEM-${String((state.lots || []).length+1).padStart(3,"0")}`;
         const codeAssem = isRose ? `${baseCode}-Rosé` : baseCode;
 
-        const sourceLotsData = sourcesToProcess.map(s => ({ id: parseInt(s.lotId), volumeUsed: parseFloat(s.volume) || 0 }));
+        const sourceLotsData = sourcesToProcess.map((s: any) => ({ id: parseInt(s.lotId), volumeUsed: parseFloat(s.volume) || 0 }));
         
         const res = await fetch('/api/lots/assemblage', { 
           method: 'POST', 
-          headers: buildApiHeaders(user),
           headers: buildApiHeaders(user),
           body: JSON.stringify({ 
             code: codeAssem, 
@@ -285,14 +340,13 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
       // 3. TIRAGE (API TIRAGE SÉCURISÉE)
       else if (task.recette === "TIRAGE") {
         const execDate = new Date().toISOString(); 
-        const volUsed = btlNeeded * (fmtHL[tirageFormat] || 0.0075);
+        const volUsed = btlNeeded * ((fmtHL as Record<string, number>)[tirageFormat] || 0.0075);
         const detailBouchage = `${tirageBouchage} (${tirageModele || "Non précisé"})`;
         const isTranquille = tirageTypeMise === "TRANQUILLE";
         const finalNote = isTranquille ? `Mise en bouteille vin tranquille sous ${detailBouchage}.` : `Exécution OT Tirage effervescent sous ${detailBouchage}.`;
 
         const res = await fetch('/api/tirage', { 
           method: 'POST', 
-          headers: buildApiHeaders(user), 
           headers: buildApiHeaders(user), 
           body: JSON.stringify({ 
             lotId: parseInt(lotSourceId), 
@@ -316,7 +370,6 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
         const res = await fetch('/api/lots/intrants', { 
           method: 'POST', 
           headers: buildApiHeaders(user),
-          headers: buildApiHeaders(user),
           body: JSON.stringify({ 
             lotId: parseInt(task.targetLotId), 
             intrant: task.recette, quantity: 1, unit: "opération", 
@@ -332,7 +385,8 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
       onClose();
 
     } catch(e) {
-      alert("Erreur lors de l'exécution : " + e.message);
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      alert("Erreur lors de l'exécution : " + errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -373,7 +427,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
           
           <div style={{ marginBottom: 4, borderBottom:`1px solid ${T.border}`, paddingBottom: 16 }}>
             <FF label="Type de mise en bouteille">
-              <Select value={tirageTypeMise} onChange={e => setTirageTypeMise(e.target.value)} disabled={isSubmitting} style={{ fontWeight:"bold", color: tirageTypeMise === "TRANQUILLE" ? "#8b1c31" : T.accent }}>
+              <Select value={tirageTypeMise} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTirageTypeMise(e.target.value)} disabled={isSubmitting} style={{ fontWeight:"bold", color: tirageTypeMise === "TRANQUILLE" ? "#8b1c31" : T.accent }}>
                 <option value="EFFERVESCENT">Prise de mousse (Champagne)</option>
                 <option value="TRANQUILLE">Vin Tranquille (Coteaux / Rouge)</option>
               </Select>
@@ -403,38 +457,39 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
             <FF label="Format bouteille">
-              <Select value={tirageFormat} disabled={isSubmitting} onChange={e => {
+              <Select value={tirageFormat} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                const formatKey = e.target.value as keyof typeof fmtHL;
                 setTirageFormat(e.target.value);
-                setTirageCount(plannedVol > 0 ? Math.floor(plannedVol / fmtHL[e.target.value]).toString() : "");
+                setTirageCount(plannedVol > 0 ? Math.floor(plannedVol / fmtHL[formatKey]).toString() : "");
               }}>
                 {["37.5cl","75cl","150cl"].map(f => <option key={f}>{f}</option>)}
               </Select>
             </FF>
             <FF label="Nombre de bouteilles réel">
-              <Input type="number" value={tirageCount} onChange={e => setTirageCount(e.target.value)} disabled={isSubmitting} />
+              <Input type="number" value={tirageCount} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageCount(e.target.value)} disabled={isSubmitting} />
             </FF>
           </div>
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12 }}>
             <FF label="Bouchage">
-              <Select value={tirageBouchage} onChange={e => setTirageBouchage(e.target.value)} disabled={isSubmitting}>
+              <Select value={tirageBouchage} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTirageBouchage(e.target.value)} disabled={isSubmitting}>
                 <option value="Capsule">Capsule</option>
                 <option value="Liège">Liège</option>
               </Select>
             </FF>
             <FF label="Modèle (Marque - Réf)">
-              <Input value={tirageModele} onChange={e => setTirageModele(e.target.value)} placeholder="Ex: Trescases - 29x29" disabled={isSubmitting} />
+              <Input value={tirageModele} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageModele(e.target.value)} placeholder="Ex: Trescases - 29x29" disabled={isSubmitting} />
             </FF>
           </div>
 
           <FF label="Emplacement de stockage">
-            <Input value={tirageZone} onChange={e => setTirageZone(e.target.value)} placeholder="Ex: Cave 2 - Palette 15" disabled={isSubmitting} />
+            <Input value={tirageZone} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageZone(e.target.value)} placeholder="Ex: Cave 2 - Palette 15" disabled={isSubmitting} />
           </FF>
         </div>
       ) : (
         targetContainer && (
           <FF label={`Volume de JUS CLAIR transféré vers ${targetContainer.displayName || targetContainer.name} (hL)`}>
-            <Input type="number" step="0.1" value={volMain} onChange={e => setVolMain(e.target.value)} disabled={isSubmitting} style={{ borderColor: isTankCapacityIssue ? T.red : T.border }} />
+            <Input type="number" step="0.1" value={volMain} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVolMain(e.target.value)} disabled={isSubmitting} style={{ borderColor: isTankCapacityIssue ? T.red : T.border }} />
           </FF>
         )
       )}
@@ -451,20 +506,20 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
           <div style={{ fontSize:11, color:T.accent, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Gestion des restes (Lies / Bourbes)</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
             <FF label="Type de reste">
-              <Select value={remType} onChange={e => { setRemType(e.target.value); setRemTargetId(""); }} disabled={isSubmitting}>
+              <Select value={remType} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setRemType(e.target.value); setRemTargetId(""); }} disabled={isSubmitting}>
                 <option value="LIES">Lies</option>
                 <option value="BOURBES">Bourbes</option>
               </Select>
             </FF>
             <FF label="Volume récupéré (hL)">
-              <Input type="number" step="0.1" value={remVol} onChange={e => setRemVol(e.target.value)} placeholder="ex: 0.5" disabled={isSubmitting} />
+              <Input type="number" step="0.1" value={remVol} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRemVol(e.target.value)} placeholder="ex: 0.5" disabled={isSubmitting} />
             </FF>
           </div>
           {parseFloat(remVol) > 0 && (
             <FF label={`Envoyer ces ${remType.toLowerCase()} vers :`}>
-              <Select value={remTargetId} onChange={e => setRemTargetId(e.target.value)} disabled={isSubmitting}>
+              <Select value={remTargetId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRemTargetId(e.target.value)} disabled={isSubmitting}>
                 <option value="">-- Choisir la cuve de stockage --</option>
-                {recoveryTanks.map(c => {
+                {recoveryTanks.map((c: any) => {
                   const volDispo = Math.max(0, (c.capacityValue || c.capacity || 0) - (c.currentVolume || 0)).toFixed(1);
                   return (
                     <option key={c.id} value={c.id}>
@@ -494,7 +549,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 // =============================================================================
 // DASHBOARD (Avec intégration des alertes d'inventaire)
 // =============================================================================
-function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }) {
+function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }: DashboardProps) {
   const T = useTheme(); 
   const { user } = useAuth(); 
   const { state } = useStore();
@@ -561,7 +616,7 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }) {
     { label:"Stock",   sub:`${surLattes.toLocaleString("fr-FR")} btl`, nav:"stock", color:T.green },
   ];
 
-  const formatVolStr = (vol) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
+  const formatVolStr = (vol: any) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
 
   return (
     <div>
@@ -710,7 +765,7 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }) {
 // =============================================================================
 // MODALE D'ENCUVAGE (Macération Rouge / Rosé de Saignée) - SÉCURISÉE
 // =============================================================================
-function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state }) {
+function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state }: MacerationModalProps) {
   const T = useTheme();
   // On estime que 1000 kg de vendange entière/égrappée prennent environ 10 hL à 12 hL de volume en cuve
   const volumeEstime = ((pressing.weight / 1000) * 11).toFixed(1);
@@ -849,7 +904,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
 // =============================================================================
 // COMPOSANT VISUEL RÉUTILISABLE : APERÇU DE REMPLISSAGE DE CUVE
 // =============================================================================
-function TankFillPreview({ container, incomingVolume, T, colorOverride }) {
+function TankFillPreview({ container, incomingVolume, T, colorOverride }: TankFillPreviewProps) {
   if (!container) return null;
 
   const currentV = parseFloat(container.currentVolume || container.volume) || 0;
@@ -897,7 +952,7 @@ function TankFillPreview({ container, incomingVolume, T, colorOverride }) {
 // =============================================================================
 // MODULE VENDANGES (QUAI, PRESSOIRS & DÉBOURBAGE) - PRODUCTION READY
 // =============================================================================
-function Vendanges({ onSelectContainer }) {
+function Vendanges({ onSelectContainer }: VendangesProps) {
   const T = useTheme();
   const { state, dispatch, refreshData } = useStore();
   const { user } = useAuth(); 
