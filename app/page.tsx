@@ -458,8 +458,9 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
             <FF label="Format bouteille">
               <Select value={tirageFormat} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                const formatKey = e.target.value as keyof typeof fmtHL;
                 setTirageFormat(e.target.value);
-                setTirageCount(plannedVol > 0 ? Math.floor(plannedVol / fmtHL[e.target.value]).toString() : "");
+                setTirageCount(plannedVol > 0 ? Math.floor(plannedVol / fmtHL[formatKey]).toString() : "");
               }}>
                 {["37.5cl","75cl","150cl"].map(f => <option key={f}>{f}</option>)}
               </Select>
