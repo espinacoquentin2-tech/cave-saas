@@ -348,7 +348,6 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
         const res = await fetch('/api/tirage', { 
           method: 'POST', 
           headers: buildApiHeaders(user), 
-          headers: buildApiHeaders(user), 
           body: JSON.stringify({ 
             lotId: parseInt(lotSourceId), 
             format: tirageFormat, count: btlNeeded, volume: volUsed, 
