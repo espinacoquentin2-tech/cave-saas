@@ -519,7 +519,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
             <FF label={`Envoyer ces ${remType.toLowerCase()} vers :`}>
               <Select value={remTargetId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRemTargetId(e.target.value)} disabled={isSubmitting}>
                 <option value="">-- Choisir la cuve de stockage --</option>
-                {recoveryTanks.map(c => {
+                {recoveryTanks.map((c: any) => {
                   const volDispo = Math.max(0, (c.capacityValue || c.capacity || 0) - (c.currentVolume || 0)).toFixed(1);
                   return (
                     <option key={c.id} value={c.id}>
