@@ -370,7 +370,6 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
         const res = await fetch('/api/lots/intrants', { 
           method: 'POST', 
           headers: buildApiHeaders(user),
-          headers: buildApiHeaders(user),
           body: JSON.stringify({ 
             lotId: parseInt(task.targetLotId), 
             intrant: task.recette, quantity: 1, unit: "opération", 
