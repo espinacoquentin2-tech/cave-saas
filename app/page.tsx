@@ -489,7 +489,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
       ) : (
         targetContainer && (
           <FF label={`Volume de JUS CLAIR transféré vers ${targetContainer.displayName || targetContainer.name} (hL)`}>
-            <Input type="number" step="0.1" value={volMain} onChange={e => setVolMain(e.target.value)} disabled={isSubmitting} style={{ borderColor: isTankCapacityIssue ? T.red : T.border }} />
+            <Input type="number" step="0.1" value={volMain} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVolMain(e.target.value)} disabled={isSubmitting} style={{ borderColor: isTankCapacityIssue ? T.red : T.border }} />
           </FF>
         )
       )}
