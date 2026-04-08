@@ -506,18 +506,18 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
           <div style={{ fontSize:11, color:T.accent, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Gestion des restes (Lies / Bourbes)</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
             <FF label="Type de reste">
-              <Select value={remType} onChange={e => { setRemType(e.target.value); setRemTargetId(""); }} disabled={isSubmitting}>
+              <Select value={remType} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setRemType(e.target.value); setRemTargetId(""); }} disabled={isSubmitting}>
                 <option value="LIES">Lies</option>
                 <option value="BOURBES">Bourbes</option>
               </Select>
             </FF>
             <FF label="Volume récupéré (hL)">
-              <Input type="number" step="0.1" value={remVol} onChange={e => setRemVol(e.target.value)} placeholder="ex: 0.5" disabled={isSubmitting} />
+              <Input type="number" step="0.1" value={remVol} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRemVol(e.target.value)} placeholder="ex: 0.5" disabled={isSubmitting} />
             </FF>
           </div>
           {parseFloat(remVol) > 0 && (
             <FF label={`Envoyer ces ${remType.toLowerCase()} vers :`}>
-              <Select value={remTargetId} onChange={e => setRemTargetId(e.target.value)} disabled={isSubmitting}>
+              <Select value={remTargetId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRemTargetId(e.target.value)} disabled={isSubmitting}>
                 <option value="">-- Choisir la cuve de stockage --</option>
                 {recoveryTanks.map(c => {
                   const volDispo = Math.max(0, (c.capacityValue || c.capacity || 0) - (c.currentVolume || 0)).toFixed(1);
