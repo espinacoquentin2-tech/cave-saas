@@ -427,7 +427,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
           
           <div style={{ marginBottom: 4, borderBottom:`1px solid ${T.border}`, paddingBottom: 16 }}>
             <FF label="Type de mise en bouteille">
-              <Select value={tirageTypeMise} onChange={e => setTirageTypeMise(e.target.value)} disabled={isSubmitting} style={{ fontWeight:"bold", color: tirageTypeMise === "TRANQUILLE" ? "#8b1c31" : T.accent }}>
+              <Select value={tirageTypeMise} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTirageTypeMise(e.target.value)} disabled={isSubmitting} style={{ fontWeight:"bold", color: tirageTypeMise === "TRANQUILLE" ? "#8b1c31" : T.accent }}>
                 <option value="EFFERVESCENT">Prise de mousse (Champagne)</option>
                 <option value="TRANQUILLE">Vin Tranquille (Coteaux / Rouge)</option>
               </Select>
@@ -457,7 +457,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
             <FF label="Format bouteille">
-              <Select value={tirageFormat} disabled={isSubmitting} onChange={e => {
+              <Select value={tirageFormat} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                 setTirageFormat(e.target.value);
                 setTirageCount(plannedVol > 0 ? Math.floor(plannedVol / fmtHL[e.target.value]).toString() : "");
               }}>
@@ -465,13 +465,13 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
               </Select>
             </FF>
             <FF label="Nombre de bouteilles réel">
-              <Input type="number" value={tirageCount} onChange={e => setTirageCount(e.target.value)} disabled={isSubmitting} />
+              <Input type="number" value={tirageCount} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageCount(e.target.value)} disabled={isSubmitting} />
             </FF>
           </div>
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12 }}>
             <FF label="Bouchage">
-              <Select value={tirageBouchage} onChange={e => setTirageBouchage(e.target.value)} disabled={isSubmitting}>
+              <Select value={tirageBouchage} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTirageBouchage(e.target.value)} disabled={isSubmitting}>
                 <option value="Capsule">Capsule</option>
                 <option value="Liège">Liège</option>
               </Select>
