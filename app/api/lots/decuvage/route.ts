@@ -1,29 +1,17 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
-<<<<<<< HEAD
 import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { DecuvageService } from '@/server/modules/decuvage/decuvage.service';
 import { decuvageSchema } from '@/server/modules/decuvage/decuvage.schemas';
 import { logger } from '@/server/shared/logger';
 import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
-=======
-import { BusinessLogicError } from '@/lib/errors';
-import { DecuvageService } from '@/server/modules/decuvage/decuvage.service';
-import { decuvageSchema } from '@/server/modules/decuvage/decuvage.schemas';
-import { logger } from '@/server/shared/logger';
-import { getRequestId, parseRequestActor } from '@/server/shared/request-context';
->>>>>>> main
 
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
 
   try {
-<<<<<<< HEAD
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
-=======
-    const actor = parseRequestActor(request);
->>>>>>> main
     const payload = decuvageSchema.parse(await request.json());
     const result = await DecuvageService.execute(payload, actor);
 
@@ -50,7 +38,6 @@ export async function POST(request: Request) {
       },
     );
   } catch (error) {
-<<<<<<< HEAD
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
         action: 'auth.rejected',
@@ -70,8 +57,6 @@ export async function POST(request: Request) {
       );
     }
 
-=======
->>>>>>> main
     if (error instanceof ZodError) {
       logger.warn({
         action: 'lots.decuvage.post.validation_failed',
@@ -91,7 +76,6 @@ export async function POST(request: Request) {
       );
     }
 
-<<<<<<< HEAD
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
         action: 'auth.rejected',
@@ -111,8 +95,6 @@ export async function POST(request: Request) {
       );
     }
 
-=======
->>>>>>> main
     if (error instanceof BusinessLogicError) {
       logger.warn({
         action: 'lots.decuvage.post.business_rejected',
