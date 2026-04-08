@@ -385,7 +385,8 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
       onClose();
 
     } catch(e) {
-      alert("Erreur lors de l'exécution : " + e.message);
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      alert("Erreur lors de l'exécution : " + errorMessage);
     } finally {
       setIsSubmitting(false);
     }
