@@ -803,7 +803,6 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
       const res = await fetch('/api/lots', { 
         method: 'POST', 
         headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           code: codeMac, millesime, cepage: pressing.cepage, lieu: pressing.cru || pressing.parcelle, 
           volume: parseFloat(form.volumeOccupe), containerId: parseInt(form.cuveId), 
@@ -817,7 +816,6 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
       // 2. MISE À JOUR DU QUAI (API)
       await fetch('/api/pressings', { 
         method: 'PATCH', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ id: pressing.id, status: "PRESSE" }) 
       }).catch(()=>{});
