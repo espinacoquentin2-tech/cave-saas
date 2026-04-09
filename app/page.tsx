@@ -692,9 +692,9 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }: DashboardPr
             </div>
             {caveAlerts.length === 0 ? (
               <div style={{ textAlign:"center", padding:"20px 0", color:T.green }}><div style={{ fontSize:22, marginBottom:6 }}>✓</div><div style={{ fontSize:12, color:T.textDim, fontStyle: "italic" }}>Aucune alerte — tout est en ordre</div></div>
-            ) : caveAlerts.map((a, i) => (
+            ) : caveAlerts.map((a: any, i: number) => (
               <div key={i} onClick={() => setNav(a.nav)} style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"10px 0", borderBottom:i < caveAlerts.length-1 ? `1px solid ${T.border}` : "none", cursor:"pointer" }}>
-                <div style={{ width:8, height:8, borderRadius:"50%", background:alertColors[a.level] || T.accent, flexShrink:0, marginTop:4 }} />
+                <div style={{ width:8, height:8, borderRadius:"50%", background:alertColors[a.level as keyof typeof alertColors] || T.accent, flexShrink:0, marginTop:4 }} />
                 <div style={{ fontSize:12, color: a.level === "red" ? T.red : T.textStrong, flex:1, lineHeight:1.4 }}>{a.msg}</div>
               </div>
             ))}
@@ -706,9 +706,9 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }: DashboardPr
             </div>
             {stockAlerts.length === 0 ? (
               <div style={{ textAlign:"center", padding:"20px 0", color:T.green }}><div style={{ fontSize:22, marginBottom:6 }}>✓</div><div style={{ fontSize:12, color:T.textDim, fontStyle: "italic" }}>Stocks suffisants</div></div>
-            ) : stockAlerts.map((a, i) => (
+            ) : stockAlerts.map((a: any, i: number) => (
               <div key={i} onClick={() => setNav(a.nav)} style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"10px 0", borderBottom:i < stockAlerts.length-1 ? `1px solid ${T.border}` : "none", cursor:"pointer" }}>
-                <div style={{ width:8, height:8, borderRadius:"50%", background:alertColors[a.level] || T.accent, flexShrink:0, marginTop:4 }} />
+                <div style={{ width:8, height:8, borderRadius:"50%", background:alertColors[a.level as keyof typeof alertColors] || T.accent, flexShrink:0, marginTop:4 }} />
                 <div style={{ fontSize:12, color: a.level === "red" ? T.red : T.textStrong, flex:1, lineHeight:1.4, fontWeight: a.level === "red" ? "bold" : "normal" }}>{a.msg}</div>
               </div>
             ))}
