@@ -826,7 +826,8 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
       if (refreshData) await refreshData();
       onClose();
     } catch(e) { 
-      alert("Erreur lors de l'encuvage : " + e.message); 
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      alert("Erreur lors de l'encuvage : " + errorMessage); 
     } finally {
       setIsSubmitting(false);
     }
