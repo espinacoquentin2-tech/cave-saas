@@ -579,7 +579,7 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }: DashboardPr
   const pendingTasks = workOrders.filter(w => w.status === "PENDING" || w.status === "BLOCKED").sort((a,b) => {
     if (a.status === "BLOCKED" && b.status !== "BLOCKED") return -1;
     if (a.status !== "BLOCKED" && b.status === "BLOCKED") return 1;
-    return new Date(a.date) - new Date(b.date);
+    return new Date(a.date).getTime() - new Date(b.date).getTime();
   });
 
   // 🚨 1. ALERTES CUVERIE & LOTS
