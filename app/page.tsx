@@ -782,7 +782,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
   const [showAdd, setShowAdd] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
-  const availCuves = (state.containers || []).filter(c => 
+  const availCuves = (state.containers || []).filter((c: any) => 
     c.status !== "ARCHIVÉE" && 
     c.status !== "PLEINE" && 
     !c.type.includes("DEBOURBAGE") && 
