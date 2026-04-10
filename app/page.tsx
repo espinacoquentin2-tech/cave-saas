@@ -836,7 +836,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
   const sanColors = { "A+": T.green, "A": T.accent, "B": "#d98b2b", "C": T.red, "FA": T.blue };
 
   if (showAdd) {
-    return <AddContainerModal initialCapacity={Math.ceil(parseFloat(volumeEstime)).toString()} onClose={() => setShowAdd(false)} onSuccess={(newId) => { setForm({ ...form, cuveId: newId }); setShowAdd(false); }} />;
+    return <AddContainerModal initialCapacity={Math.ceil(parseFloat(volumeEstime)).toString()} onClose={() => setShowAdd(false)} onSuccess={(newId: any) => { setForm({ ...form, cuveId: newId }); setShowAdd(false); }} />;
   }
 
   return (
