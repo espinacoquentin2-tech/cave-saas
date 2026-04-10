@@ -58,13 +58,3 @@ export const createTransferSchema = z
   });
 
 export type CreateTransferInput = z.infer<typeof createTransferSchema>;
-<<<<<<< HEAD
-=======
-export const transferActorSchema = z.object({
-  email: z.string().trim().email(),
-  role: z.enum(['ADMIN', 'CHEF_CAVE', 'CAVISTE']),
-});
-
-export type CreateTransferInput = z.infer<typeof createTransferSchema>;
-export type TransferActor = z.infer<typeof transferActorSchema>;
->>>>>>> main
