@@ -2254,7 +2254,12 @@ function AddCompartmentModal({ container, onClose }: AddCompartmentModalProps) {
 // =============================================================================
 // MODALE DE TRANSFERT / SOUTIRAGE (UNIFIÉE EN BACKEND)
 // =============================================================================
-function TransferModal({ container, onClose }) {
+type TransferModalProps = {
+  container: any;
+  onClose: () => void;
+};
+
+function TransferModal({ container, onClose }: TransferModalProps) {
   const T = useTheme();
   const { state, dispatch, refreshData } = useStore(); 
   const { user } = useAuth();
@@ -2273,7 +2278,7 @@ function TransferModal({ container, onClose }) {
 
   const isAdmin = user?.role === "Admin" || user?.role === "Chef de cave";
   
-  const lotToTransfer = (state.lots || []).find(l => String(l.id) === String(container.lotId || container.currentLots?.[0]?.id));
+  const lotToTransfer = (state.lots || []).find((l: any) => String(l.id) === String(container.lotId || container.currentLots?.[0]?.id));
   const isSoutirageDebourbage = container.type === "CUVE_DEBOURBAGE" && lotToTransfer?.status === "MOUT_NON_DEBOURBE";
   const isMustTransfer = lotToTransfer?.status?.includes("MOUT") || lotToTransfer?.status?.includes("FERMENTATION");
 
@@ -2282,13 +2287,13 @@ function TransferModal({ container, onClose }) {
     BOIS: ["BARRIQUE", "FOUDRE"]
   };
 
-  const baseAvailTargets = (state.containers || []).filter(c => 
+  const baseAvailTargets = (state.containers || []).filter((c: any) => 
     String(c.id) !== String(container.id) && 
     c.status !== "ARCHIVÉE" && 
     (c.currentVolume || 0) < (c.capacityValue || c.capacity || 0)
   );
   
-  const uniqueZones = [...new Set(baseAvailTargets.map(c => c.zone).filter(Boolean))].sort();
+  const uniqueZones = [...new Set(baseAvailTargets.map((c: any) => c.zone).filter(Boolean))].sort();
 
   const sourceVol = Number((container.currentVolume || 0).toFixed(2));
   const totalVol = Number(dests.reduce((sum, d) => sum + (parseFloat(d.vol) || 0), 0).toFixed(2));
@@ -2296,9 +2301,9 @@ function TransferModal({ container, onClose }) {
   const isVolValid = totalVol > 0 && totalVol <= sourceVol;
   const isPartial = totalVol > 0 && totalVol < sourceVol;
 
-  const hasCapacityIssue = dests.some(d => {
+  const hasCapacityIssue = dests.some((d: any) => {
     if (!d.toId || !d.vol) return false;
-    const targetCuve = baseAvailTargets.find(c => String(c.id) === String(d.toId));
+    const targetCuve = baseAvailTargets.find((c: any) => String(c.id) === String(d.toId));
     if (!targetCuve) return true;
     const targetCap = targetCuve.capacityValue || targetCuve.capacity || 0;
     const targetCur = targetCuve.currentVolume || 0;
@@ -2306,16 +2311,16 @@ function TransferModal({ container, onClose }) {
     return Number(parseFloat(d.vol).toFixed(2)) > free;
   });
 
-  const hasCepageMismatch = dests.some(d => {
+  const hasCepageMismatch = dests.some((d: any) => {
     if (!d.toId || !isMustTransfer) return false;
-    const targetCuve = baseAvailTargets.find(c => String(c.id) === String(d.toId));
+    const targetCuve = baseAvailTargets.find((c: any) => String(c.id) === String(d.toId));
     if (!targetCuve || targetCuve.currentVolume <= 0) return false; 
-    const targetLot = (state.lots || []).find(l => String(l.currentContainerId || l.containerId) === String(targetCuve.id));
+    const targetLot = (state.lots || []).find((l: any) => String(l.currentContainerId || l.containerId) === String(targetCuve.id));
     if (!targetLot) return false;
     return (targetLot.mainGrapeCode || targetLot.cepage) !== "MULTI" && (targetLot.mainGrapeCode || targetLot.cepage) !== (lotToTransfer?.mainGrapeCode || lotToTransfer?.cepage);
   });
 
-  const updateDest = (id, field, value) => {
+  const updateDest = (id: any, field: any, value: any) => {
     if (["filterZone", "filterCat", "filterType"].includes(field)) {
       setDests(dests.map(d => d.id === id ? { ...d, [field]: value, toId: "" } : d));
     } else {
@@ -2323,11 +2328,11 @@ function TransferModal({ container, onClose }) {
     }
   };
 
-  const handleMax = (destId) => {
+  const handleMax = (destId: any) => {
     const otherDestsVol = dests.filter(d => d.id !== destId).reduce((sum, d) => sum + (parseFloat(d.vol) || 0), 0);
     const availableFromSource = Math.max(0, sourceVol - otherDestsVol);
     const dest = dests.find(d => d.id === destId);
-    const targetCuve = baseAvailTargets.find(c => String(c.id) === String(dest.toId));
+    const targetCuve = baseAvailTargets.find((c: any) => String(c.id) === String(dest?.toId));
     const targetCap = targetCuve ? (targetCuve.capacityValue || targetCuve.capacity || 0) : Infinity;
     const targetCur = targetCuve ? (targetCuve.currentVolume || 0) : 0;
     const freeSpaceTarget = Math.max(0, targetCap - targetCur);
