@@ -1537,7 +1537,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                     else setNewApport({...newApport, parcelle: e.target.value});
                   }}>
                     <option value="">-- Sélectionner --</option>
-                    {(state.parcelles || []).map(p => <option key={p.id} value={p.nom}>{p.nom}</option>)}
+                    {(state.parcelles || []).map((p: any) => <option key={p.id} value={p.nom}>{p.nom}</option>)}
                     <option value="CUSTOM" style={{ fontWeight: "bold", color: T.accent }}>+ Autre origine (Négoce, Achat...)</option>
                   </Select>
                 </FF>
@@ -1548,32 +1548,32 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                     <button onClick={() => setIsCustomOrigin(false)} disabled={isSubmitting} style={{ background: "none", border: "none", color: T.textDim, cursor: "pointer", fontSize: 12 }}>✕ Annuler</button>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                    <Select value={customDep} disabled={isSubmitting} onChange={e => { setCustomDep(e.target.value); setCustomReg(""); setCustomCom(""); }}>
+                    <Select value={customDep} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setCustomDep(e.target.value); setCustomReg(""); setCustomCom(""); }}>
                       <option value="">Département</option>
                       {depts.map(d => <option key={d}>{d}</option>)}
                     </Select>
-                    <Select value={customReg} disabled={!customDep || isSubmitting} onChange={e => { setCustomReg(e.target.value); setCustomCom(""); }}>
+                    <Select value={customReg} disabled={!customDep || isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setCustomReg(e.target.value); setCustomCom(""); }}>
                       <option value="">Région / Sous-région</option>
                       {regions.map(r => <option key={r}>{r}</option>)}
                     </Select>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <Select value={customCom} disabled={!customReg || isSubmitting} onChange={e => setCustomCom(e.target.value)}>
+                    <Select value={customCom} disabled={!customReg || isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCustomCom(e.target.value)}>
                       <option value="">Commune</option>
-                      {communes.map(c => <option key={c}>{c}</option>)}
+                      {communes.map((c: any) => <option key={c}>{c}</option>)}
                     </Select>
-                    <Input value={customNom} disabled={isSubmitting} onChange={e=>setCustomNom(e.target.value)} placeholder="Nom du Vendeur ou Lieu-dit" />
+                    <Input value={customNom} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setCustomNom(e.target.value)} placeholder="Nom du Vendeur ou Lieu-dit" />
                   </div>
                 </div>
               )}
               <div style={{ display: "flex", gap: 16, alignItems: "flex-end" }}>
                 <FF label="Cépage" style={{ width: 140 }}>
-                  <Select value={newApport.cepage} disabled={isSubmitting} onChange={(e) => setNewApport({...newApport, cepage: e.target.value})}>
+                  <Select value={newApport.cepage} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewApport({...newApport, cepage: e.target.value})}>
                     <option value="CH">Chardonnay</option><option value="PN">Pinot Noir</option><option value="PM">Meunier</option><option value="PBL">Pinot Blanc</option><option value="ARB">Arbane</option><option value="PMES">Petit Meslier</option><option value="PG">Pinot Gris</option><option value="VOLTIS">Voltis</option>
                   </Select>
                 </FF>
                 <FF label="Poids (kg)" style={{ width: 120 }}>
-                  <Input type="text" value={newApport.poids} disabled={isSubmitting} onChange={(e) => setNewApport({...newApport, poids: e.target.value})} placeholder="Ex: 4000" />
+                  <Input type="text" value={newApport.poids} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewApport({...newApport, poids: e.target.value})} placeholder="Ex: 4000" />
                 </FF>
                 <Btn onClick={handleAddApport} disabled={isSubmitting} style={{ height: 38 }}>{isSubmitting ? "..." : "+ Ajouter l'apport"}</Btn>
               </div>
@@ -1589,7 +1589,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px 100px 150px 40px", padding: "12px 20px", borderBottom: `1px solid ${T.border}`, fontSize: 11, color: T.textDim, textTransform: "uppercase" }}>
                   <div>Provenance</div><div>Cépage</div><div>Poids restant</div><div>Vol. Estimé</div><div>Statut</div><div></div>
                 </div>
-                {apportsEnAttente.map(a => {
+                {apportsEnAttente.map((a: any) => {
                   const volEstime = calculateFractions(a.weight || a.poids || 0);
                   const totalEstime = (Number(volEstime.cuvee) + Number(volEstime.taille)).toFixed(2);
                   return (
@@ -1620,7 +1620,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
               <div style={{ padding:"30px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucune machine en route.</div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 20 }}>
-                {pressoirsActifs.map(p => {
+                {pressoirsActifs.map((p: any) => {
                   const isPret = p.status === "PRET_ECOULAGE";
                   const fillPct = ((p.loadKg || 0) / p.capacite) * 100;
                   
