@@ -2440,18 +2440,18 @@ function TransferModal({ container, onClose }: TransferModalProps) {
                   <option value="CUVES">Cuves</option><option value="BOIS">Bois</option><option value="CITERNE">Citernes</option><option value="AUTRE">Autres</option>
                 </Select>
                 {(d.filterCat === "CUVES" || d.filterCat === "BOIS") && (
-                  <Select value={d.filterType} onChange={e => updateDest(d.id, "filterType", e.target.value)} style={{ flex: 1, fontSize: 11 }} disabled={isSubmitting}>
+                  <Select value={d.filterType} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateDest(d.id, "filterType", e.target.value)} style={{ flex: 1, fontSize: 11 }} disabled={isSubmitting}>
                     <option value="">-- Type --</option>
-                    {GROUPS[d.filterCat].map(t => <option key={t} value={t}>{t.replace("CUVE_", "")}</option>)}
+                    {GROUPS[d.filterCat as keyof typeof GROUPS].map((t: any) => <option key={t} value={t}>{t.replace("CUVE_", "")}</option>)}
                   </Select>
                 )}
               </div>
 
               <div style={{ display:"flex", gap:8, alignItems:"center" }}>
                 <div style={{ flex: 2 }}>
-                  <Select value={d.toId} onChange={e => updateDest(d.id, "toId", e.target.value)} style={{ borderColor: isError || isRowCepageMismatch ? T.red : T.border }} disabled={isSubmitting}>
+                  <Select value={d.toId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateDest(d.id, "toId", e.target.value)} style={{ borderColor: isError || isRowCepageMismatch ? T.red : T.border }} disabled={isSubmitting}>
                     <option value="">-- Sélectionner la cuve ({filteredTargets.length} trouvées) --</option>
-                    {filteredTargets.map(c => {
+                    {filteredTargets.map((c: any) => {
                       const dispo = Math.max(0, (c.capacityValue || c.capacity || 0) - (c.currentVolume || 0)).toFixed(2);
                       return <option key={c.id} value={c.id}>{c.displayName || c.name} ({dispo} hL dispo)</option>;
                     })}
@@ -2461,10 +2461,10 @@ function TransferModal({ container, onClose }: TransferModalProps) {
                 </div>
                 
                 <div style={{ flex: 1, display:"flex", gap:4 }}>
-                  <Input type="number" step="0.1" placeholder="Vol (hL)" value={d.vol} onChange={e => updateDest(d.id, "vol", e.target.value)} style={{ borderColor: isError ? T.red : T.border }} disabled={isRowCepageMismatch || isSubmitting} />
+                  <Input type="number" step="0.1" placeholder="Vol (hL)" value={d.vol} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateDest(d.id, "vol", e.target.value)} style={{ borderColor: isError ? T.red : T.border }} disabled={isRowCepageMismatch || isSubmitting} />
                   <Btn variant="secondary" onClick={() => handleMax(d.id)} disabled={isRowCepageMismatch || isSubmitting}>MAX</Btn>
                 </div>
-                {dests.length > 1 && <Btn variant="ghost" onClick={() => setDests(dests.filter(other => other.id !== d.id))} style={{ color:T.red, padding:"8px" }} disabled={isSubmitting}>✕</Btn>}
+                {dests.length > 1 && <Btn variant="ghost" onClick={() => setDests(dests.filter((other: any) => other.id !== d.id))} style={{ color:T.red, padding:"8px" }} disabled={isSubmitting}>✕</Btn>}
               </div>
             </div>
           )
@@ -2476,7 +2476,7 @@ function TransferModal({ container, onClose }: TransferModalProps) {
       
       {isPartial && (
          <FF label="Que devient le reste en cuve source ?">
-           <Select value={remType} onChange={e => setRemType(e.target.value)} disabled={isSubmitting}>
+	           <Select value={remType} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRemType(e.target.value)} disabled={isSubmitting}>
              <option value="">Garder le statut actuel</option><option value="BOURBES">Qualifier en Bourbes</option><option value="LIES">Qualifier en Lies</option>
            </Select>
          </FF>
@@ -2486,16 +2486,16 @@ function TransferModal({ container, onClose }: TransferModalProps) {
         <div style={{ marginTop: 16, borderTop: `1px solid ${T.border}`, paddingTop: 16 }}>
           <div style={{ fontSize: 11, color: T.accent, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>🔬 Résultats Labo (Moût clair)</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, background: T.surfaceHigh, padding: "12px", borderRadius: 4 }}>
-            <FF label="pH"><Input type="number" step="0.01" value={ph} onChange={e => setPh(e.target.value)} disabled={isSubmitting} /></FF>
-            <FF label="AT"><Input type="number" step="0.1" value={at} onChange={e => setAt(e.target.value)} disabled={isSubmitting} /></FF>
-            <FF label="TAVP"><Input type="number" step="0.1" value={tavp} onChange={e => setTavp(e.target.value)} disabled={isSubmitting} /></FF>
+	            <FF label="pH"><Input type="number" step="0.01" value={ph} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPh(e.target.value)} disabled={isSubmitting} /></FF>
+	            <FF label="AT"><Input type="number" step="0.1" value={at} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAt(e.target.value)} disabled={isSubmitting} /></FF>
+	            <FF label="TAVP"><Input type="number" step="0.1" value={tavp} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTavp(e.target.value)} disabled={isSubmitting} /></FF>
           </div>
         </div>
       )}
       
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
-        <Btn onClick={submit} disabled={!isVolValid || hasCapacityIssue || hasCepageMismatch || dests.some(d => !d.toId || !d.vol) || totalVol > sourceVol || isSubmitting}>
+	        <Btn onClick={submit} disabled={!isVolValid || hasCapacityIssue || hasCepageMismatch || dests.some((d: any) => !d.toId || !d.vol) || totalVol > sourceVol || isSubmitting}>
           {isSubmitting ? "Transfert en cours..." : "Valider le transfert"}
         </Btn>
       </div>
@@ -2506,7 +2506,13 @@ function TransferModal({ container, onClose }: TransferModalProps) {
 // =============================================================================
 // MODALE DE DÉCUVAGE (UNIFIÉE EN BACKEND)
 // =============================================================================
-function DecuvageModal({ container, lot, onClose }) {
+type DecuvageModalProps = {
+  container: any;
+  lot: any;
+  onClose: () => void;
+};
+
+function DecuvageModal({ container, lot, onClose }: DecuvageModalProps) {
   const T = useTheme();
   const { state, dispatch, refreshData } = useStore();
   const { user } = useAuth();
@@ -2521,7 +2527,7 @@ function DecuvageModal({ container, lot, onClose }) {
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [showAdd, setShowAdd] = useState(null);
 
-  const availCuves = state.containers.filter(c => 
+  const availCuves = state.containers.filter((c: any) => 
     c.status !== "PLEINE" && c.status !== "ARCHIVÉE" && String(c.id) !== String(container.id) && !c.type.includes("DEBOURBAGE")
   );
 
@@ -2535,7 +2541,6 @@ function DecuvageModal({ container, lot, onClose }) {
       // API UNIFIÉE : Tout le cycle de décuvage d'un coup
       const res = await fetch('/api/lots/decuvage', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           sourceLotId: lot.id, 
