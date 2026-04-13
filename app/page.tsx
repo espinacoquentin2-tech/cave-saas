@@ -885,7 +885,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
         </div>
         <div style={{ marginTop: 8 }}>
           <FF label="Observations (Sulfitage, levurage...)">
-            <Input value={form.notes} disabled={isSubmitting} onChange={e=>setForm({...form, notes:e.target.value})} placeholder="Ex: Sulfitage à la benne 3g/hL..." />
+            <Input value={form.notes} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, notes:e.target.value})} placeholder="Ex: Sulfitage à la benne 3g/hL..." />
           </FF>
         </div>
       </div>
