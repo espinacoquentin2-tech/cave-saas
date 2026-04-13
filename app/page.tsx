@@ -2750,7 +2750,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
   const allCompartments = isCiterneMere ? [container, ...enfants] : [container]; 
   
   const totalCapacity = isCiterneMere ? allCompartments.reduce((sum: any, c: any) => sum + (c.capacityValue || c.capacity || 0), 0) : (container.capacityValue || container.capacity || 0);
-  const totalVolume = isCiterneMere ? allCompartments.reduce((sum, c) => sum + (c.currentVolume || 0), 0) : (container.currentVolume || 0);
+  const totalVolume = isCiterneMere ? allCompartments.reduce((sum: any, c: any) => sum + (c.currentVolume || 0), 0) : (container.currentVolume || 0);
 
   const isReallyEmpty = container.status === "VIDE" || container.status === "NETTOYAGE" || totalVolume <= 0;
   const currentVol = isReallyEmpty ? 0 : totalVolume;
@@ -2761,18 +2761,18 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
   const tc = getTypeColor(container.type);
   const displayStatus = isReallyEmpty && container.status !== "NETTOYAGE" ? "VIDE" : container.status;
 
-  const lot = isReallyEmpty ? null : (state.lots || []).find(l => String(l.id) === String(container.lotId) || String(l.currentContainerId || l.containerId) === String(container.id));
+  const lot = isReallyEmpty ? null : (state.lots || []).find((l: any) => String(l.id) === String(container.lotId) || String(l.currentContainerId || l.containerId) === String(container.id));
 
-  const hist = (state.events || []).filter(e => String(e.containerId) === String(container.id)).sort((a,b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+  const hist = (state.events || []).filter((e: any) => String(e.containerId) === String(container.id)).sort((a: any, b: any) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
   
-  const lotsPasses = [...new Set((state.events || []).filter(e => String(e.containerId) === String(container.id) && e.lotId).map(e => e.lotId))].map(id => { 
-    const l = (state.lots || []).find(x => String(x.id) === String(id)); 
+  const lotsPasses = [...new Set((state.events || []).filter((e: any) => String(e.containerId) === String(container.id) && e.lotId).map((e: any) => e.lotId))].map((id: any) => { 
+    const l = (state.lots || []).find((x: any) => String(x.id) === String(id)); 
     if (!l) return null; 
-    const evts = (state.events || []).filter(e => String(e.lotId) === String(id) && String(e.containerId) === String(container.id)).sort((a,b) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime()); 
+    const evts = (state.events || []).filter((e: any) => String(e.lotId) === String(id) && String(e.containerId) === String(container.id)).sort((a: any, b: any) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime()); 
     return { lot:l, from: evts[0]?.createdAt || evts[0]?.date, to: evts[evts.length-1]?.createdAt || evts[evts.length-1]?.date }; 
   }).filter(Boolean).reverse();
   
-  const formatVolShort = (vol) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
+  const formatVolShort = (vol: any) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
 
   const toggleCleaning = async () => {
     setIsSubmitting(true);
@@ -2780,7 +2780,6 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
     try {
       const res = await fetch(`/api/containers`, { // Adaptez à votre route API
         method: 'PUT', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ id: container.id, status: nextStatus }) 
       });
@@ -2807,15 +2806,16 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
         const err = await res.json();
         throw new Error(err.error || "Raison inconnue");
       }
-    } catch(e) {
-      alert("BLOCAGE BASE DE DONNÉES : " + e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("BLOCAGE BASE DE DONNÉES : " + message);
     } finally {
       setIsSubmitting(false);
       setModal(null);
     }
   };
 
-  const formatEventDate = (dStr) => {
+  const formatEventDate = (dStr: any) => {
     if (!dStr) return "--";
     const d = new Date(dStr);
     if (isNaN(d.getTime())) return dStr; // Fallback pour les vieilles dates formatées manuellement
@@ -2835,8 +2835,8 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
               onClick={() => prevContainer && onSelectContainer(prevContainer)} 
               disabled={!prevContainer}
               style={{ background:"none", border:`1px solid ${T.border}`, color: prevContainer ? T.textStrong : T.textDim, padding:"6px 14px", borderRadius:3, cursor: prevContainer ? "pointer" : "default", fontSize:11, fontFamily:"monospace", opacity: prevContainer ? 1 : 0.3, transition: "all 0.2s" }}
-              onMouseEnter={e => prevContainer && (e.currentTarget.style.background = T.surfaceHigh)}
-              onMouseLeave={e => prevContainer && (e.currentTarget.style.background = "none")}
+              onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => prevContainer && (e.currentTarget.style.background = T.surfaceHigh)}
+              onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => prevContainer && (e.currentTarget.style.background = "none")}
             >
               {"< Précédent"}
             </button>
