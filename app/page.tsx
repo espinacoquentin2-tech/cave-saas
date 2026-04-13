@@ -847,7 +847,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
         <FF label="État Sanitaire">
-          <Select value={form.sanitaire} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, sanitaire:e.target.value})} style={{ borderLeft: `4px solid ${sanColors[form.sanitaire]}`, fontWeight:"bold" }}>
+          <Select value={form.sanitaire} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, sanitaire:e.target.value})} style={{ borderLeft: `4px solid ${sanColors[form.sanitaire as keyof typeof sanColors]}`, fontWeight:"bold" }}>
             <option value="A+">A+ (Parfait)</option><option value="A">A (Très bon)</option><option value="B">B (Moyen, trié)</option><option value="C">C (Médiocre)</option>
           </Select>
         </FF>
@@ -868,9 +868,9 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
           </FF>
           <FF label="Envoyer vers (Cuve)">
             <div style={{ display: "flex", gap: 8 }}>
-              <Select value={form.cuveId} disabled={isSubmitting} onChange={e=>setForm({...form, cuveId:e.target.value})} style={{ flex: 1, borderColor: !form.cuveId ? T.red : T.border }}>
+              <Select value={form.cuveId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, cuveId:e.target.value})} style={{ flex: 1, borderColor: !form.cuveId ? T.red : T.border }}>
                 <option value="">-- Choisir une cuve --</option>
-                {availCuves.map(c => {
+                {availCuves.map((c: any) => {
                   const volDispo = Math.max(0, (c.capacityValue || c.capacity || 0) - (c.currentVolume || 0)).toFixed(1);
                   return (
                     <option key={c.id} value={c.id}>
@@ -885,7 +885,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
         </div>
         <div style={{ marginTop: 8 }}>
           <FF label="Observations (Sulfitage, levurage...)">
-            <Input value={form.notes} disabled={isSubmitting} onChange={e=>setForm({...form, notes:e.target.value})} placeholder="Ex: Sulfitage à la benne 3g/hL..." />
+            <Input value={form.notes} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, notes:e.target.value})} placeholder="Ex: Sulfitage à la benne 3g/hL..." />
           </FF>
         </div>
       </div>
@@ -1001,14 +1001,14 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
   const pressoirs = state.pressoirs || [];
   const apports = state.pressings || []; 
-  const apportsEnAttente = apports.filter(a => a.status !== "PRESSÉ");
+  const apportsEnAttente = apports.filter((a: any) => a.status !== "PRESSÉ");
 
   const depts = Object.keys(CHAMPAGNE_GEODATA || {});
-  const regions = customDep ? Object.keys(CHAMPAGNE_GEODATA[customDep] || {}) : [];
-  const communes = (customDep && customReg) ? (CHAMPAGNE_GEODATA[customDep][customReg] || []) : [];
+  const regions = customDep ? Object.keys((CHAMPAGNE_GEODATA as Record<string, any>)[customDep] || {}) : [];
+  const communes = (customDep && customReg) ? (((CHAMPAGNE_GEODATA as Record<string, any>)[customDep] || {})[customReg] || []) : [];
 
-  const safeParseFloat = (val) => parseFloat(String(val).replace(',', '.'));
-  const parseToHl = (val) => parseFloat((parseFloat(String(val).replace(',', '.')) || 0).toFixed(2));
+  const safeParseFloat = (val: any) => parseFloat(String(val).replace(',', '.'));
+  const parseToHl = (val: any) => parseFloat((parseFloat(String(val).replace(',', '.')) || 0).toFixed(2));
 
   // --- ACTIONS SIMPLES ---
   const handleAddApport = async () => {
@@ -1025,7 +1025,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       const res = await fetch('/api/pressings', { 
         method: 'POST', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           date: new Date().toISOString(), 
@@ -1044,7 +1043,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       setNewApport({ parcelle: "", cepage: "CH", poids: "" });
       setIsCustomOrigin(false); setCustomDep(""); setCustomReg(""); setCustomCom(""); setCustomNom("");
     } catch (e) { 
-      alert(e.message); 
+      alert(e instanceof Error ? e.message : String(e)); 
     } finally { 
       setIsSubmitting(false); 
     }
@@ -1054,11 +1053,11 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     if (!apportToDelete) return;
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/pressings?id=${apportToDelete.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/pressings?id=${(apportToDelete as any).id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error((await res.json()).error);
       if (refreshData) await refreshData();
     } catch(e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     }
     setApportToDelete(null); 
     setIsSubmitting(false);
@@ -1071,7 +1070,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       const res = await fetch('/api/pressoirs', { 
         method: 'POST', 
         headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
         body: JSON.stringify(newPress) 
       });
       if (!res.ok) throw new Error("Erreur serveur");
@@ -1080,18 +1078,17 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       setNewPress({ nom: "", type: "Pneumatique", marque: "Bücher", capacite: 4000 });
       setShowAddPress(false);
     } catch (e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const updatePressStatus = async (id, status, extraData = {}) => {
+  const updatePressStatus = async (id: any, status: any, extraData: any = {}) => {
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/pressoirs', { 
         method: 'PUT', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ id, status, ...extraData }) 
       });
@@ -1100,7 +1097,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       if (refreshData) await refreshData();
       if (status === "VIDE") setActionModal(null);
     } catch (e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSubmitting(false);
     }
@@ -1110,9 +1107,9 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
   const handleLoadSubmit = async (forceLoad = false, forceMix = false) => {
     if (!selectedApport || !loadWeight) return alert("Veuillez sélectionner un lot et indiquer le poids à charger.");
     
-    const apport = apports.find(a => String(a.id) === String(selectedApport));
+    const apport = apports.find((a: any) => String(a.id) === String(selectedApport));
     const weightToLoad = safeParseFloat(loadWeight);
-    const p = actionModal.press;
+    const p = (actionModal as any).press;
 
     if (weightToLoad > apport.poids) return alert("Vous ne pouvez pas charger plus que ce qu'il reste sur le quai !");
     
@@ -1127,7 +1124,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
           type: fillPct < 90 ? 'UNDER' : 'OVER',
           fillPct, totalLoad, missing: p.capacite - totalLoad, excess: totalLoad - p.capacite,
           forceMix
-        });
+        } as any);
         return; 
       }
     }
@@ -1136,7 +1133,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       const res = await fetch('/api/pressings/load', { 
         method: 'POST', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           pressId: p.id, 
@@ -1151,7 +1147,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
         const errorData = await res.json();
         // Gestion de l'erreur 409 (Mélange de cépage détecté par le backend)
         if (res.status === 409) {
-          setMixWarning({ apport, press: p, weightToLoad });
+          setMixWarning({ apport, press: p, weightToLoad } as any);
           setIsSubmitting(false);
           return;
         }
@@ -1166,7 +1162,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       if (refreshData) await refreshData();
 
     } catch(e) { 
-      alert(e.message); 
+      alert(e instanceof Error ? e.message : String(e)); 
     } finally {
       setIsSubmitting(false);
     }
@@ -1177,7 +1173,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       const res = await fetch('/api/containers', { 
         method: 'POST', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           name: newCuve.name, 
@@ -1193,7 +1188,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       setNewCuve({ name: "", type: "Débourbage Cuvée", capacityValue: "" });
       setShowAddCuve(false);
     } catch(e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSubmitting(false);
     }
@@ -1202,7 +1197,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
   // --- DÉBOURBAGE (TRANSFERT / SOUTIRAGE) ---
   const validerTransfert = async () => {
     // 1. Calcul du volume total saisi
-    const volSaisi = transferDests.reduce((sum, d) => sum + parseToHl(d.vol), 0);
+    const volSaisi = transferDests.reduce((sum: any, d: any) => sum + parseToHl(d.vol), 0);
     
     // Remplacement du "alert" par un Toast rouge
     if (volSaisi <= 0) {
@@ -1210,8 +1205,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       return;
     }
     
-    const sourceId = transferModal.id;
-    const currentLot = (state.lots || []).find(l => String(l.currentContainerId || l.containerId) === String(sourceId) && parseFloat(l.currentVolume || l.volume) > 0);
+    const sourceId = (transferModal as any).id;
+    const currentLot = (state.lots || []).find((l: any) => String(l.currentContainerId || l.containerId) === String(sourceId) && parseFloat(l.currentVolume || l.volume) > 0);
 
     if (!currentLot) {
        dispatch({ type: "TOAST_ADD", payload: { msg: "Erreur : La cuve source est vide ou le lot est introuvable.", color: T.red } });
@@ -1227,8 +1222,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       // 2. Préparation stricte des destinations
       const validDestinations = transferDests
-        .filter(d => d.cuveId && parseToHl(d.vol) > 0)
-        .map(d => ({ toId: parseInt(d.cuveId), volume: parseToHl(d.vol) }));
+        .filter((d: any) => d.cuveId && parseToHl(d.vol) > 0)
+        .map((d: any) => ({ toId: parseInt(d.cuveId), volume: parseToHl(d.vol) }));
 
       if (validDestinations.length === 0) {
         throw new Error("Aucune cuve de destination valide n'a été configurée.");
@@ -1236,7 +1231,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
       // 3. Payload Zod-compliant
       const payload = {
-          lotId: parseInt(currentLot.id),
+          lotId: parseInt((currentLot as any).id),
           fromId: parseInt(sourceId),
           volume: volSaisi, 
           destinations: validDestinations,
@@ -1250,7 +1245,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       // 4. Appel de l'API blindée
       const res = await fetch('/api/transfers', {
           method: 'POST',
-          headers: buildApiHeaders(user),
           headers: buildApiHeaders(user),
           body: JSON.stringify(payload)
       });
@@ -1280,7 +1274,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
   // --- ÉCOULEMENT DES JUS DU PRESSOIR (Création des lots de moût) ---
   const validerEcoulement = async () => {
-    const p = actionModal.press;
+    const p = (actionModal as any).press;
     setIsSubmitting(true);
     
     try {
@@ -1289,16 +1283,15 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
         pressoirId: p.id,
         parcelle: p.parcelle,
         cepage: p.cepage,
-        cuvees: cuveeDests.filter(d => d.cuveId && parseToHl(d.vol) > 0).map(d => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
-        tailles: tailleDests.filter(d => d.cuveId && parseToHl(d.vol) > 0).map(d => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
-        rebeches: rebechesDests.filter(d => d.cuveId && parseToHl(d.vol) > 0).map(d => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
+        cuvees: cuveeDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
+        tailles: tailleDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
+        rebeches: rebechesDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
         operator: user?.name || "Système",
         idempotencyKey: idempotencyKey || crypto.randomUUID()
       };
 
       const res = await fetch('/api/pressings/ecoulement', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify(payload) 
       });
@@ -1321,7 +1314,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     }
   };
 
-  const calculateFractions = (kg) => {
+  const calculateFractions = (kg: any) => {
     const cuvee = (kg / 4000) * 20.5;
     const taille = (kg / 4000) * 5.0;
     const maxRebeches = (cuvee + taille) * 0.10; 
@@ -1332,7 +1325,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     };
   };
 
-  const toggleCleaning = async (c) => {
+  const toggleCleaning = async (c: any) => {
     setIsSubmitting(true);
     const nextStatus = c.status === "NETTOYAGE" ? "VIDE" : "NETTOYAGE";
     try {
@@ -1343,15 +1336,15 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     finally { setIsSubmitting(false); }
   };
 
-  const pressoirsActifs = pressoirs.filter(p => p.status !== "VIDE");
-  const pressoirsArret = pressoirs.filter(p => p.status === "VIDE");
+  const pressoirsActifs = pressoirs.filter((p: any) => p.status !== "VIDE");
+  const pressoirsArret = pressoirs.filter((p: any) => p.status === "VIDE");
   
-  const cuvesDebourbage = (state.containers || []).filter(c => c.status !== "ARCHIVÉE" && (c.type?.includes("Débourbage") || c.type?.includes("Belon") || c.displayName?.toLowerCase().includes("cuvée") || c.displayName?.toLowerCase().includes("taille")));
+  const cuvesDebourbage = (state.containers || []).filter((c: any) => c.status !== "ARCHIVÉE" && (c.type?.includes("Débourbage") || c.type?.includes("Belon") || c.displayName?.toLowerCase().includes("cuvée") || c.displayName?.toLowerCase().includes("taille")));
   
-  const debourbageActifs = cuvesDebourbage.filter(c => (parseFloat(c.currentVolume || c.volume) || 0) > 0);
-  const debourbageVides = cuvesDebourbage.filter(c => (parseFloat(c.currentVolume || c.volume) || 0) <= 0);
+  const debourbageActifs = cuvesDebourbage.filter((c: any) => (parseFloat(c.currentVolume || c.volume) || 0) > 0);
+  const debourbageVides = cuvesDebourbage.filter((c: any) => (parseFloat(c.currentVolume || c.volume) || 0) <= 0);
 
-  const cuvesCuverie = (state.containers || []).filter(c => {
+  const cuvesCuverie = (state.containers || []).filter((c: any) => {
     if (c.status === "ARCHIVÉE") return false;
     const t = (c.type || "").toLowerCase();
     const n = ((c.displayName || c.name) || "").toLowerCase();
@@ -1365,10 +1358,10 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     return true;
   });
 
-  const cuvesBourbes = (state.containers || []).filter(c => c.status !== "ARCHIVÉE" && (c.type === "CUVE_BOURBES" || c.type?.includes("Bourbe") || (c.displayName || c.name || "").toLowerCase().includes("bourbe")));
-  const cuvesRebeches = (state.containers || []).filter(c => c.status !== "ARCHIVÉE" && (c.type === "CUVE_REBECHES" || c.type?.includes("Rebeche") || (c.displayName || c.name || "").toLowerCase().includes("rebêche") || (c.displayName || c.name || "").toLowerCase().includes("rebeche")));
+  const cuvesBourbes = (state.containers || []).filter((c: any) => c.status !== "ARCHIVÉE" && (c.type === "CUVE_BOURBES" || c.type?.includes("Bourbe") || (c.displayName || c.name || "").toLowerCase().includes("bourbe")));
+  const cuvesRebeches = (state.containers || []).filter((c: any) => c.status !== "ARCHIVÉE" && (c.type === "CUVE_REBECHES" || c.type?.includes("Rebeche") || (c.displayName || c.name || "").toLowerCase().includes("rebêche") || (c.displayName || c.name || "").toLowerCase().includes("rebeche")));
 
-  const renderDebourbageCard = (c) => {
+  const renderDebourbageCard = (c: any) => {
     const nameToDisplay = c.displayName || c.name || "Sans nom";
     const isCuvee = c.type.includes("Cuvée") || nameToDisplay.toLowerCase().includes("cuvée");
     const currentVol = parseFloat(c.currentVolume || c.volume) || 0;
@@ -1411,7 +1404,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                  disabled={isVide || isSubmitting} onClick={() => { 
                    const autoClair = parseToHl(currentVol * 0.98); 
                    setTransferModal(c); 
-                   setTransferDests([{ id: Date.now(), cuveId: "", vol: autoClair.toFixed(2) }]); 
+                   setTransferDests([{ id: Date.now(), cuveId: "", vol: autoClair.toFixed(2) }] as any); 
                    setTransferOptions({ actionRest: "ENVOYER_BOURBES", bourbesDestId: "" });
                    setQuickDestIndex(null);
                  }}>
@@ -1423,8 +1416,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     );
   };
 
-  const renderDestSection = (title, icon, color, dests, setDests, options, theoVol, defaultType, isHardLimit = false) => {
-    const total = dests.reduce((sum, d) => sum + parseToHl(d.vol), 0);
+  const renderDestSection = (title: any, icon: any, color: any, dests: any, setDests: any, options: any, theoVol: any, defaultType: any, isHardLimit = false) => {
+    const total = dests.reduce((sum: any, d: any) => sum + parseToHl(d.vol), 0);
     const isOverLimit = isHardLimit && total > (parseFloat(theoVol) + 0.05);
 
     return (
