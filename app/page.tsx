@@ -1325,7 +1325,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     };
   };
 
-  const toggleCleaning = async (c) => {
+  const toggleCleaning = async (c: any) => {
     setIsSubmitting(true);
     const nextStatus = c.status === "NETTOYAGE" ? "VIDE" : "NETTOYAGE";
     try {
@@ -1336,15 +1336,15 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     finally { setIsSubmitting(false); }
   };
 
-  const pressoirsActifs = pressoirs.filter(p => p.status !== "VIDE");
-  const pressoirsArret = pressoirs.filter(p => p.status === "VIDE");
+  const pressoirsActifs = pressoirs.filter((p: any) => p.status !== "VIDE");
+  const pressoirsArret = pressoirs.filter((p: any) => p.status === "VIDE");
   
-  const cuvesDebourbage = (state.containers || []).filter(c => c.status !== "ARCHIVÉE" && (c.type?.includes("Débourbage") || c.type?.includes("Belon") || c.displayName?.toLowerCase().includes("cuvée") || c.displayName?.toLowerCase().includes("taille")));
+  const cuvesDebourbage = (state.containers || []).filter((c: any) => c.status !== "ARCHIVÉE" && (c.type?.includes("Débourbage") || c.type?.includes("Belon") || c.displayName?.toLowerCase().includes("cuvée") || c.displayName?.toLowerCase().includes("taille")));
   
-  const debourbageActifs = cuvesDebourbage.filter(c => (parseFloat(c.currentVolume || c.volume) || 0) > 0);
-  const debourbageVides = cuvesDebourbage.filter(c => (parseFloat(c.currentVolume || c.volume) || 0) <= 0);
+  const debourbageActifs = cuvesDebourbage.filter((c: any) => (parseFloat(c.currentVolume || c.volume) || 0) > 0);
+  const debourbageVides = cuvesDebourbage.filter((c: any) => (parseFloat(c.currentVolume || c.volume) || 0) <= 0);
 
-  const cuvesCuverie = (state.containers || []).filter(c => {
+  const cuvesCuverie = (state.containers || []).filter((c: any) => {
     if (c.status === "ARCHIVÉE") return false;
     const t = (c.type || "").toLowerCase();
     const n = ((c.displayName || c.name) || "").toLowerCase();
@@ -1358,10 +1358,10 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     return true;
   });
 
-  const cuvesBourbes = (state.containers || []).filter(c => c.status !== "ARCHIVÉE" && (c.type === "CUVE_BOURBES" || c.type?.includes("Bourbe") || (c.displayName || c.name || "").toLowerCase().includes("bourbe")));
-  const cuvesRebeches = (state.containers || []).filter(c => c.status !== "ARCHIVÉE" && (c.type === "CUVE_REBECHES" || c.type?.includes("Rebeche") || (c.displayName || c.name || "").toLowerCase().includes("rebêche") || (c.displayName || c.name || "").toLowerCase().includes("rebeche")));
+  const cuvesBourbes = (state.containers || []).filter((c: any) => c.status !== "ARCHIVÉE" && (c.type === "CUVE_BOURBES" || c.type?.includes("Bourbe") || (c.displayName || c.name || "").toLowerCase().includes("bourbe")));
+  const cuvesRebeches = (state.containers || []).filter((c: any) => c.status !== "ARCHIVÉE" && (c.type === "CUVE_REBECHES" || c.type?.includes("Rebeche") || (c.displayName || c.name || "").toLowerCase().includes("rebêche") || (c.displayName || c.name || "").toLowerCase().includes("rebeche")));
 
-  const renderDebourbageCard = (c) => {
+  const renderDebourbageCard = (c: any) => {
     const nameToDisplay = c.displayName || c.name || "Sans nom";
     const isCuvee = c.type.includes("Cuvée") || nameToDisplay.toLowerCase().includes("cuvée");
     const currentVol = parseFloat(c.currentVolume || c.volume) || 0;
@@ -1404,7 +1404,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                  disabled={isVide || isSubmitting} onClick={() => { 
                    const autoClair = parseToHl(currentVol * 0.98); 
                    setTransferModal(c); 
-                   setTransferDests([{ id: Date.now(), cuveId: "", vol: autoClair.toFixed(2) }]); 
+                   setTransferDests([{ id: Date.now(), cuveId: "", vol: autoClair.toFixed(2) }] as any); 
                    setTransferOptions({ actionRest: "ENVOYER_BOURBES", bourbesDestId: "" });
                    setQuickDestIndex(null);
                  }}>
@@ -1416,8 +1416,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     );
   };
 
-  const renderDestSection = (title, icon, color, dests, setDests, options, theoVol, defaultType, isHardLimit = false) => {
-    const total = dests.reduce((sum, d) => sum + parseToHl(d.vol), 0);
+  const renderDestSection = (title: any, icon: any, color: any, dests: any, setDests: any, options: any, theoVol: any, defaultType: any, isHardLimit = false) => {
+    const total = dests.reduce((sum: any, d: any) => sum + parseToHl(d.vol), 0);
     const isOverLimit = isHardLimit && total > (parseFloat(theoVol) + 0.05);
 
     return (
