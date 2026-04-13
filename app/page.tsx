@@ -3338,8 +3338,7 @@ function RenameContainerModal({ container, onClose }: { container: any; onClose:
     try {
       const res = await fetch('/api/containers', { 
         method: 'PUT', 
-        headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
+        headers: buildApiHeaders(undefined), 
         body: JSON.stringify({ id: container.id, name: newName }) 
       });
       
@@ -3350,7 +3349,7 @@ function RenameContainerModal({ container, onClose }: { container: any; onClose:
       } else {
         throw new Error((await res.json()).error);
       }
-    } catch(e) {
+    } catch(e: any) {
       alert("Erreur : " + e.message);
     } finally {
       setIsSubmitting(false);
@@ -3360,7 +3359,7 @@ function RenameContainerModal({ container, onClose }: { container: any; onClose:
   return (
     <Modal title="Renommer le contenant" onClose={onClose}>
       <FF label="Nouveau nom">
-        <Input value={newName} onChange={e => setNewName(e.target.value)} disabled={isSubmitting} />
+        <Input value={newName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewName(e.target.value)} disabled={isSubmitting} />
       </FF>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
@@ -3370,7 +3369,7 @@ function RenameContainerModal({ container, onClose }: { container: any; onClose:
   );
 }
 
-function CreateLotModal({ container, onClose }) {
+function CreateLotModal({ container, onClose }: { container: any; onClose: any }) {
   const T = useTheme();
   const { state, dispatch, refreshData } = useStore(); 
   const { user } = useAuth();
@@ -3390,7 +3389,6 @@ function CreateLotModal({ container, onClose }) {
       const res = await fetch('/api/lots', { 
         method: 'POST', 
         headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           code, millesime: parseInt(form.millesime), cepage: form.cepage, lieu: form.lieu.toUpperCase(), 
           volume: parseFloat(form.volume), containerId: container.id, status: form.status, 
@@ -3404,7 +3402,7 @@ function CreateLotModal({ container, onClose }) {
       dispatch({ type:"TOAST_ADD", payload:{ msg:`Lot ${code} créé !`, color:"#2d6640" } }); 
       if (refreshData) await refreshData();
       onClose(); 
-    } catch(e) {
+    } catch(e: any) {
       alert("Erreur : " + e.message);
       setIdempotencyKey(crypto.randomUUID()); // 👈 NOUVELLE CLÉ GÉNÉRÉE EN CAS D'ERREUR
     } finally {
@@ -3415,26 +3413,26 @@ function CreateLotModal({ container, onClose }) {
   return (
     <Modal title="Créer un lot" onClose={onClose}>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-        <FF label="Millésime"><Input type="number" value={form.millesime} onChange={e => setForm({...form, millesime:e.target.value})} disabled={isSubmitting}/></FF>
+        <FF label="Millésime"><Input type="number" value={form.millesime} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, millesime:e.target.value})} disabled={isSubmitting}/></FF>
         <FF label="Cépage">
-          <Select value={form.cepage} onChange={e => setForm({...form, cepage:e.target.value})} disabled={isSubmitting}>
-            {CEPAGES.map(c => <option key={c}>{c}</option>)}
+          <Select value={form.cepage} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, cepage:e.target.value})} disabled={isSubmitting}>
+            {CEPAGES.map((c: any) => <option key={c}>{c}</option>)}
           </Select>
         </FF>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:12 }}>
-        <FF label="Lieu-dit / Parcelle"><Input value={form.lieu} onChange={e => setForm({...form, lieu:e.target.value})} disabled={isSubmitting}/></FF>
+        <FF label="Lieu-dit / Parcelle"><Input value={form.lieu} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, lieu:e.target.value})} disabled={isSubmitting}/></FF>
         <FF label="Qualité">
-          <Select value={form.qualite} onChange={e => setForm({...form, qualite:e.target.value})} disabled={isSubmitting}>
+          <Select value={form.qualite} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, qualite:e.target.value})} disabled={isSubmitting}>
             <option value="">Standard</option><option value="Cuvée">Cuvée (-C)</option><option value="Taille">Taille (-T)</option>
           </Select>
         </FF>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-        <FF label="Volume initial (hL)"><Input type="number" step="0.1" value={form.volume} onChange={e => setForm({...form, volume:e.target.value})} disabled={isSubmitting}/></FF>
+        <FF label="Volume initial (hL)"><Input type="number" step="0.1" value={form.volume} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, volume:e.target.value})} disabled={isSubmitting}/></FF>
         <FF label="Statut initial">
-          <Select value={form.status} onChange={e => setForm({...form, status:e.target.value})} disabled={isSubmitting}>
-            {LOT_STATUSES.slice(0,4).map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+          <Select value={form.status} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, status:e.target.value})} disabled={isSubmitting}>
+            {LOT_STATUSES.slice(0,4).map((s: any) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
           </Select>
         </FF>
       </div>
