@@ -2054,7 +2054,7 @@ function AddIntrantModal({ container, lot, onClose }: AddIntrantModalProps) {
     <Modal title="Opération / Intrant" onClose={onClose}>
       <div style={{ marginBottom: 16 }}>
         <FF label="Type d'opération">
-          <Select value={intrant} onChange={e => setIntrant(e.target.value)} style={{ borderColor: isBlockedAOC ? T.red : T.border }} disabled={isSubmitting}>
+          <Select value={intrant} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setIntrant(e.target.value)} style={{ borderColor: isBlockedAOC ? T.red : T.border }} disabled={isSubmitting}>
             <optgroup label="Opérations Œnologiques">
               <option value="Ouillage">Ouillage</option>
               <option value="Filtration">Filtration</option>
@@ -2081,10 +2081,10 @@ function AddIntrantModal({ container, lot, onClose }: AddIntrantModalProps) {
 
       <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:10 }}>
         <FF label="Quantité">
-          <Input type="number" step="0.1" value={qty} onChange={e => setQty(e.target.value)} disabled={isBlockedAOC || isSubmitting} />
+          <Input type="number" step="0.1" value={qty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQty(e.target.value)} disabled={isBlockedAOC || isSubmitting} />
         </FF>
         <FF label="Unité">
-          <Select value={unit} onChange={e => setUnit(e.target.value)} disabled={isBlockedAOC || isSubmitting}>
+          <Select value={unit} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUnit(e.target.value)} disabled={isBlockedAOC || isSubmitting}>
             {["opération", "g", "kg", "mL", "cL", "L", "g/hL", "mL/hL"].map(u => <option key={u}>{u}</option>)}
           </Select>
         </FF>
@@ -2100,7 +2100,14 @@ function AddIntrantModal({ container, lot, onClose }: AddIntrantModalProps) {
 // =============================================================================
 // MODALE AJOUT CONTENANT (SÉCURISÉE)
 // =============================================================================
-function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialType = "CUVE_INOX" }) {
+type AddContainerModalProps = {
+  onClose: () => void;
+  onSuccess?: (newId: string) => void;
+  initialCapacity?: string;
+  initialType?: string;
+};
+
+function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialType = "CUVE_INOX" }: AddContainerModalProps) {
   const T = useTheme(); 
   const { dispatch, refreshData } = useStore();
   
@@ -2110,7 +2117,7 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
 
   const isDebourbage = form.type.includes("DEBOURBAGE");
   
-  const handleCapacityChange = (e) => {
+  const handleCapacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value;
     if (isDebourbage && parseFloat(val) > 200) val = "200";
     setForm({ ...form, capacity: val });
@@ -2131,7 +2138,6 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
     try {
       const res = await fetch('/api/containers', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ ...form, type: finalType, capacity: parseFloat(form.capacity), idempotencyKey }) 
       });
