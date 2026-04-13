@@ -1749,13 +1749,13 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
       {/* --- MODALES --- */}
 
-      {actionModal?.type === "LOAD" && actionModal.press && (
-        <Modal title={`Charger : ${actionModal.press.nom}`} onClose={() => setActionModal(null)}>
+      {(actionModal as any)?.type === "LOAD" && (actionModal as any).press && (
+        <Modal title={`Charger : ${(actionModal as any).press.nom}`} onClose={() => setActionModal(null)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
             <FF label="Lot de raisins à charger">
-              <Select value={selectedApport} disabled={isSubmitting} onChange={e => setSelectedApport(e.target.value)}>
+              <Select value={selectedApport} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedApport(e.target.value)}>
                 <option value="">-- Sélectionner un apport sur le quai --</option>
-                {apportsEnAttente.map(a => (
+                {apportsEnAttente.map((a: any) => (
                   <option key={a.id} value={a.id}>
                     {a.cru || a.parcelle} ({a.cepage}) - Reste: {a.weight || a.poids} kg
                   </option>
@@ -1767,12 +1767,12 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                 type="number"
                 disabled={isSubmitting}
                 value={loadWeight}
-                onChange={e => setLoadWeight(e.target.value)}
-                placeholder={`Ex: ${actionModal.press.capacite}`}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLoadWeight(e.target.value)}
+                placeholder={`Ex: ${(actionModal as any).press.capacite}`}
               />
             </FF>
             <div style={{ fontSize: 11, color: T.textDim }}>
-              Capacité max du pressoir : {actionModal.press.capacite} kg
+              Capacité max du pressoir : {(actionModal as any).press.capacite} kg
             </div>
           </div>
           <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
@@ -1788,8 +1788,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       {mixWarning && (
         <Modal title="⚠️ Mélange de cépages détecté" onClose={() => setMixWarning(null)}>
           <div style={{ padding: "10px 0 20px 0", color: T.text, lineHeight: 1.5, fontSize: 14 }}>
-            Le pressoir contient actuellement du <strong>{mixWarning.press.cepage}</strong>.<br/><br/>
-            Vous vous apprêtez à y ajouter <strong>{mixWarning.weightToLoad} kg de {mixWarning.apport.cepage}</strong>.<br/><br/>
+            Le pressoir contient actuellement du <strong>{(mixWarning as any).press.cepage}</strong>.<br/><br/>
+            Vous vous apprêtez à y ajouter <strong>{(mixWarning as any).weightToLoad} kg de {(mixWarning as any).apport.cepage}</strong>.<br/><br/>
             Le système conservera l'identité du cépage majoritaire, mais gardera la trace exacte de ce mélange dans la provenance du lot.<br/>
             Voulez-vous vraiment procéder à ce mélange ?
           </div>
@@ -1806,38 +1806,38 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       )}
 
       {loadWarning && (
-        <Modal title={loadWarning.type === 'UNDER' ? "⚠️ Sous-charge détectée" : "🚨 Surcharge détectée"} onClose={() => setLoadWarning(null)}>
+        <Modal title={(loadWarning as any).type === 'UNDER' ? "⚠️ Sous-charge détectée" : "🚨 Surcharge détectée"} onClose={() => setLoadWarning(null)}>
           <div style={{ padding: "10px 0 20px 0", color: T.text, lineHeight: 1.5, fontSize: 14 }}>
-            {loadWarning.type === 'UNDER' ? (
+            {(loadWarning as any).type === 'UNDER' ? (
               <>
-                Le pressoir ne sera rempli qu'à <strong>{loadWarning.fillPct.toFixed(1)}%</strong> ({loadWarning.totalLoad} kg sur {actionModal.press.capacite} kg max).<br/><br/>
-                Il vous manque <strong>{loadWarning.missing.toFixed(0)} kg</strong> pour atteindre la pleine capacité de la machine.<br/>
+                Le pressoir ne sera rempli qu'à <strong>{(loadWarning as any).fillPct.toFixed(1)}%</strong> ({(loadWarning as any).totalLoad} kg sur {(actionModal as any).press.capacite} kg max).<br/><br/>
+                Il vous manque <strong>{(loadWarning as any).missing.toFixed(0)} kg</strong> pour atteindre la pleine capacité de la machine.<br/>
                 Voulez-vous vraiment lancer le cycle tel quel ?
               </>
             ) : (
               <>
-                Vous dépassez la capacité de la machine (<strong>{loadWarning.totalLoad} kg</strong> pour {actionModal.press.capacite} kg autorisés).<br/><br/>
-                Vous avez <strong>{loadWarning.excess.toFixed(0)} kg en trop</strong>. Cela peut entraîner une casse mécanique ou une extraction excessive.<br/>
+                Vous dépassez la capacité de la machine (<strong>{(loadWarning as any).totalLoad} kg</strong> pour {(actionModal as any).press.capacite} kg autorisés).<br/><br/>
+                Vous avez <strong>{(loadWarning as any).excess.toFixed(0)} kg en trop</strong>. Cela peut entraîner une casse mécanique ou une extraction excessive.<br/>
                 Voulez-vous forcer le chargement ?
               </>
             )}
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <Btn variant="secondary" onClick={() => setLoadWarning(null)} disabled={isSubmitting}>Annuler et modifier</Btn>
-            <Btn onClick={() => handleLoadSubmit(true, loadWarning.forceMix)} disabled={isSubmitting} style={{ background: loadWarning.type === 'OVER' ? T.red : T.accent, borderColor: loadWarning.type === 'OVER' ? T.red : T.accent, color: "#fff" }}>
-              {isSubmitting ? "Traitement..." : (loadWarning.type === 'OVER' ? "Forcer la surcharge" : "Lancer en sous-charge")}
+            <Btn onClick={() => handleLoadSubmit(true, (loadWarning as any).forceMix)} disabled={isSubmitting} style={{ background: (loadWarning as any).type === 'OVER' ? T.red : T.accent, borderColor: (loadWarning as any).type === 'OVER' ? T.red : T.accent, color: "#fff" }}>
+              {isSubmitting ? "Traitement..." : ((loadWarning as any).type === 'OVER' ? "Forcer la surcharge" : "Lancer en sous-charge")}
             </Btn>
           </div>
         </Modal>
       )}
 
       {/* --- MODALE D'ÉCOULEMENT (LA PLUS IMPORTANTE) --- */}
-      {actionModal?.type === "ECOULEMENT" && actionModal.press && (() => {
-        const cuvesCuvee = cuvesDebourbage.filter(c => c.type.includes("Cuvée") || (c.displayName || c.name || "").toLowerCase().includes("cuvée"));
-        const cuvesTaille = cuvesDebourbage.filter(c => c.type.includes("Taille") || (c.displayName || c.name || "").toLowerCase().includes("taille"));
-        const calcVol = calculateFractions(actionModal.press.loadKg); 
+      {(actionModal as any)?.type === "ECOULEMENT" && (actionModal as any).press && (() => {
+        const cuvesCuvee = cuvesDebourbage.filter((c: any) => c.type.includes("Cuvée") || (c.displayName || c.name || "").toLowerCase().includes("cuvée"));
+        const cuvesTaille = cuvesDebourbage.filter((c: any) => c.type.includes("Taille") || (c.displayName || c.name || "").toLowerCase().includes("taille"));
+        const calcVol = calculateFractions((actionModal as any).press.loadKg); 
 
-        const isDestInvalid = (dests, options) => dests.some(d => {
+        const isDestInvalid = (dests: any[], options: any[]) => dests.some((d: any) => {
             const v = parseToHl(d.vol); 
             if (v > 0 && !d.cuveId) return true;
             if (d.cuveId && v <= 0) return true;
