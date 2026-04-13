@@ -1043,7 +1043,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       setNewApport({ parcelle: "", cepage: "CH", poids: "" });
       setIsCustomOrigin(false); setCustomDep(""); setCustomReg(""); setCustomCom(""); setCustomNom("");
     } catch (e) { 
-      alert(e.message); 
+      alert(e instanceof Error ? e.message : String(e)); 
     } finally { 
       setIsSubmitting(false); 
     }
@@ -1057,7 +1057,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       if (!res.ok) throw new Error((await res.json()).error);
       if (refreshData) await refreshData();
     } catch(e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     }
     setApportToDelete(null); 
     setIsSubmitting(false);
@@ -1070,7 +1070,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       const res = await fetch('/api/pressoirs', { 
         method: 'POST', 
         headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
         body: JSON.stringify(newPress) 
       });
       if (!res.ok) throw new Error("Erreur serveur");
@@ -1079,18 +1078,17 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       setNewPress({ nom: "", type: "Pneumatique", marque: "Bücher", capacite: 4000 });
       setShowAddPress(false);
     } catch (e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const updatePressStatus = async (id, status, extraData = {}) => {
+  const updatePressStatus = async (id: any, status: any, extraData: any = {}) => {
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/pressoirs', { 
         method: 'PUT', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ id, status, ...extraData }) 
       });
@@ -1099,7 +1097,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       if (refreshData) await refreshData();
       if (status === "VIDE") setActionModal(null);
     } catch (e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSubmitting(false);
     }
@@ -1109,7 +1107,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
   const handleLoadSubmit = async (forceLoad = false, forceMix = false) => {
     if (!selectedApport || !loadWeight) return alert("Veuillez sélectionner un lot et indiquer le poids à charger.");
     
-    const apport = apports.find(a => String(a.id) === String(selectedApport));
+    const apport = apports.find((a: any) => String(a.id) === String(selectedApport));
     const weightToLoad = safeParseFloat(loadWeight);
     const p = actionModal.press;
 
