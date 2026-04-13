@@ -2649,14 +2649,19 @@ function DecuvageModal({ container, lot, onClose }: DecuvageModalProps) {
 // COMPOSANTS CUVERIE (PRODUCTION READY)
 // =============================================================================
 
-function ContainerTile({ c, onClick }) {
+type ContainerTileProps = {
+  c: any;
+  onClick: () => void;
+};
+
+function ContainerTile({ c, onClick }: ContainerTileProps) {
   const T = useTheme(); 
   const { state } = useStore();
   
   // NOUVEAU : On récupère les enfants et on utilise les bons champs BDD
-  const enfants = (state.containers || []).filter(enfant => enfant.parentId === c.id);
-  const totalCapacity = (c.capacityValue || c.capacity || 0) + enfants.reduce((sum, e) => sum + (e.capacityValue || e.capacity || 0), 0);
-  let totalVolume = (c.currentVolume || 0) + enfants.reduce((sum, e) => sum + (e.currentVolume || 0), 0);
+  const enfants = (state.containers || []).filter((enfant: any) => enfant.parentId === c.id);
+  const totalCapacity = (c.capacityValue || c.capacity || 0) + enfants.reduce((sum: any, e: any) => sum + (e.capacityValue || e.capacity || 0), 0);
+  let totalVolume = (c.currentVolume || 0) + enfants.reduce((sum: any, e: any) => sum + (e.currentVolume || 0), 0);
 
   const isReallyEmpty = c.status === "VIDE" || c.status === "NETTOYAGE" || totalVolume <= 0;
   totalVolume = isReallyEmpty ? 0 : totalVolume;
@@ -2665,13 +2670,13 @@ function ContainerTile({ c, onClick }) {
   const tc = getTypeColor(c.type);
   
   // Utilisation de currentContainerId pour la correspondance
-  const lot = isReallyEmpty ? null : (state.lots || []).find(l => String(l.id) === String(c.lotId) || String(l.currentContainerId || l.containerId) === String(c.id));
+  const lot = isReallyEmpty ? null : (state.lots || []).find((l: any) => String(l.id) === String(c.lotId) || String(l.currentContainerId || l.containerId) === String(c.id));
   const displayStatus = isReallyEmpty && c.status !== "NETTOYAGE" ? "VIDE" : c.status;
 
-  const formatVolShort = (vol) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
+  const formatVolShort = (vol: any) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
 
   return (
-    <div onClick={onClick} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16, cursor:"pointer", position:"relative", overflow:"hidden", borderLeft:`3px solid ${displayStatus === "NETTOYAGE" ? T.blue : tc}`, transition: "transform 0.2s, box-shadow 0.2s" }} onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = `0 4px 12px ${T.accent}11`; }} onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}>
+    <div onClick={onClick} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16, cursor:"pointer", position:"relative", overflow:"hidden", borderLeft:`3px solid ${displayStatus === "NETTOYAGE" ? T.blue : tc}`, transition: "transform 0.2s, box-shadow 0.2s" }} onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = `0 4px 12px ${T.accent}11`; }} onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}>
       <div style={{ position:"absolute", bottom:0, left:0, right:0, height:`${pct}%`, background:tc+"0d", pointerEvents:"none" }} />
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
         <div>
@@ -2702,17 +2707,24 @@ function ContainerTile({ c, onClick }) {
 // =============================================================================
 // DÉTAIL D'UNE CUVE / CITERNE (SÉCURISÉ)
 // =============================================================================
-function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onSelectContainer }) {
+type ContainerDetailProps = {
+  container: any;
+  onBack: () => void;
+  onSelectLot: (lot: any) => void;
+  onSelectContainer: (container: any) => void;
+};
+
+function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onSelectContainer }: ContainerDetailProps) {
   const T = useTheme(); 
   const { user } = useAuth(); 
   const { state, dispatch, refreshData } = useStore();
-  const container = (state.containers || []).find(c => c.id === initialContainer.id) || initialContainer;
+  const container = (state.containers || []).find((c: any) => c.id === initialContainer.id) || initialContainer;
   const [modal, setModal] = useState(null); 
   const [histTab, setHistTab] = useState("evenements");
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const navigableContainers = (state.containers || [])
-    .filter(c => 
+    .filter((c: any) => 
       c.status !== "LIVRE" && 
       c.status !== "ARCHIVÉE" && 
       !c.parentId && 
@@ -2721,23 +2733,23 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
       !c.type?.includes("Débourbage") && 
       !c.type?.includes("Belon")
     )
-    .sort((a, b) => (a.displayName || a.name).localeCompare(b.displayName || b.name));
+    .sort((a: any, b: any) => (a.displayName || a.name).localeCompare(b.displayName || b.name));
   
-  const currentIndex = navigableContainers.findIndex(c => c.id === container.id);
+  const currentIndex = navigableContainers.findIndex((c: any) => c.id === container.id);
   const prevContainer = currentIndex > 0 ? navigableContainers[currentIndex - 1] : null;
   const nextContainer = currentIndex < navigableContainers.length - 1 ? navigableContainers[currentIndex + 1] : null;
 
   const isCiterneMere = container.type === "CITERNE";
   const baseName = (container.displayName || container.name).split(" - Comp ")[0]; 
   
-  const enfants = (state.containers || []).filter(c => 
+  const enfants = (state.containers || []).filter((c: any) => 
     c.parentId === container.id || 
     (c.type === "COMPARTIMENT" && (c.displayName || c.name).startsWith(baseName) && c.id !== container.id)
   );
   
   const allCompartments = isCiterneMere ? [container, ...enfants] : [container]; 
   
-  const totalCapacity = isCiterneMere ? allCompartments.reduce((sum, c) => sum + (c.capacityValue || c.capacity || 0), 0) : (container.capacityValue || container.capacity || 0);
+  const totalCapacity = isCiterneMere ? allCompartments.reduce((sum: any, c: any) => sum + (c.capacityValue || c.capacity || 0), 0) : (container.capacityValue || container.capacity || 0);
   const totalVolume = isCiterneMere ? allCompartments.reduce((sum, c) => sum + (c.currentVolume || 0), 0) : (container.currentVolume || 0);
 
   const isReallyEmpty = container.status === "VIDE" || container.status === "NETTOYAGE" || totalVolume <= 0;
