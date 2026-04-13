@@ -1222,8 +1222,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       // 2. Préparation stricte des destinations
       const validDestinations = transferDests
-        .filter(d => d.cuveId && parseToHl(d.vol) > 0)
-        .map(d => ({ toId: parseInt(d.cuveId), volume: parseToHl(d.vol) }));
+        .filter((d: any) => d.cuveId && parseToHl(d.vol) > 0)
+        .map((d: any) => ({ toId: parseInt(d.cuveId), volume: parseToHl(d.vol) }));
 
       if (validDestinations.length === 0) {
         throw new Error("Aucune cuve de destination valide n'a été configurée.");
@@ -1231,7 +1231,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
       // 3. Payload Zod-compliant
       const payload = {
-          lotId: parseInt(currentLot.id),
+          lotId: parseInt((currentLot as any).id),
           fromId: parseInt(sourceId),
           volume: volSaisi, 
           destinations: validDestinations,
@@ -1245,7 +1245,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       // 4. Appel de l'API blindée
       const res = await fetch('/api/transfers', {
           method: 'POST',
-          headers: buildApiHeaders(user),
           headers: buildApiHeaders(user),
           body: JSON.stringify(payload)
       });
@@ -1275,7 +1274,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
   // --- ÉCOULEMENT DES JUS DU PRESSOIR (Création des lots de moût) ---
   const validerEcoulement = async () => {
-    const p = actionModal.press;
+    const p = (actionModal as any).press;
     setIsSubmitting(true);
     
     try {
@@ -1284,16 +1283,15 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
         pressoirId: p.id,
         parcelle: p.parcelle,
         cepage: p.cepage,
-        cuvees: cuveeDests.filter(d => d.cuveId && parseToHl(d.vol) > 0).map(d => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
-        tailles: tailleDests.filter(d => d.cuveId && parseToHl(d.vol) > 0).map(d => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
-        rebeches: rebechesDests.filter(d => d.cuveId && parseToHl(d.vol) > 0).map(d => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
+        cuvees: cuveeDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
+        tailles: tailleDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
+        rebeches: rebechesDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
         operator: user?.name || "Système",
         idempotencyKey: idempotencyKey || crypto.randomUUID()
       };
 
       const res = await fetch('/api/pressings/ecoulement', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify(payload) 
       });
@@ -1316,7 +1314,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     }
   };
 
-  const calculateFractions = (kg) => {
+  const calculateFractions = (kg: any) => {
     const cuvee = (kg / 4000) * 20.5;
     const taille = (kg / 4000) * 5.0;
     const maxRebeches = (cuvee + taille) * 0.10; 
