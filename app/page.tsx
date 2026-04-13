@@ -2351,11 +2351,10 @@ function TransferModal({ container, onClose }: TransferModalProps) {
       const res = await fetch('/api/transfers', { 
         method: 'POST', 
         headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           lotId: lotToTransfer.id, 
           fromId: container.id, 
-          destinations: dests.map(d => ({ toId: parseInt(d.toId), volume: Number(parseFloat(d.vol).toFixed(2)) })), 
+          destinations: dests.map((d: any) => ({ toId: parseInt(d.toId), volume: Number(parseFloat(d.vol).toFixed(2)) })), 
           volume: totalVol,
           operator: user.name, 
           remainderType: isPartial ? remType : null, 
@@ -2372,8 +2371,9 @@ function TransferModal({ container, onClose }: TransferModalProps) {
       dispatch({ type:"TOAST_ADD", payload:{ msg:`Transfert éclaté validé`, color:"#2d6640" } }); 
       if (refreshData) await refreshData();
       onClose(); 
-    } catch(e) {
-      alert("Erreur : " + e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message);
     } finally {
       setIsSubmitting(false);
     }
@@ -2384,8 +2384,8 @@ function TransferModal({ container, onClose }: TransferModalProps) {
       <AddContainerModal 
         initialCapacity="50"
         onClose={() => setShowAdd(false)} 
-        onSuccess={(newId) => { 
-          const emptyRow = dests.find(d => !d.toId);
+        onSuccess={(newId: string) => { 
+          const emptyRow = dests.find((d: any) => !d.toId);
           if(emptyRow) updateDest(emptyRow.id, "toId", newId);
           setShowAdd(false); 
         }} 
@@ -2397,7 +2397,7 @@ function TransferModal({ container, onClose }: TransferModalProps) {
     <Modal title={`Transfert (Max ${sourceVol} hL)`} onClose={onClose} wide={true}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
         <FF label="Date de l'opération" style={{ flex: 1, maxWidth: 200 }}>
-          <Input type="date" value={transferDate} onChange={e => setTransferDate(e.target.value)} disabled={isSubmitting} />
+          <Input type="date" value={transferDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTransferDate(e.target.value)} disabled={isSubmitting} />
         </FF>
         {isAdmin && <Btn variant="ghost" onClick={() => setShowAdd(true)} style={{ fontSize:10, color:T.accent }} disabled={isSubmitting}>+ NOUVELLE CUVE</Btn>}
       </div>
@@ -2410,19 +2410,19 @@ function TransferModal({ container, onClose }: TransferModalProps) {
           </div>
         </div>
 
-        {dests.map((d, i) => {
-          const alreadySelectedIds = dests.filter(other => other.id !== d.id).map(other => String(other.toId));
-          let filteredTargets = baseAvailTargets.filter(c => !alreadySelectedIds.includes(String(c.id)));
+        {dests.map((d: any, i: number) => {
+          const alreadySelectedIds = dests.filter((other: any) => other.id !== d.id).map((other: any) => String(other.toId));
+          let filteredTargets = baseAvailTargets.filter((c: any) => !alreadySelectedIds.includes(String(c.id)));
 
-          if (d.filterZone) filteredTargets = filteredTargets.filter(c => c.zone === d.filterZone);
-          if (d.filterCat === "CUVES") filteredTargets = filteredTargets.filter(c => GROUPS.CUVES.includes(c.type));
-          if (d.filterCat === "BOIS") filteredTargets = filteredTargets.filter(c => GROUPS.BOIS.includes(c.type));
-          if (d.filterCat === "CITERNE") filteredTargets = filteredTargets.filter(c => c.type === "CITERNE" || c.type === "COMPARTIMENT");
-          if (d.filterCat === "AUTRE") filteredTargets = filteredTargets.filter(c => c.type === "AUTRE");
-          if (d.filterType) filteredTargets = filteredTargets.filter(c => c.type === d.filterType);
+          if (d.filterZone) filteredTargets = filteredTargets.filter((c: any) => c.zone === d.filterZone);
+          if (d.filterCat === "CUVES") filteredTargets = filteredTargets.filter((c: any) => GROUPS.CUVES.includes(c.type));
+          if (d.filterCat === "BOIS") filteredTargets = filteredTargets.filter((c: any) => GROUPS.BOIS.includes(c.type));
+          if (d.filterCat === "CITERNE") filteredTargets = filteredTargets.filter((c: any) => c.type === "CITERNE" || c.type === "COMPARTIMENT");
+          if (d.filterCat === "AUTRE") filteredTargets = filteredTargets.filter((c: any) => c.type === "AUTRE");
+          if (d.filterType) filteredTargets = filteredTargets.filter((c: any) => c.type === d.filterType);
 
-          const targetCuve = baseAvailTargets.find(c => String(c.id) === String(d.toId));
-          const targetLot = targetCuve && targetCuve.currentVolume > 0 ? (state.lots || []).find(l => String(l.currentContainerId || l.containerId) === String(targetCuve.id)) : null;
+          const targetCuve = baseAvailTargets.find((c: any) => String(c.id) === String(d.toId));
+          const targetLot = targetCuve && targetCuve.currentVolume > 0 ? (state.lots || []).find((l: any) => String(l.currentContainerId || l.containerId) === String(targetCuve.id)) : null;
           const free = targetCuve ? (targetCuve.capacityValue || targetCuve.capacity || 0) - (targetCuve.currentVolume || 0) : 0;
           
           const isError = parseFloat(d.vol) > free;
@@ -2431,11 +2431,11 @@ function TransferModal({ container, onClose }: TransferModalProps) {
           return (
             <div key={d.id} style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16, paddingBottom:16, borderBottom: i < dests.length-1 ? `1px dashed ${T.border}` : "none" }}>
               <div style={{ display:"flex", gap:8 }}>
-                <Select value={d.filterZone} onChange={e => updateDest(d.id, "filterZone", e.target.value)} style={{ flex: 1, fontSize: 11 }} disabled={isSubmitting}>
+                <Select value={d.filterZone} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateDest(d.id, "filterZone", e.target.value)} style={{ flex: 1, fontSize: 11 }} disabled={isSubmitting}>
                   <option value="">-- Zone --</option>
-                  {uniqueZones.map(z => <option key={z} value={z}>{z}</option>)}
+                  {uniqueZones.map((z: any) => <option key={z} value={z}>{z}</option>)}
                 </Select>
-                <Select value={d.filterCat} onChange={e => updateDest(d.id, "filterCat", e.target.value)} style={{ flex: 1, fontSize: 11 }} disabled={isSubmitting}>
+                <Select value={d.filterCat} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateDest(d.id, "filterCat", e.target.value)} style={{ flex: 1, fontSize: 11 }} disabled={isSubmitting}>
                   <option value="">-- Catégorie --</option>
                   <option value="CUVES">Cuves</option><option value="BOIS">Bois</option><option value="CITERNE">Citernes</option><option value="AUTRE">Autres</option>
                 </Select>
