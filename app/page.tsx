@@ -802,7 +802,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
       // 1. Création du Lot de macération (API Transactionnelle)
       const res = await fetch('/api/lots', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
+        headers: buildApiHeaders(undefined), 
         body: JSON.stringify({ 
           code: codeMac, millesime, cepage: pressing.cepage, lieu: pressing.cru || pressing.parcelle, 
           volume: parseFloat(form.volumeOccupe), containerId: parseInt(form.cuveId), 
@@ -816,7 +816,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
       // 2. MISE À JOUR DU QUAI (API)
       await fetch('/api/pressings', { 
         method: 'PATCH', 
-        headers: buildApiHeaders(user), 
+        headers: buildApiHeaders(undefined), 
         body: JSON.stringify({ id: pressing.id, status: "PRESSE" }) 
       }).catch(()=>{});
 
@@ -2138,7 +2138,7 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
     try {
       const res = await fetch('/api/containers', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
+        headers: buildApiHeaders(undefined), 
         body: JSON.stringify({ ...form, type: finalType, capacity: parseFloat(form.capacity), idempotencyKey }) 
       });
       
@@ -2148,8 +2148,9 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
       dispatch({ type:"TOAST_ADD", payload:{ msg:`${form.name} ajouté`, color:"#2d6640" } }); 
       if (refreshData) await refreshData();
       if (onSuccess) onSuccess(dbC.id.toString()); else onClose(); 
-    } catch (e) {
-      alert("Erreur : " + e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message);
     } finally {
       setIsSubmitting(false);
     }
@@ -2158,16 +2159,16 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
   return (
     <Modal title="Ajouter contenant" onClose={onClose}>
       <FF label="Nom affiché">
-        <Input value={form.name} onChange={e => setForm({...form, name:e.target.value})} placeholder="Ex: Cuve Inox 1" disabled={isSubmitting} />
+        <Input value={form.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, name:e.target.value})} placeholder="Ex: Cuve Inox 1" disabled={isSubmitting} />
       </FF>
       <FF label="Type">
-        <Select value={form.type} onChange={e => setForm({...form, type:e.target.value})} disabled={isSubmitting}>
+        <Select value={form.type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, type:e.target.value})} disabled={isSubmitting}>
           {CONTAINER_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g," ")}</option>)}
         </Select>
       </FF>
       {form.type === "AUTRE" && (
         <FF label="Précisez le type (ex: AMPHORE)">
-          <Input value={form.customType || ""} onChange={e => setForm({...form, customType:e.target.value})} placeholder="AMPHORE..." disabled={isSubmitting} />
+          <Input value={form.customType || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, customType:e.target.value})} placeholder="AMPHORE..." disabled={isSubmitting} />
         </FF>
       )}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
@@ -2182,7 +2183,7 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
            {isDebourbage && <div style={{ fontSize: 10, color: T.red, marginTop: 4, fontWeight: "bold" }}>⚠️ Limite AOC : 200 hL max</div>}
          </FF>
          <FF label="Zone">
-           <Input value={form.zone} onChange={e => setForm({...form, zone:e.target.value})} disabled={isSubmitting} />
+	           <Input value={form.zone} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, zone:e.target.value})} disabled={isSubmitting} />
          </FF>
       </div>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
@@ -2196,7 +2197,12 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
 // =============================================================================
 // MODALE AJOUT COMPARTIMENT CITERNE
 // =============================================================================
-function AddCompartmentModal({ container, onClose }) {
+type AddCompartmentModalProps = {
+  container: any;
+  onClose: () => void;
+};
+
+function AddCompartmentModal({ container, onClose }: AddCompartmentModalProps) {
   const T = useTheme();
   const { dispatch, refreshData } = useStore();
   const [cap, setCap] = useState("");
@@ -2211,8 +2217,7 @@ function AddCompartmentModal({ container, onClose }) {
     try {
       const res = await fetch('/api/containers/compartment', {
         method: 'POST',
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify({ originalContainerId: container.id, newCapacity: parsedCap, idempotencyKey })
       });
       if (!res.ok) throw new Error((await res.json()).error || "Erreur serveur");
@@ -2220,8 +2225,9 @@ function AddCompartmentModal({ container, onClose }) {
       dispatch({ type: "TOAST_ADD", payload: { msg: "Compartiment créé !", color: T.green } });
       if (refreshData) await refreshData();
       onClose();
-    } catch(e) { 
-      alert("Erreur : " + e.message); 
+    } catch (e: unknown) { 
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message); 
     } finally {
       setIsSubmitting(false);
     }
@@ -2235,7 +2241,7 @@ function AddCompartmentModal({ container, onClose }) {
         </div>
       </div>
       <FF label={`Capacité du NOUVEAU compartiment (hL)`}>
-        <Input type="number" step="0.1" value={cap} onChange={e => setCap(e.target.value)} placeholder={`Ex: 25`} disabled={isSubmitting} />
+        <Input type="number" step="0.1" value={cap} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCap(e.target.value)} placeholder={`Ex: 25`} disabled={isSubmitting} />
       </FF>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
