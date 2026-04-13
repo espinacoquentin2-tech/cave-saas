@@ -3176,7 +3176,7 @@ function TourFA({ onSelectLot }: any) {
 // =============================================================================
 // COMPOSANT PRINCIPAL CUVERIE
 // =============================================================================
-function Cuverie({ onSelectContainer }) {
+function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
   const T = useTheme(); 
   const { state } = useStore(); 
   const { user } = useAuth();
@@ -3185,7 +3185,7 @@ function Cuverie({ onSelectContainer }) {
   const [subFilter, setSubFilter] = useState(""); 
   const [search, setSearch] = useState(""); 
   
-  const [filterZones, setFilterZones] = useState([]); 
+  const [filterZones, setFilterZones] = useState<string[]>([]); 
   const [modal, setModal] = useState(false);
   
   const GROUPS = {
@@ -3196,14 +3196,14 @@ function Cuverie({ onSelectContainer }) {
 
   const isAdmin = user?.role === "Admin" || user?.role === "Chef de cave";
   
-  const uniqueZones = [...new Set((state.containers || []).map(c => c.zone).filter(Boolean))].sort();
+  const uniqueZones = [...new Set((state.containers || []).map((c: any) => c.zone).filter(Boolean))].sort();
 
-  const handleMainFilter = (f) => {
+  const handleMainFilter = (f: string) => {
     setMainFilter(f);
     setSubFilter(""); 
   };
 
-  const filtered = (state.containers || []).filter(c => {
+  const filtered = (state.containers || []).filter((c: any) => {
     if (
       c.status === "LIVRE" || 
       c.status === "ARCHIVÉE" || 
@@ -3231,7 +3231,7 @@ function Cuverie({ onSelectContainer }) {
     if (mainFilter === "TOUS") { 
       matchFilter = true; 
     } else if (mainFilter === "RÉSERVES") {
-      matchFilter = (state.lots || []).some(l => (String(l.currentContainerId || l.containerId) === String(c.id) || String(l.id) === String(c.lotId)) && l.status === "RESERVE");
+      matchFilter = (state.lots || []).some((l: any) => (String(l.currentContainerId || l.containerId) === String(c.id) || String(l.id) === String(c.lotId)) && l.status === "RESERVE");
     } else if (mainFilter === "CUVES") {
       if (subFilter) matchFilter = c.type === subFilter && !isSousProduit;
       else matchFilter = GROUPS.CUVES.includes(c.type) && !isSousProduit;
