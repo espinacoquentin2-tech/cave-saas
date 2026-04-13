@@ -1053,7 +1053,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     if (!apportToDelete) return;
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/pressings?id=${apportToDelete.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/pressings?id=${(apportToDelete as any).id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error((await res.json()).error);
       if (refreshData) await refreshData();
     } catch(e) { 
