@@ -3250,8 +3250,8 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
     return matchFilter && matchSearch && matchZone;
   });
 
-  const cuvesActives = filtered.filter(c => (parseFloat(c.currentVolume || 0)) > 0);
-  const cuvesVides = filtered.filter(c => (parseFloat(c.currentVolume || 0)) <= 0);
+  const cuvesActives = filtered.filter((c: any) => (parseFloat(c.currentVolume || 0)) > 0);
+  const cuvesVides = filtered.filter((c: any) => (parseFloat(c.currentVolume || 0)) <= 0);
 
   return (
     <div>
@@ -3261,7 +3261,7 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
       </div>
       
       <div style={{ display:"flex", gap:10, marginBottom: mainFilter === "CUVES" || mainFilter === "BOIS" || mainFilter === "SOUS-PRODUITS" ? 10 : 20, flexWrap:"wrap" }}>
-        <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un contenant..." style={{ minWidth:200 }} />
+        <Input value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} placeholder="Rechercher un contenant..." style={{ minWidth:200 }} />
         
         {uniqueZones.length > 0 && (
           <MultiSelectDrop label="Toutes les zones" options={uniqueZones} selected={filterZones} onChange={setFilterZones} width={160} />
@@ -3299,7 +3299,7 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
                 Contenants pleins ou en cours d'utilisation ({cuvesActives.length})
               </h3>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(215px,1fr))", gap:16 }}>
-                {cuvesActives.map(c => <ContainerTile key={c.id} c={c} onClick={() => onSelectContainer(c)} />)}
+                {cuvesActives.map((c: any) => <ContainerTile key={c.id} c={c} onClick={() => onSelectContainer(c)} />)}
               </div>
             </div>
           )}
@@ -3310,7 +3310,7 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
                 Contenants vides ou en nettoyage ({cuvesVides.length})
               </h3>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(215px,1fr))", gap:16 }}>
-                {cuvesVides.map(c => (
+                {cuvesVides.map((c: any) => (
                   <div key={c.id} style={{ opacity: c.status !== "NETTOYAGE" ? 0.7 : 1, transition: "opacity 0.2s" }}>
                     <ContainerTile c={c} onClick={() => onSelectContainer(c)} />
                   </div>
@@ -3326,7 +3326,7 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
   );
 }
 
-function RenameContainerModal({ container, onClose }) {
+function RenameContainerModal({ container, onClose }: { container: any; onClose: any }) {
   const T = useTheme(); 
   const { dispatch, refreshData } = useStore();
   const [newName, setNewName] = useState(container.displayName || container.name);
