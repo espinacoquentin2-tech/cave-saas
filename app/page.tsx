@@ -1001,14 +1001,14 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
   const pressoirs = state.pressoirs || [];
   const apports = state.pressings || []; 
-  const apportsEnAttente = apports.filter(a => a.status !== "PRESSÉ");
+  const apportsEnAttente = apports.filter((a: any) => a.status !== "PRESSÉ");
 
   const depts = Object.keys(CHAMPAGNE_GEODATA || {});
-  const regions = customDep ? Object.keys(CHAMPAGNE_GEODATA[customDep] || {}) : [];
-  const communes = (customDep && customReg) ? (CHAMPAGNE_GEODATA[customDep][customReg] || []) : [];
+  const regions = customDep ? Object.keys((CHAMPAGNE_GEODATA as Record<string, any>)[customDep] || {}) : [];
+  const communes = (customDep && customReg) ? (((CHAMPAGNE_GEODATA as Record<string, any>)[customDep] || {})[customReg] || []) : [];
 
-  const safeParseFloat = (val) => parseFloat(String(val).replace(',', '.'));
-  const parseToHl = (val) => parseFloat((parseFloat(String(val).replace(',', '.')) || 0).toFixed(2));
+  const safeParseFloat = (val: any) => parseFloat(String(val).replace(',', '.'));
+  const parseToHl = (val: any) => parseFloat((parseFloat(String(val).replace(',', '.')) || 0).toFixed(2));
 
   // --- ACTIONS SIMPLES ---
   const handleAddApport = async () => {
@@ -1025,7 +1025,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       const res = await fetch('/api/pressings', { 
         method: 'POST', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           date: new Date().toISOString(), 
