@@ -868,9 +868,9 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
           </FF>
           <FF label="Envoyer vers (Cuve)">
             <div style={{ display: "flex", gap: 8 }}>
-              <Select value={form.cuveId} disabled={isSubmitting} onChange={e=>setForm({...form, cuveId:e.target.value})} style={{ flex: 1, borderColor: !form.cuveId ? T.red : T.border }}>
+              <Select value={form.cuveId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, cuveId:e.target.value})} style={{ flex: 1, borderColor: !form.cuveId ? T.red : T.border }}>
                 <option value="">-- Choisir une cuve --</option>
-                {availCuves.map(c => {
+                {availCuves.map((c: any) => {
                   const volDispo = Math.max(0, (c.capacityValue || c.capacity || 0) - (c.currentVolume || 0)).toFixed(1);
                   return (
                     <option key={c.id} value={c.id}>
