@@ -3541,7 +3541,6 @@ function DegorgerModal({ bl, onClose }: { bl: any; onClose: any }) {
       const res = await fetch('/api/bottles/degorger', { 
         method: 'POST', 
         headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           blId: parseInt(bl.id), 
           count: qtyNum, 
@@ -3557,7 +3556,7 @@ function DegorgerModal({ bl, onClose }: { bl: any; onClose: any }) {
       dispatch({ type:"TOAST_ADD", payload:{ msg:`${qtyNum} btl dégorgées ! (Création lot Produits Finis)`, color:T.green } }); 
       if (refreshData) await refreshData();
       onClose(); 
-    } catch(e) { 
+    } catch(e: any) { 
       alert(e.message); 
     } finally {
       setIsSubmitting(false);
@@ -3569,12 +3568,12 @@ function DegorgerModal({ bl, onClose }: { bl: any; onClose: any }) {
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
         <FF label={`Nombre de btl (max ${max})`}>
           <div style={{ display: "flex", gap: 8 }}>
-            <Input type="number" value={count} onChange={e => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }} />
+            <Input type="number" value={count} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }} />
             <Btn variant="secondary" onClick={() => setCount(max.toString())} disabled={isSubmitting}>MAX</Btn>
           </div>
         </FF>
         <FF label="Sucre ajouté (g/L)">
-          <Input type="number" step="0.1" placeholder="Ex: 8" value={sugar} onChange={e => setSugar(e.target.value)} disabled={isSubmitting} />
+          <Input type="number" step="0.1" placeholder="Ex: 8" value={sugar} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSugar(e.target.value)} disabled={isSubmitting} />
         </FF>
       </div>
 
@@ -3584,7 +3583,7 @@ function DegorgerModal({ bl, onClose }: { bl: any; onClose: any }) {
       
       <div style={{ marginTop: 8 }}>
         <FF label="Modèle de Bouchon Liège (Optionnel)">
-          <Input value={modeleBouchon} onChange={e => setModeleBouchon(e.target.value)} disabled={isSubmitting} placeholder="Ex: Mytik - MD5" />
+          <Input value={modeleBouchon} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModeleBouchon(e.target.value)} disabled={isSubmitting} placeholder="Ex: Mytik - MD5" />
         </FF>
       </div>
 
@@ -3598,9 +3597,10 @@ function DegorgerModal({ bl, onClose }: { bl: any; onClose: any }) {
   );
 }
 
-function HabillerModal({ bl, onClose }) {
+function HabillerModal({ bl, onClose }: { bl: any; onClose: any }) {
   const T = useTheme(); 
   const { state, dispatch, refreshData } = useStore();
+  const { user } = useAuth();
   
   const [count, setCount] = useState(""); 
   const [coiffeId, setCoiffeId] = useState("");
@@ -3612,9 +3612,9 @@ function HabillerModal({ bl, onClose }) {
   
   const max = bl.currentBottleCount || bl.currentCount || 0;
 
-  const coiffes = (state.products || []).filter(p => p.subCategory === "Coiffes");
-  const etiquettes = (state.products || []).filter(p => p.subCategory === "Étiquettes" || p.subCategory === "Contre-étiquettes");
-  const cartons = (state.products || []).filter(p => p.subCategory === "Cartons");
+  const coiffes = (state.products || []).filter((p: any) => p.subCategory === "Coiffes");
+  const etiquettes = (state.products || []).filter((p: any) => p.subCategory === "Étiquettes" || p.subCategory === "Contre-étiquettes");
+  const cartons = (state.products || []).filter((p: any) => p.subCategory === "Cartons");
 
   const submit = async () => {
     const qtyNum = parseInt(count);
@@ -3624,7 +3624,6 @@ function HabillerModal({ bl, onClose }) {
     try {
       const res = await fetch('/api/bottles/habiller', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           blId: parseInt(bl.id), count: qtyNum, 
