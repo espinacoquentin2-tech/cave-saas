@@ -847,12 +847,12 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
         <FF label="État Sanitaire">
-          <Select value={form.sanitaire} disabled={isSubmitting} onChange={e=>setForm({...form, sanitaire:e.target.value})} style={{ borderLeft: `4px solid ${sanColors[form.sanitaire]}`, fontWeight:"bold" }}>
+          <Select value={form.sanitaire} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, sanitaire:e.target.value})} style={{ borderLeft: `4px solid ${sanColors[form.sanitaire]}`, fontWeight:"bold" }}>
             <option value="A+">A+ (Parfait)</option><option value="A">A (Très bon)</option><option value="B">B (Moyen, trié)</option><option value="C">C (Médiocre)</option>
           </Select>
         </FF>
         <FF label="Type de vendange">
-          <Select value={form.typeVendange} disabled={isSubmitting} onChange={e=>setForm({...form, typeVendange:e.target.value})}>
+          <Select value={form.typeVendange} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, typeVendange:e.target.value})}>
             <option>Égrappée 100%</option><option>Vendange Entière 100%</option><option>Partiellement Égrappée</option>
           </Select>
         </FF>
@@ -864,7 +864,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12 }}>
           <FF label="Volume occupé estimé (hL)">
-            <Input type="number" step="0.1" value={form.volumeOccupe} disabled={isSubmitting} onChange={e=>setForm({...form, volumeOccupe:e.target.value})} />
+            <Input type="number" step="0.1" value={form.volumeOccupe} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, volumeOccupe:e.target.value})} />
           </FF>
           <FF label="Envoyer vers (Cuve)">
             <div style={{ display: "flex", gap: 8 }}>
