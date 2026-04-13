@@ -1934,12 +1934,18 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 // =============================================================================
 // MODALS ACTIONS CUVE (SÉCURISÉES)
 // =============================================================================
-function CorrectVolumeModal({ container, lot, onClose }) {
+type CorrectVolumeModalProps = {
+  container: any;
+  lot: any;
+  onClose: () => void;
+};
+
+function CorrectVolumeModal({ container, lot, onClose }: CorrectVolumeModalProps) {
   const T = useTheme(); 
   const { dispatch, refreshData } = useStore(); 
   const { user } = useAuth();
   
-  const [vol, setVol] = useState(lot.currentVolume || lot.volume); 
+  const [vol, setVol] = useState(String(lot.currentVolume || lot.volume || "")); 
   const [note, setNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
@@ -1950,7 +1956,6 @@ function CorrectVolumeModal({ container, lot, onClose }) {
       const res = await fetch('/api/lots/volume', { 
         method: 'POST', 
         headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
         body: JSON.stringify({ lotId: lot.id, newVolume: parseFloat(vol), operator: user.name, note, idempotencyKey }) 
       });
       
@@ -1959,8 +1964,9 @@ function CorrectVolumeModal({ container, lot, onClose }) {
       dispatch({ type: "TOAST_ADD", payload: { msg: `Volume corrigé à ${vol} hL`, color: "#2d6640" } }); 
       if (refreshData) await refreshData();
       onClose();
-    } catch(e) {
-      alert("Erreur : " + e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message);
       setIdempotencyKey(crypto.randomUUID()); // 👈 NOUVELLE CLÉ GÉNÉRÉE EN CAS D'ERREUR
     } finally {
       setIsSubmitting(false);
@@ -1989,7 +1995,13 @@ function CorrectVolumeModal({ container, lot, onClose }) {
 // =============================================================================
 // MODALE D'OPÉRATIONS / INTRANTS (SÉCURISÉE)
 // =============================================================================
-function AddIntrantModal({ container, lot, onClose }) {
+type AddIntrantModalProps = {
+  container: any;
+  lot: any;
+  onClose: () => void;
+};
+
+function AddIntrantModal({ container, lot, onClose }: AddIntrantModalProps) {
   const T = useTheme(); 
   const { dispatch, refreshData, state } = useStore(); 
   const { user } = useAuth();
@@ -2015,7 +2027,6 @@ function AddIntrantModal({ container, lot, onClose }) {
       const res = await fetch('/api/lots/intrants', { 
         method: 'POST', 
         headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
         body: JSON.stringify({ lotId: lot.id, intrant, quantity: parseFloat(qty), unit, operator: user.name, idempotencyKey }) 
       });
       
@@ -2030,8 +2041,10 @@ function AddIntrantModal({ container, lot, onClose }) {
 
       if (refreshData) await refreshData();
       onClose(); 
-    } catch(e) {
-      alert("Erreur : " + e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message);
+      setIdempotencyKey(crypto.randomUUID());
     } finally {
       setIsSubmitting(false);
     }
