@@ -2950,7 +2950,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
                        </div>
                        <div style={{ display:"flex", justifyContent:"flex-end", gap:6 }}>
                           {isCompEmpty ? (
-                            <Btn variant="secondary" style={{fontSize:9, padding:"4px 8px", background:T.surface, color:T.textDim, borderColor:T.border}} onClick={() => setModal("createLot")}>+ Créer Lot</Btn>
+                            <Btn variant="secondary" style={{fontSize:9, padding:"4px 8px", background:T.surface, color:T.textDim, borderColor:T.border}} onClick={() => setModal("createLot" as any)}>+ Créer Lot</Btn>
                           ) : (
                             compLot && <Btn variant="secondary" style={{fontSize:9, padding:"4px 8px"}} onClick={() => {
                                if (onSelectLot) onSelectLot(compLot);
@@ -2976,7 +2976,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
                 {hist.length === 0 ? (
                   <div style={{ padding:"32px 20px", textAlign:"center", color:T.textDim, fontSize:12, fontStyle: "italic" }}>Aucun événement enregistré</div>
                 ) : (
-                  hist.map((h, i) => (
+                  hist.map((h: any, i: number) => (
                     <div key={h.id} style={{ display:"grid", gridTemplateColumns:"140px 110px 1fr 100px", gap:10, alignItems:"center", padding:"12px 16px", borderBottom:i<hist.length-1?`1px solid ${T.border}`:"none" }}>
                       <div style={{ fontSize:10, color:T.textDim, fontFamily:"monospace" }}>{formatEventDate(h.createdAt || h.date)}</div>
                       <div><Badge label={h.eventType || h.type} /></div>
@@ -2993,7 +2993,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
                 {lotsPasses.length === 0 ? (
                   <div style={{ padding:"32px 20px", textAlign:"center", color:T.textDim, fontSize:12, fontStyle: "italic" }}>Aucun lot n'a encore transité</div>
                 ) : (
-                  lotsPasses.map(({ lot:l, from, to }) => (
+                  lotsPasses.map(({ lot:l, from, to }: any) => (
                     <div key={l.id} style={{ display:"grid", gridTemplateColumns:"2fr 60px 120px 120px 100px", padding:"12px 16px", alignItems:"center", borderBottom:`1px solid ${T.border}` }}>
                       <div style={{ fontSize:11, color:T.accentLight, fontFamily:"monospace", fontWeight: "bold" }}>{l.businessCode || l.code}</div>
                       <div style={{ fontSize:12, color:T.text }}>{l.year || l.millesime}</div>
