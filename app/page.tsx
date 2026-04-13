@@ -1849,9 +1849,9 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
             return false;
         });
 
-        const totalC = cuveeDests.reduce((s,d)=>parseToHl(s+parseToHl(d.vol)),0); 
-        const totalT = tailleDests.reduce((s,d)=>parseToHl(s+parseToHl(d.vol)),0); 
-        const totalR = rebechesDests.reduce((s,d)=>parseToHl(s+parseToHl(d.vol)),0); 
+        const totalC = cuveeDests.reduce((s: any, d: any) => parseToHl(s + parseToHl(d.vol)), 0); 
+        const totalT = tailleDests.reduce((s: any, d: any) => parseToHl(s + parseToHl(d.vol)), 0); 
+        const totalR = rebechesDests.reduce((s: any, d: any) => parseToHl(s + parseToHl(d.vol)), 0); 
 
         const hasErrors =
            isDestInvalid(cuveeDests, cuvesCuvee) ||
@@ -1862,10 +1862,10 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
            totalR > parseToHl(calcVol.rebeches);
 
         return (
-          <Modal title={`Fractionnement : ${actionModal.press.nom}`} onClose={() => setActionModal(null)} wide={true}>
+          <Modal title={`Fractionnement : ${(actionModal as any).press.nom}`} onClose={() => setActionModal(null)} wide={true}>
             <div style={{ width: "100%" }}>
               <div style={{ fontSize: 13, marginBottom: 24, lineHeight: 1.5 }}>
-                Le pressurage de <strong>{actionModal.press.loadKg} kg</strong> de <strong>{actionModal.press.parcelle} ({actionModal.press.cepage})</strong> est terminé.<br/>
+                Le pressurage de <strong>{(actionModal as any).press.loadKg} kg</strong> de <strong>{(actionModal as any).press.parcelle} ({(actionModal as any).press.cepage})</strong> est terminé.<br/>
                 Ajustez les volumes et répartissez les jus dans un ou plusieurs Belons.
               </div>
 
@@ -1890,7 +1890,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       {apportToDelete && (
         <Modal title="Supprimer cet apport" onClose={() => setApportToDelete(null)}>
           <div style={{ fontSize: 14, color: T.text, marginBottom: 24 }}>
-            Êtes-vous sûr de vouloir supprimer l'apport de <strong>{apportToDelete.weight || apportToDelete.poids} kg</strong> ?<br/><br/>Cette action effacera l'enregistrement.
+            Êtes-vous sûr de vouloir supprimer l'apport de <strong>{(apportToDelete as any).weight || (apportToDelete as any).poids} kg</strong> ?<br/><br/>Cette action effacera l'enregistrement.
           </div>
           <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
             <Btn variant="secondary" onClick={() => setApportToDelete(null)} disabled={isSubmitting}>Annuler</Btn>
@@ -1902,17 +1902,17 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       {showAddPress && (
         <Modal title="Ajouter un pressoir" onClose={() => setShowAddPress(false)}>
           <div style={{ display: "grid", gap: 16, marginBottom: 24 }}>
-            <FF label="Nom du pressoir"><Input disabled={isSubmitting} value={newPress.nom} onChange={(e) => setNewPress({...newPress, nom: e.target.value})} placeholder="Ex: Pressoir 1" /></FF>
+            <FF label="Nom du pressoir"><Input disabled={isSubmitting} value={newPress.nom} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPress({...newPress, nom: e.target.value})} placeholder="Ex: Pressoir 1" /></FF>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <FF label="Type">
-                <Select disabled={isSubmitting} value={newPress.type} onChange={(e) => setNewPress({...newPress, type: e.target.value})}>
+                <Select disabled={isSubmitting} value={newPress.type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewPress({...newPress, type: e.target.value})}>
                   <option>Pneumatique</option><option>Traditionnel (Maie fixe)</option><option>Hydraulique (Maie tournante)</option><option>Mécanique (Plateaux)</option>
                 </Select>
               </FF>
-              <FF label="Constructeur"><Input disabled={isSubmitting} value={newPress.marque} onChange={(e) => setNewPress({...newPress, marque: e.target.value})} placeholder="Ex: Bücher..." /></FF>
+              <FF label="Constructeur"><Input disabled={isSubmitting} value={newPress.marque} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPress({...newPress, marque: e.target.value})} placeholder="Ex: Bücher..." /></FF>
             </div>
             <FF label="Capacité (Marc)">
-              <Select disabled={isSubmitting} value={newPress.capacite} onChange={(e) => setNewPress({...newPress, capacite: Number(e.target.value)})}>
+              <Select disabled={isSubmitting} value={newPress.capacite} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewPress({...newPress, capacite: Number(e.target.value)})}>
                 <option value={2000}>2 000 kg</option><option value={4000}>4 000 kg</option><option value={6000}>6 000 kg</option><option value={8000}>8 000 kg</option><option value={12000}>12 000 kg</option>
               </Select>
             </FF>
