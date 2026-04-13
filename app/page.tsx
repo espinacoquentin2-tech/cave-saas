@@ -1109,7 +1109,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     
     const apport = apports.find((a: any) => String(a.id) === String(selectedApport));
     const weightToLoad = safeParseFloat(loadWeight);
-    const p = actionModal.press;
+    const p = (actionModal as any).press;
 
     if (weightToLoad > apport.poids) return alert("Vous ne pouvez pas charger plus que ce qu'il reste sur le quai !");
     
@@ -1133,7 +1133,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       const res = await fetch('/api/pressings/load', { 
         method: 'POST', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           pressId: p.id, 
@@ -1163,7 +1162,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       if (refreshData) await refreshData();
 
     } catch(e) { 
-      alert(e.message); 
+      alert(e instanceof Error ? e.message : String(e)); 
     } finally {
       setIsSubmitting(false);
     }
@@ -1174,7 +1173,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       const res = await fetch('/api/containers', { 
         method: 'POST', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           name: newCuve.name, 
@@ -1190,7 +1188,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       setNewCuve({ name: "", type: "Débourbage Cuvée", capacityValue: "" });
       setShowAddCuve(false);
     } catch(e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSubmitting(false);
     }
@@ -1199,7 +1197,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
   // --- DÉBOURBAGE (TRANSFERT / SOUTIRAGE) ---
   const validerTransfert = async () => {
     // 1. Calcul du volume total saisi
-    const volSaisi = transferDests.reduce((sum, d) => sum + parseToHl(d.vol), 0);
+    const volSaisi = transferDests.reduce((sum: any, d: any) => sum + parseToHl(d.vol), 0);
     
     // Remplacement du "alert" par un Toast rouge
     if (volSaisi <= 0) {
@@ -1207,7 +1205,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       return;
     }
     
-    const sourceId = transferModal.id;
+    const sourceId = (transferModal as any).id;
     const currentLot = (state.lots || []).find(l => String(l.currentContainerId || l.containerId) === String(sourceId) && parseFloat(l.currentVolume || l.volume) > 0);
 
     if (!currentLot) {
