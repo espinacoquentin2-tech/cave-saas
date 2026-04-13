@@ -2844,8 +2844,8 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
               onClick={() => nextContainer && onSelectContainer(nextContainer)} 
               disabled={!nextContainer}
               style={{ background:"none", border:`1px solid ${T.border}`, color: nextContainer ? T.textStrong : T.textDim, padding:"6px 14px", borderRadius:3, cursor: nextContainer ? "pointer" : "default", fontSize:11, fontFamily:"monospace", opacity: nextContainer ? 1 : 0.3, transition: "all 0.2s" }}
-              onMouseEnter={e => nextContainer && (e.currentTarget.style.background = T.surfaceHigh)}
-              onMouseLeave={e => nextContainer && (e.currentTarget.style.background = "none")}
+              onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => nextContainer && (e.currentTarget.style.background = T.surfaceHigh)}
+              onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => nextContainer && (e.currentTarget.style.background = "none")}
             >
               {"Suivant >"}
             </button>
@@ -2895,31 +2895,31 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
                 
                 {(!isCiterneMere || enfants.length === 0) && (
                   <>
-                    {!lot && isReallyEmpty && <Btn onClick={() => setModal("createLot")} disabled={isSubmitting}>+ Créer lot</Btn>}
+                    {!lot && isReallyEmpty && <Btn onClick={() => setModal("createLot" as any)} disabled={isSubmitting}>+ Créer lot</Btn>}
                     
-                    {lot && <Btn variant="ghost" onClick={() => setModal("transfer")} disabled={isSubmitting}>Transférer</Btn>}
+                    {lot && <Btn variant="ghost" onClick={() => setModal("transfer" as any)} disabled={isSubmitting}>Transférer</Btn>}
                     
                     {lot && (lot.status === "MACERATION" || lot.status === "MOUT_NON_DEBOURBE") && (
-                      <Btn variant="primary" onClick={() => setModal("decuvage")} style={{ background: "#8b1c31", borderColor: "#8b1c31", color: "#fff" }} disabled={isSubmitting}>
+                      <Btn variant="primary" onClick={() => setModal("decuvage" as any)} style={{ background: "#8b1c31", borderColor: "#8b1c31", color: "#fff" }} disabled={isSubmitting}>
                         🍷 Décuver / Presser
                       </Btn>
                     )}
 
-                    {lot && <Btn variant="ghost" onClick={() => setModal("intrant")} disabled={isSubmitting}>Ajout intrant</Btn>}
-                    {lot && <Btn variant="ghost" onClick={() => setModal("volume")} disabled={isSubmitting}>Corriger volume</Btn>}
+                    {lot && <Btn variant="ghost" onClick={() => setModal("intrant" as any)} disabled={isSubmitting}>Ajout intrant</Btn>}
+                    {lot && <Btn variant="ghost" onClick={() => setModal("volume" as any)} disabled={isSubmitting}>Corriger volume</Btn>}
                   </>
                 )}
                 
                 {(user.role === "Admin" || user.role === "Chef de cave") && (
                   <>
-                    <Btn variant="ghost" onClick={() => setModal("rename")} disabled={isSubmitting}>✏️ Renommer</Btn>
+                    <Btn variant="ghost" onClick={() => setModal("rename" as any)} disabled={isSubmitting}>✏️ Renommer</Btn>
                     {isReallyEmpty && (
-                       <Btn variant="ghost" onClick={() => setModal("deleteConfirm")} style={{ color: T.red }} disabled={isSubmitting}>
+                       <Btn variant="ghost" onClick={() => setModal("deleteConfirm" as any)} style={{ color: T.red }} disabled={isSubmitting}>
                          🗑️ {isCiterneMere ? "Supprimer Tout" : "Supprimer"}
                        </Btn>
                     )}
                     {container.type === "CITERNE" && (
-                      <Btn variant="ghost" onClick={() => setModal("compartment")} disabled={isSubmitting}>+ Ajouter compartiment</Btn>
+                      <Btn variant="ghost" onClick={() => setModal("compartment" as any)} disabled={isSubmitting}>+ Ajouter compartiment</Btn>
                     )}
                   </>
                 )}
@@ -2935,7 +2935,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
               
               <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
                 {allCompartments.map((comp, index) => {
-                   const compLot = (comp.currentVolume || comp.volume) > 0 ? (state.lots || []).find(l => String(l.currentContainerId || l.containerId) === String(comp.id)) : null;
+	                   const compLot = (comp.currentVolume || comp.volume) > 0 ? (state.lots || []).find((l: any) => String(l.currentContainerId || l.containerId) === String(comp.id)) : null;
                    const compName = index === 0 ? "Compartiment 1 (Base)" : (comp.displayName || comp.name).split(" - ")[1] || (comp.displayName || comp.name);
                    const isCompEmpty = (comp.currentVolume || comp.volume) <= 0;
 
