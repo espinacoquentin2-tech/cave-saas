@@ -3640,7 +3640,7 @@ function HabillerModal({ bl, onClose }: { bl: any; onClose: any }) {
       dispatch({ type:"TOAST_ADD", payload:{ msg:`${qtyNum} btl habillées. Stocks déduits !`, color:"#9960aa" } }); 
       if (refreshData) await refreshData();
       onClose(); 
-    } catch(e) { alert(e.message); }
+    } catch(e: any) { alert(e.message); }
     finally { setIsSubmitting(false); }
   };
 
@@ -3648,7 +3648,7 @@ function HabillerModal({ bl, onClose }: { bl: any; onClose: any }) {
     <Modal title={`Habillage & Mise en carton`} onClose={onClose}>
       <FF label={`Nombre de bouteilles à habiller (max ${max})`}>
         <div style={{ display: "flex", gap: 8 }}>
-          <Input type="number" value={count} onChange={e => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }} />
+          <Input type="number" value={count} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }} />
           <Btn variant="secondary" onClick={() => setCount(max.toString())} disabled={isSubmitting}>MAX</Btn>
         </div>
       </FF>
@@ -3657,15 +3657,15 @@ function HabillerModal({ bl, onClose }: { bl: any; onClose: any }) {
         <div style={{ fontSize:12, fontWeight:"bold", color:T.accent, marginBottom:12, textTransform:"uppercase" }}>Habillage (Unité)</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
           <FF label="Coiffe">
-            <Select value={coiffeId} onChange={e => setCoiffeId(e.target.value)} disabled={isSubmitting}>
+            <Select value={coiffeId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCoiffeId(e.target.value)} disabled={isSubmitting}>
               <option value="">-- Sans coiffe --</option>
-              {coiffes.map(p => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
+              {coiffes.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
             </Select>
           </FF>
           <FF label="Étiquette">
-            <Select value={etiquetteId} onChange={e => setEtiquetteId(e.target.value)} disabled={isSubmitting}>
+            <Select value={etiquetteId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEtiquetteId(e.target.value)} disabled={isSubmitting}>
               <option value="">-- Sans étiquette --</option>
-              {etiquettes.map(p => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
+              {etiquettes.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
             </Select>
           </FF>
         </div>
@@ -3675,14 +3675,14 @@ function HabillerModal({ bl, onClose }: { bl: any; onClose: any }) {
         <div style={{ fontSize:12, fontWeight:"bold", color:T.textDim, marginBottom:12, textTransform:"uppercase" }}>Mise en Carton</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12 }}>
           <FF label="Format">
-            <Select value={cartonSize} onChange={e => setCartonSize(e.target.value)} disabled={isSubmitting}>
+            <Select value={cartonSize} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCartonSize(e.target.value)} disabled={isSubmitting}>
               <option value="1">Unité (1)</option><option value="3">Carton de 3</option><option value="6">Carton de 6</option>
             </Select>
           </FF>
           <FF label="Modèle de carton">
-            <Select value={cartonId} onChange={e => setCartonId(e.target.value)} disabled={isSubmitting}>
+            <Select value={cartonId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCartonId(e.target.value)} disabled={isSubmitting}>
               <option value="">-- Sans carton --</option>
-              {cartons.map(p => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
+              {cartons.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
             </Select>
           </FF>
         </div>
@@ -3698,9 +3698,10 @@ function HabillerModal({ bl, onClose }: { bl: any; onClose: any }) {
   );
 }
 
-function ExpedierModal({ bl, onClose }) {
+function ExpedierModal({ bl, onClose }: { bl: any; onClose: any }) {
   const T = useTheme(); 
   const { dispatch, refreshData } = useStore();
+  const { user } = useAuth();
   
   const [count, setCount] = useState(""); 
   const [clientName, setClientName] = useState("");
@@ -3719,7 +3720,6 @@ function ExpedierModal({ bl, onClose }) {
       const res = await fetch('/api/bottles/expedier', { 
         method: 'POST', 
         headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           blId: parseInt(bl.id), count: qtyNum, clientName, idempotencyKey 
         }) 
@@ -3730,7 +3730,7 @@ function ExpedierModal({ bl, onClose }) {
       dispatch({ type:"TOAST_ADD", payload:{ msg:`${qtyNum} expédiées à ${clientName}`, color:T.green } }); 
       if (refreshData) await refreshData();
       onClose(); 
-    } catch(e) { alert(e.message); }
+    } catch(e: any) { alert(e.message); }
     finally { setIsSubmitting(false); }
   };
 
