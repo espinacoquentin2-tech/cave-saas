@@ -3040,6 +3040,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
 // =============================================================================
 function TourFA({ onSelectLot }: any) {
   const T = useTheme();
+  const { user } = useAuth();
   const { state, dispatch, refreshData } = useStore();
   
   const [tourDate, setTourDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -3079,7 +3080,6 @@ function TourFA({ onSelectLot }: any) {
       const res = await fetch('/api/fa', {
         method: 'POST',
         headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
         body: JSON.stringify({
           readings: payloadReadings,
           idempotencyKey
@@ -3114,7 +3114,7 @@ function TourFA({ onSelectLot }: any) {
         </div>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <FF label="Date du relevé">
-            <Input type="date" value={tourDate} onChange={(e: any) => setTourDate(e.target.value)} disabled={isSubmitting} />
+            <Input type="date" value={tourDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTourDate(e.target.value)} disabled={isSubmitting} />
           </FF>
           <Btn onClick={submitTour} disabled={isSubmitting || Object.keys(readings).length === 0} style={{ background: isSubmitting ? T.textDim : T.accent, height: 38, marginTop: 16 }}>
             {isSubmitting ? "Enregistrement sécurisé..." : "Valider le Tour"}
@@ -3134,7 +3134,7 @@ function TourFA({ onSelectLot }: any) {
             const container = (state.containers || []).find((c: any) => String(c.id) === String(l.currentContainerId || l.containerId));
             
             return (
-              <div key={l.id} style={{ display: "grid", gridTemplateColumns: "150px 2fr 100px 1.5fr 1.5fr", padding: "12px 16px", alignItems: "center", borderBottom: i < faLots.length - 1 ? `1px solid ${T.border}` : "none", transition: "background .15s" }} onMouseEnter={e => e.currentTarget.style.background = T.surfaceHigh} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <div key={l.id} style={{ display: "grid", gridTemplateColumns: "150px 2fr 100px 1.5fr 1.5fr", padding: "12px 16px", alignItems: "center", borderBottom: i < faLots.length - 1 ? `1px solid ${T.border}` : "none", transition: "background .15s" }} onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = T.surfaceHigh} onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = "transparent"}>
                 <div onClick={() => onSelectLot(l)} style={{ fontSize: 13, color: T.accent, fontFamily: "monospace", fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}>
                   {l.businessCode || l.code}
                 </div>
