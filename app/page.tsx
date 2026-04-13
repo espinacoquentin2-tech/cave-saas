@@ -2561,8 +2561,9 @@ function DecuvageModal({ container, lot, onClose }: DecuvageModalProps) {
       dispatch({ type: "TOAST_ADD", payload: { msg: "Décuvage terminé avec succès !", color: "#8b1c31" } });
       if (refreshData) await refreshData();
       onClose();
-    } catch(e) { 
-      alert("Erreur : " + e.message); 
+    } catch (e: unknown) { 
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message); 
     } finally {
       setIsSubmitting(false);
     }
@@ -2573,7 +2574,7 @@ function DecuvageModal({ container, lot, onClose }: DecuvageModalProps) {
       <AddContainerModal 
         initialCapacity={showAdd === "goutte" ? Math.ceil(volG).toString() : Math.ceil(volP).toString()}
         onClose={() => setShowAdd(null)}
-        onSuccess={(newId) => {
+        onSuccess={(newId: string) => {
           if (showAdd === "goutte") setForm({ ...form, cuveGoutteId: newId });
           if (showAdd === "presse") setForm({ ...form, cuvePresseId: newId });
           setShowAdd(null);
@@ -2590,7 +2591,7 @@ function DecuvageModal({ container, lot, onClose }: DecuvageModalProps) {
 
       <div style={{ marginBottom: 20 }}>
         <FF label="Statut cible des jus écoulés">
-          <Select value={form.statusDest} onChange={e=>setForm({...form, statusDest:e.target.value})} disabled={isSubmitting}>
+          <Select value={form.statusDest} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, statusDest:e.target.value})} disabled={isSubmitting}>
             <option value="FERMENTATION_ALCOOLIQUE">Fermentation Alcoolique (Sucres à finir)</option>
             <option value="VIN_ROUGE">Vin Rouge (FA Terminée)</option>
             <option value="VIN_DE_BASE">Vin de Base (Rosé)</option>
@@ -2601,14 +2602,14 @@ function DecuvageModal({ container, lot, onClose }: DecuvageModalProps) {
       <div style={{ border:`1px solid ${T.border}`, borderRadius:4, padding:16, marginBottom:16 }}>
         <div style={{ fontSize:12, fontWeight:"bold", color:"#8b1c31", marginBottom:12, textTransform:"uppercase" }}>🍷 Vin de Goutte (-G)</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12 }}>
-          <FF label="Volume écoulé (hL)"><Input type="number" step="0.1" value={form.volGoutte} onChange={e=>setForm({...form, volGoutte:e.target.value})} disabled={isSubmitting} /></FF>
+	          <FF label="Volume écoulé (hL)"><Input type="number" step="0.1" value={form.volGoutte} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, volGoutte:e.target.value})} disabled={isSubmitting} /></FF>
           <FF label="Envoyer vers (Cuve/Foudre)">
             <div style={{ display: "flex", gap: 8 }}>
-              <Select value={form.cuveGoutteId} onChange={e=>setForm({...form, cuveGoutteId:e.target.value})} disabled={isSubmitting} style={{ flex: 1, borderColor: volG > 0 && !form.cuveGoutteId ? T.red : T.border }}>
+	              <Select value={form.cuveGoutteId} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, cuveGoutteId:e.target.value})} disabled={isSubmitting} style={{ flex: 1, borderColor: volG > 0 && !form.cuveGoutteId ? T.red : T.border }}>
                 <option value="">-- Choisir un contenant --</option>
-                {availCuves.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name}</option>)}
+	                {availCuves.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name}</option>)}
               </Select>
-              <Btn variant="secondary" onClick={() => setShowAdd("goutte")} disabled={isSubmitting}>+</Btn>
+	              <Btn variant="secondary" onClick={() => setShowAdd("goutte" as any)} disabled={isSubmitting}>+</Btn>
             </div>
           </FF>
         </div>
@@ -2617,21 +2618,21 @@ function DecuvageModal({ container, lot, onClose }: DecuvageModalProps) {
       <div style={{ border:`1px solid ${T.border}`, borderRadius:4, padding:16, marginBottom:20 }}>
         <div style={{ fontSize:12, fontWeight:"bold", color:T.textDim, marginBottom:12, textTransform:"uppercase" }}>🗜️ Vin de Presse (-P)</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12 }}>
-          <FF label="Volume pressé (hL)"><Input type="number" step="0.1" value={form.volPresse} onChange={e=>setForm({...form, volPresse:e.target.value})} disabled={isSubmitting} /></FF>
+	          <FF label="Volume pressé (hL)"><Input type="number" step="0.1" value={form.volPresse} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, volPresse:e.target.value})} disabled={isSubmitting} /></FF>
           <FF label="Envoyer vers (Cuve/Barrique)">
             <div style={{ display: "flex", gap: 8 }}>
-              <Select value={form.cuvePresseId} onChange={e=>setForm({...form, cuvePresseId:e.target.value})} disabled={isSubmitting} style={{ flex: 1, borderColor: volP > 0 && !form.cuvePresseId ? T.red : T.border }}>
+	              <Select value={form.cuvePresseId} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, cuvePresseId:e.target.value})} disabled={isSubmitting} style={{ flex: 1, borderColor: volP > 0 && !form.cuvePresseId ? T.red : T.border }}>
                 <option value="">-- Choisir un contenant --</option>
-                {availCuves.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name}</option>)}
+	                {availCuves.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name}</option>)}
               </Select>
-              <Btn variant="secondary" onClick={() => setShowAdd("presse")} disabled={isSubmitting}>+</Btn>
+	              <Btn variant="secondary" onClick={() => setShowAdd("presse" as any)} disabled={isSubmitting}>+</Btn>
             </div>
           </FF>
         </div>
       </div>
 
       <FF label="Observations générales">
-        <Input value={form.notes} onChange={e=>setForm({...form, notes:e.target.value})} disabled={isSubmitting} />
+        <Input value={form.notes} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, notes:e.target.value})} disabled={isSubmitting} />
       </FF>
 
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
