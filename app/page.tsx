@@ -1434,8 +1434,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
           {isHardLimit ? "Maximum autorisé" : "Théorique attendu"} : {parseFloat(theoVol).toFixed(2)} hL
         </div>
 
-        {dests.map((d, i) => {
-           const targetCuve = options.find(c => String(c.id) === String(d.cuveId));
+        {dests.map((d: any, i: any) => {
+           const targetCuve = options.find((c: any) => String(c.id) === String(d.cuveId));
            const free = targetCuve ? Math.max(0, parseFloat(targetCuve.capacityValue || targetCuve.capacity || 0) - parseFloat(targetCuve.currentVolume || targetCuve.volume || 0)) : 0;
            const isOver = parseToHl(d.vol) > (free + 0.05);
 
@@ -1443,18 +1443,18 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
              <div key={d.id} style={{ marginBottom: 12 }}>
                <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
                  <div style={{ flex: 2 }}>
-                   <Select value={d.cuveId} disabled={isSubmitting} onChange={e => {
+                   <Select value={d.cuveId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                        const selectedCuveId = e.target.value;
                        const nd = [...dests]; 
                        nd[i] = { ...nd[i], cuveId: selectedCuveId }; 
                        
                        if (selectedCuveId) {
-                           const tCuve = options.find(c => String(c.id) === String(selectedCuveId));
+                           const tCuve = options.find((c: any) => String(c.id) === String(selectedCuveId));
                            if (tCuve) {
                                const freeSpace = Math.max(0, parseFloat(tCuve.capacityValue || tCuve.capacity || 0) - parseFloat(tCuve.currentVolume || tCuve.volume || 0));
                                const safeSpace = freeSpace * 0.9; 
                                
-                               const otherDestsVol = dests.filter((_, idx) => idx !== i).reduce((s, od) => s + parseToHl(od.vol), 0);
+                               const otherDestsVol = dests.filter((_: any, idx: any) => idx !== i).reduce((s: any, od: any) => s + parseToHl(od.vol), 0);
                                const remainingToDistribute = Math.max(0, parseFloat(theoVol) - otherDestsVol);
                                
                                const autoVol = Math.min(safeSpace, remainingToDistribute);
@@ -1466,24 +1466,24 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                        setDests(nd);
                    }} style={{ borderColor: isOver ? T.red : T.border }}>
                       <option value="">-- Choisir cuve --</option>
-                      {options.map(c => {
+                      {options.map((c: any) => {
                          const dispo = Math.max(0, parseFloat(c.capacityValue || c.capacity || 0) - parseFloat(c.currentVolume || c.volume || 0));
-                         const isAlreadySelected = dests.some((otherD, idx) => idx !== i && String(otherD.cuveId) === String(c.id));
+                         const isAlreadySelected = dests.some((otherD: any, idx: any) => idx !== i && String(otherD.cuveId) === String(c.id));
                          return <option key={c.id} value={c.id} disabled={isAlreadySelected}>{c.displayName || c.name} (Dispo: {dispo.toFixed(2)} hL)</option>
                       })}
                    </Select>
                  </div>
                  <div style={{ flex: 1, display:"flex", gap:4 }}>
-                   <Input type="number" step="0.1" value={d.vol} disabled={isSubmitting} onChange={e => {
+                   <Input type="number" step="0.1" value={d.vol} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                        const nd = [...dests]; 
                        nd[i] = { ...nd[i], vol: e.target.value }; 
                        setDests(nd);
                    }} placeholder="Vol." style={{ borderColor: isOver ? T.red : T.border }} />
                    <Btn variant="secondary" disabled={isSubmitting} onClick={() => {
-                       const tCuve = options.find(c => String(c.id) === String(d.cuveId));
+                       const tCuve = options.find((c: any) => String(c.id) === String(d.cuveId));
                        const freeSpace = tCuve ? Math.max(0, parseFloat(tCuve.capacityValue || tCuve.capacity || 0) - parseFloat(tCuve.currentVolume || tCuve.volume || 0)) : 0;
                        const safeSpace = freeSpace * 0.9;
-                       const otherDests = dests.filter((_, idx) => idx !== i).reduce((s, od) => s + parseToHl(od.vol), 0);
+                       const otherDests = dests.filter((_: any, idx: any) => idx !== i).reduce((s: any, od: any) => s + parseToHl(od.vol), 0);
                        const remTheo = Math.max(0, parseFloat(theoVol) - otherDests);
                        const maxVal = Math.min(remTheo, safeSpace);
                        if(maxVal > 0) {
@@ -1495,7 +1495,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                  </div>
                  {dests.length > 1 && (
                    <Btn variant="ghost" disabled={isSubmitting} style={{color:T.red, padding:"0 8px"}} onClick={() => {
-                      setDests(dests.filter((_, idx) => idx !== i));
+                      setDests(dests.filter((_: any, idx: any) => idx !== i));
                    }}>✕</Btn>
                  )}
                </div>
@@ -1504,7 +1504,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
         })}
         <div style={{ marginTop: 8 }}>
            <Btn variant="secondary" disabled={isSubmitting} style={{ fontSize: 10, padding: "4px 8px" }} onClick={() => {
-              setDests([...dests, { id: Date.now() + Math.random(), cuveId: "", vol: "" }]);
+              setDests([...dests, { id: Date.now() + Math.random(), cuveId: "", vol: "" }] as any);
            }}>+ Éclater dans une autre cuve</Btn>
         </div>
       </div>
@@ -1532,7 +1532,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
             <div style={{ display: "flex", gap: 16, alignItems: isCustomOrigin ? "flex-start" : "flex-end", flexWrap: "wrap" }}>
               {!isCustomOrigin ? (
                 <FF label="Provenance (Parcelle ou Autre)" style={{ flex: 1, minWidth: 200 }}>
-                  <Select value={newApport.parcelle} disabled={isSubmitting} onChange={(e) => {
+                  <Select value={newApport.parcelle} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                     if (e.target.value === "CUSTOM") setIsCustomOrigin(true);
                     else setNewApport({...newApport, parcelle: e.target.value});
                   }}>
