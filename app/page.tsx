@@ -802,7 +802,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
       // 1. Création du Lot de macération (API Transactionnelle)
       const res = await fetch('/api/lots', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
+        headers: buildApiHeaders(undefined), 
         body: JSON.stringify({ 
           code: codeMac, millesime, cepage: pressing.cepage, lieu: pressing.cru || pressing.parcelle, 
           volume: parseFloat(form.volumeOccupe), containerId: parseInt(form.cuveId), 
@@ -816,7 +816,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
       // 2. MISE À JOUR DU QUAI (API)
       await fetch('/api/pressings', { 
         method: 'PATCH', 
-        headers: buildApiHeaders(user), 
+        headers: buildApiHeaders(undefined), 
         body: JSON.stringify({ id: pressing.id, status: "PRESSE" }) 
       }).catch(()=>{});
 
@@ -847,7 +847,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
         <FF label="État Sanitaire">
-          <Select value={form.sanitaire} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, sanitaire:e.target.value})} style={{ borderLeft: `4px solid ${sanColors[form.sanitaire]}`, fontWeight:"bold" }}>
+          <Select value={form.sanitaire} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, sanitaire:e.target.value})} style={{ borderLeft: `4px solid ${sanColors[form.sanitaire as keyof typeof sanColors]}`, fontWeight:"bold" }}>
             <option value="A+">A+ (Parfait)</option><option value="A">A (Très bon)</option><option value="B">B (Moyen, trié)</option><option value="C">C (Médiocre)</option>
           </Select>
         </FF>
@@ -868,9 +868,9 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
           </FF>
           <FF label="Envoyer vers (Cuve)">
             <div style={{ display: "flex", gap: 8 }}>
-              <Select value={form.cuveId} disabled={isSubmitting} onChange={e=>setForm({...form, cuveId:e.target.value})} style={{ flex: 1, borderColor: !form.cuveId ? T.red : T.border }}>
+              <Select value={form.cuveId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, cuveId:e.target.value})} style={{ flex: 1, borderColor: !form.cuveId ? T.red : T.border }}>
                 <option value="">-- Choisir une cuve --</option>
-                {availCuves.map(c => {
+                {availCuves.map((c: any) => {
                   const volDispo = Math.max(0, (c.capacityValue || c.capacity || 0) - (c.currentVolume || 0)).toFixed(1);
                   return (
                     <option key={c.id} value={c.id}>
@@ -885,7 +885,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
         </div>
         <div style={{ marginTop: 8 }}>
           <FF label="Observations (Sulfitage, levurage...)">
-            <Input value={form.notes} disabled={isSubmitting} onChange={e=>setForm({...form, notes:e.target.value})} placeholder="Ex: Sulfitage à la benne 3g/hL..." />
+            <Input value={form.notes} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, notes:e.target.value})} placeholder="Ex: Sulfitage à la benne 3g/hL..." />
           </FF>
         </div>
       </div>
@@ -1001,14 +1001,14 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
   const pressoirs = state.pressoirs || [];
   const apports = state.pressings || []; 
-  const apportsEnAttente = apports.filter(a => a.status !== "PRESSÉ");
+  const apportsEnAttente = apports.filter((a: any) => a.status !== "PRESSÉ");
 
   const depts = Object.keys(CHAMPAGNE_GEODATA || {});
-  const regions = customDep ? Object.keys(CHAMPAGNE_GEODATA[customDep] || {}) : [];
-  const communes = (customDep && customReg) ? (CHAMPAGNE_GEODATA[customDep][customReg] || []) : [];
+  const regions = customDep ? Object.keys((CHAMPAGNE_GEODATA as Record<string, any>)[customDep] || {}) : [];
+  const communes = (customDep && customReg) ? (((CHAMPAGNE_GEODATA as Record<string, any>)[customDep] || {})[customReg] || []) : [];
 
-  const safeParseFloat = (val) => parseFloat(String(val).replace(',', '.'));
-  const parseToHl = (val) => parseFloat((parseFloat(String(val).replace(',', '.')) || 0).toFixed(2));
+  const safeParseFloat = (val: any) => parseFloat(String(val).replace(',', '.'));
+  const parseToHl = (val: any) => parseFloat((parseFloat(String(val).replace(',', '.')) || 0).toFixed(2));
 
   // --- ACTIONS SIMPLES ---
   const handleAddApport = async () => {
@@ -1025,7 +1025,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       const res = await fetch('/api/pressings', { 
         method: 'POST', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           date: new Date().toISOString(), 
@@ -1044,7 +1043,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       setNewApport({ parcelle: "", cepage: "CH", poids: "" });
       setIsCustomOrigin(false); setCustomDep(""); setCustomReg(""); setCustomCom(""); setCustomNom("");
     } catch (e) { 
-      alert(e.message); 
+      alert(e instanceof Error ? e.message : String(e)); 
     } finally { 
       setIsSubmitting(false); 
     }
@@ -1054,11 +1053,11 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     if (!apportToDelete) return;
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/pressings?id=${apportToDelete.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/pressings?id=${(apportToDelete as any).id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error((await res.json()).error);
       if (refreshData) await refreshData();
     } catch(e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     }
     setApportToDelete(null); 
     setIsSubmitting(false);
@@ -1071,7 +1070,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       const res = await fetch('/api/pressoirs', { 
         method: 'POST', 
         headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
         body: JSON.stringify(newPress) 
       });
       if (!res.ok) throw new Error("Erreur serveur");
@@ -1080,18 +1078,17 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       setNewPress({ nom: "", type: "Pneumatique", marque: "Bücher", capacite: 4000 });
       setShowAddPress(false);
     } catch (e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const updatePressStatus = async (id, status, extraData = {}) => {
+  const updatePressStatus = async (id: any, status: any, extraData: any = {}) => {
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/pressoirs', { 
         method: 'PUT', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ id, status, ...extraData }) 
       });
@@ -1100,7 +1097,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       if (refreshData) await refreshData();
       if (status === "VIDE") setActionModal(null);
     } catch (e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSubmitting(false);
     }
@@ -1110,9 +1107,9 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
   const handleLoadSubmit = async (forceLoad = false, forceMix = false) => {
     if (!selectedApport || !loadWeight) return alert("Veuillez sélectionner un lot et indiquer le poids à charger.");
     
-    const apport = apports.find(a => String(a.id) === String(selectedApport));
+    const apport = apports.find((a: any) => String(a.id) === String(selectedApport));
     const weightToLoad = safeParseFloat(loadWeight);
-    const p = actionModal.press;
+    const p = (actionModal as any).press;
 
     if (weightToLoad > apport.poids) return alert("Vous ne pouvez pas charger plus que ce qu'il reste sur le quai !");
     
@@ -1127,7 +1124,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
           type: fillPct < 90 ? 'UNDER' : 'OVER',
           fillPct, totalLoad, missing: p.capacite - totalLoad, excess: totalLoad - p.capacite,
           forceMix
-        });
+        } as any);
         return; 
       }
     }
@@ -1136,7 +1133,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       const res = await fetch('/api/pressings/load', { 
         method: 'POST', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           pressId: p.id, 
@@ -1151,7 +1147,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
         const errorData = await res.json();
         // Gestion de l'erreur 409 (Mélange de cépage détecté par le backend)
         if (res.status === 409) {
-          setMixWarning({ apport, press: p, weightToLoad });
+          setMixWarning({ apport, press: p, weightToLoad } as any);
           setIsSubmitting(false);
           return;
         }
@@ -1166,7 +1162,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       if (refreshData) await refreshData();
 
     } catch(e) { 
-      alert(e.message); 
+      alert(e instanceof Error ? e.message : String(e)); 
     } finally {
       setIsSubmitting(false);
     }
@@ -1177,7 +1173,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       const res = await fetch('/api/containers', { 
         method: 'POST', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           name: newCuve.name, 
@@ -1193,7 +1188,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       setNewCuve({ name: "", type: "Débourbage Cuvée", capacityValue: "" });
       setShowAddCuve(false);
     } catch(e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSubmitting(false);
     }
@@ -1202,7 +1197,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
   // --- DÉBOURBAGE (TRANSFERT / SOUTIRAGE) ---
   const validerTransfert = async () => {
     // 1. Calcul du volume total saisi
-    const volSaisi = transferDests.reduce((sum, d) => sum + parseToHl(d.vol), 0);
+    const volSaisi = transferDests.reduce((sum: any, d: any) => sum + parseToHl(d.vol), 0);
     
     // Remplacement du "alert" par un Toast rouge
     if (volSaisi <= 0) {
@@ -1210,8 +1205,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       return;
     }
     
-    const sourceId = transferModal.id;
-    const currentLot = (state.lots || []).find(l => String(l.currentContainerId || l.containerId) === String(sourceId) && parseFloat(l.currentVolume || l.volume) > 0);
+    const sourceId = (transferModal as any).id;
+    const currentLot = (state.lots || []).find((l: any) => String(l.currentContainerId || l.containerId) === String(sourceId) && parseFloat(l.currentVolume || l.volume) > 0);
 
     if (!currentLot) {
        dispatch({ type: "TOAST_ADD", payload: { msg: "Erreur : La cuve source est vide ou le lot est introuvable.", color: T.red } });
@@ -1227,8 +1222,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       // 2. Préparation stricte des destinations
       const validDestinations = transferDests
-        .filter(d => d.cuveId && parseToHl(d.vol) > 0)
-        .map(d => ({ toId: parseInt(d.cuveId), volume: parseToHl(d.vol) }));
+        .filter((d: any) => d.cuveId && parseToHl(d.vol) > 0)
+        .map((d: any) => ({ toId: parseInt(d.cuveId), volume: parseToHl(d.vol) }));
 
       if (validDestinations.length === 0) {
         throw new Error("Aucune cuve de destination valide n'a été configurée.");
@@ -1236,7 +1231,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
       // 3. Payload Zod-compliant
       const payload = {
-          lotId: parseInt(currentLot.id),
+          lotId: parseInt((currentLot as any).id),
           fromId: parseInt(sourceId),
           volume: volSaisi, 
           destinations: validDestinations,
@@ -1250,7 +1245,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       // 4. Appel de l'API blindée
       const res = await fetch('/api/transfers', {
           method: 'POST',
-          headers: buildApiHeaders(user),
           headers: buildApiHeaders(user),
           body: JSON.stringify(payload)
       });
@@ -1280,7 +1274,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
   // --- ÉCOULEMENT DES JUS DU PRESSOIR (Création des lots de moût) ---
   const validerEcoulement = async () => {
-    const p = actionModal.press;
+    const p = (actionModal as any).press;
     setIsSubmitting(true);
     
     try {
@@ -1289,16 +1283,15 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
         pressoirId: p.id,
         parcelle: p.parcelle,
         cepage: p.cepage,
-        cuvees: cuveeDests.filter(d => d.cuveId && parseToHl(d.vol) > 0).map(d => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
-        tailles: tailleDests.filter(d => d.cuveId && parseToHl(d.vol) > 0).map(d => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
-        rebeches: rebechesDests.filter(d => d.cuveId && parseToHl(d.vol) > 0).map(d => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
+        cuvees: cuveeDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
+        tailles: tailleDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
+        rebeches: rebechesDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
         operator: user?.name || "Système",
         idempotencyKey: idempotencyKey || crypto.randomUUID()
       };
 
       const res = await fetch('/api/pressings/ecoulement', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify(payload) 
       });
@@ -1321,7 +1314,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     }
   };
 
-  const calculateFractions = (kg) => {
+  const calculateFractions = (kg: any) => {
     const cuvee = (kg / 4000) * 20.5;
     const taille = (kg / 4000) * 5.0;
     const maxRebeches = (cuvee + taille) * 0.10; 
@@ -1332,7 +1325,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     };
   };
 
-  const toggleCleaning = async (c) => {
+  const toggleCleaning = async (c: any) => {
     setIsSubmitting(true);
     const nextStatus = c.status === "NETTOYAGE" ? "VIDE" : "NETTOYAGE";
     try {
@@ -1343,15 +1336,15 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     finally { setIsSubmitting(false); }
   };
 
-  const pressoirsActifs = pressoirs.filter(p => p.status !== "VIDE");
-  const pressoirsArret = pressoirs.filter(p => p.status === "VIDE");
+  const pressoirsActifs = pressoirs.filter((p: any) => p.status !== "VIDE");
+  const pressoirsArret = pressoirs.filter((p: any) => p.status === "VIDE");
   
-  const cuvesDebourbage = (state.containers || []).filter(c => c.status !== "ARCHIVÉE" && (c.type?.includes("Débourbage") || c.type?.includes("Belon") || c.displayName?.toLowerCase().includes("cuvée") || c.displayName?.toLowerCase().includes("taille")));
+  const cuvesDebourbage = (state.containers || []).filter((c: any) => c.status !== "ARCHIVÉE" && (c.type?.includes("Débourbage") || c.type?.includes("Belon") || c.displayName?.toLowerCase().includes("cuvée") || c.displayName?.toLowerCase().includes("taille")));
   
-  const debourbageActifs = cuvesDebourbage.filter(c => (parseFloat(c.currentVolume || c.volume) || 0) > 0);
-  const debourbageVides = cuvesDebourbage.filter(c => (parseFloat(c.currentVolume || c.volume) || 0) <= 0);
+  const debourbageActifs = cuvesDebourbage.filter((c: any) => (parseFloat(c.currentVolume || c.volume) || 0) > 0);
+  const debourbageVides = cuvesDebourbage.filter((c: any) => (parseFloat(c.currentVolume || c.volume) || 0) <= 0);
 
-  const cuvesCuverie = (state.containers || []).filter(c => {
+  const cuvesCuverie = (state.containers || []).filter((c: any) => {
     if (c.status === "ARCHIVÉE") return false;
     const t = (c.type || "").toLowerCase();
     const n = ((c.displayName || c.name) || "").toLowerCase();
@@ -1365,10 +1358,10 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     return true;
   });
 
-  const cuvesBourbes = (state.containers || []).filter(c => c.status !== "ARCHIVÉE" && (c.type === "CUVE_BOURBES" || c.type?.includes("Bourbe") || (c.displayName || c.name || "").toLowerCase().includes("bourbe")));
-  const cuvesRebeches = (state.containers || []).filter(c => c.status !== "ARCHIVÉE" && (c.type === "CUVE_REBECHES" || c.type?.includes("Rebeche") || (c.displayName || c.name || "").toLowerCase().includes("rebêche") || (c.displayName || c.name || "").toLowerCase().includes("rebeche")));
+  const cuvesBourbes = (state.containers || []).filter((c: any) => c.status !== "ARCHIVÉE" && (c.type === "CUVE_BOURBES" || c.type?.includes("Bourbe") || (c.displayName || c.name || "").toLowerCase().includes("bourbe")));
+  const cuvesRebeches = (state.containers || []).filter((c: any) => c.status !== "ARCHIVÉE" && (c.type === "CUVE_REBECHES" || c.type?.includes("Rebeche") || (c.displayName || c.name || "").toLowerCase().includes("rebêche") || (c.displayName || c.name || "").toLowerCase().includes("rebeche")));
 
-  const renderDebourbageCard = (c) => {
+  const renderDebourbageCard = (c: any) => {
     const nameToDisplay = c.displayName || c.name || "Sans nom";
     const isCuvee = c.type.includes("Cuvée") || nameToDisplay.toLowerCase().includes("cuvée");
     const currentVol = parseFloat(c.currentVolume || c.volume) || 0;
@@ -1411,7 +1404,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                  disabled={isVide || isSubmitting} onClick={() => { 
                    const autoClair = parseToHl(currentVol * 0.98); 
                    setTransferModal(c); 
-                   setTransferDests([{ id: Date.now(), cuveId: "", vol: autoClair.toFixed(2) }]); 
+                   setTransferDests([{ id: Date.now(), cuveId: "", vol: autoClair.toFixed(2) }] as any); 
                    setTransferOptions({ actionRest: "ENVOYER_BOURBES", bourbesDestId: "" });
                    setQuickDestIndex(null);
                  }}>
@@ -1423,8 +1416,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     );
   };
 
-  const renderDestSection = (title, icon, color, dests, setDests, options, theoVol, defaultType, isHardLimit = false) => {
-    const total = dests.reduce((sum, d) => sum + parseToHl(d.vol), 0);
+  const renderDestSection = (title: any, icon: any, color: any, dests: any, setDests: any, options: any, theoVol: any, defaultType: any, isHardLimit = false) => {
+    const total = dests.reduce((sum: any, d: any) => sum + parseToHl(d.vol), 0);
     const isOverLimit = isHardLimit && total > (parseFloat(theoVol) + 0.05);
 
     return (
@@ -1441,8 +1434,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
           {isHardLimit ? "Maximum autorisé" : "Théorique attendu"} : {parseFloat(theoVol).toFixed(2)} hL
         </div>
 
-        {dests.map((d, i) => {
-           const targetCuve = options.find(c => String(c.id) === String(d.cuveId));
+        {dests.map((d: any, i: any) => {
+           const targetCuve = options.find((c: any) => String(c.id) === String(d.cuveId));
            const free = targetCuve ? Math.max(0, parseFloat(targetCuve.capacityValue || targetCuve.capacity || 0) - parseFloat(targetCuve.currentVolume || targetCuve.volume || 0)) : 0;
            const isOver = parseToHl(d.vol) > (free + 0.05);
 
@@ -1450,18 +1443,18 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
              <div key={d.id} style={{ marginBottom: 12 }}>
                <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
                  <div style={{ flex: 2 }}>
-                   <Select value={d.cuveId} disabled={isSubmitting} onChange={e => {
+                   <Select value={d.cuveId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                        const selectedCuveId = e.target.value;
                        const nd = [...dests]; 
                        nd[i] = { ...nd[i], cuveId: selectedCuveId }; 
                        
                        if (selectedCuveId) {
-                           const tCuve = options.find(c => String(c.id) === String(selectedCuveId));
+                           const tCuve = options.find((c: any) => String(c.id) === String(selectedCuveId));
                            if (tCuve) {
                                const freeSpace = Math.max(0, parseFloat(tCuve.capacityValue || tCuve.capacity || 0) - parseFloat(tCuve.currentVolume || tCuve.volume || 0));
                                const safeSpace = freeSpace * 0.9; 
                                
-                               const otherDestsVol = dests.filter((_, idx) => idx !== i).reduce((s, od) => s + parseToHl(od.vol), 0);
+                               const otherDestsVol = dests.filter((_: any, idx: any) => idx !== i).reduce((s: any, od: any) => s + parseToHl(od.vol), 0);
                                const remainingToDistribute = Math.max(0, parseFloat(theoVol) - otherDestsVol);
                                
                                const autoVol = Math.min(safeSpace, remainingToDistribute);
@@ -1473,24 +1466,24 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                        setDests(nd);
                    }} style={{ borderColor: isOver ? T.red : T.border }}>
                       <option value="">-- Choisir cuve --</option>
-                      {options.map(c => {
+                      {options.map((c: any) => {
                          const dispo = Math.max(0, parseFloat(c.capacityValue || c.capacity || 0) - parseFloat(c.currentVolume || c.volume || 0));
-                         const isAlreadySelected = dests.some((otherD, idx) => idx !== i && String(otherD.cuveId) === String(c.id));
+                         const isAlreadySelected = dests.some((otherD: any, idx: any) => idx !== i && String(otherD.cuveId) === String(c.id));
                          return <option key={c.id} value={c.id} disabled={isAlreadySelected}>{c.displayName || c.name} (Dispo: {dispo.toFixed(2)} hL)</option>
                       })}
                    </Select>
                  </div>
                  <div style={{ flex: 1, display:"flex", gap:4 }}>
-                   <Input type="number" step="0.1" value={d.vol} disabled={isSubmitting} onChange={e => {
+                   <Input type="number" step="0.1" value={d.vol} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                        const nd = [...dests]; 
                        nd[i] = { ...nd[i], vol: e.target.value }; 
                        setDests(nd);
                    }} placeholder="Vol." style={{ borderColor: isOver ? T.red : T.border }} />
                    <Btn variant="secondary" disabled={isSubmitting} onClick={() => {
-                       const tCuve = options.find(c => String(c.id) === String(d.cuveId));
+                       const tCuve = options.find((c: any) => String(c.id) === String(d.cuveId));
                        const freeSpace = tCuve ? Math.max(0, parseFloat(tCuve.capacityValue || tCuve.capacity || 0) - parseFloat(tCuve.currentVolume || tCuve.volume || 0)) : 0;
                        const safeSpace = freeSpace * 0.9;
-                       const otherDests = dests.filter((_, idx) => idx !== i).reduce((s, od) => s + parseToHl(od.vol), 0);
+                       const otherDests = dests.filter((_: any, idx: any) => idx !== i).reduce((s: any, od: any) => s + parseToHl(od.vol), 0);
                        const remTheo = Math.max(0, parseFloat(theoVol) - otherDests);
                        const maxVal = Math.min(remTheo, safeSpace);
                        if(maxVal > 0) {
@@ -1502,7 +1495,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                  </div>
                  {dests.length > 1 && (
                    <Btn variant="ghost" disabled={isSubmitting} style={{color:T.red, padding:"0 8px"}} onClick={() => {
-                      setDests(dests.filter((_, idx) => idx !== i));
+                      setDests(dests.filter((_: any, idx: any) => idx !== i));
                    }}>✕</Btn>
                  )}
                </div>
@@ -1511,7 +1504,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
         })}
         <div style={{ marginTop: 8 }}>
            <Btn variant="secondary" disabled={isSubmitting} style={{ fontSize: 10, padding: "4px 8px" }} onClick={() => {
-              setDests([...dests, { id: Date.now() + Math.random(), cuveId: "", vol: "" }]);
+              setDests([...dests, { id: Date.now() + Math.random(), cuveId: "", vol: "" }] as any);
            }}>+ Éclater dans une autre cuve</Btn>
         </div>
       </div>
@@ -1539,12 +1532,12 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
             <div style={{ display: "flex", gap: 16, alignItems: isCustomOrigin ? "flex-start" : "flex-end", flexWrap: "wrap" }}>
               {!isCustomOrigin ? (
                 <FF label="Provenance (Parcelle ou Autre)" style={{ flex: 1, minWidth: 200 }}>
-                  <Select value={newApport.parcelle} disabled={isSubmitting} onChange={(e) => {
+                  <Select value={newApport.parcelle} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                     if (e.target.value === "CUSTOM") setIsCustomOrigin(true);
                     else setNewApport({...newApport, parcelle: e.target.value});
                   }}>
                     <option value="">-- Sélectionner --</option>
-                    {(state.parcelles || []).map(p => <option key={p.id} value={p.nom}>{p.nom}</option>)}
+                    {(state.parcelles || []).map((p: any) => <option key={p.id} value={p.nom}>{p.nom}</option>)}
                     <option value="CUSTOM" style={{ fontWeight: "bold", color: T.accent }}>+ Autre origine (Négoce, Achat...)</option>
                   </Select>
                 </FF>
@@ -1555,32 +1548,32 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                     <button onClick={() => setIsCustomOrigin(false)} disabled={isSubmitting} style={{ background: "none", border: "none", color: T.textDim, cursor: "pointer", fontSize: 12 }}>✕ Annuler</button>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                    <Select value={customDep} disabled={isSubmitting} onChange={e => { setCustomDep(e.target.value); setCustomReg(""); setCustomCom(""); }}>
+                    <Select value={customDep} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setCustomDep(e.target.value); setCustomReg(""); setCustomCom(""); }}>
                       <option value="">Département</option>
                       {depts.map(d => <option key={d}>{d}</option>)}
                     </Select>
-                    <Select value={customReg} disabled={!customDep || isSubmitting} onChange={e => { setCustomReg(e.target.value); setCustomCom(""); }}>
+                    <Select value={customReg} disabled={!customDep || isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setCustomReg(e.target.value); setCustomCom(""); }}>
                       <option value="">Région / Sous-région</option>
                       {regions.map(r => <option key={r}>{r}</option>)}
                     </Select>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <Select value={customCom} disabled={!customReg || isSubmitting} onChange={e => setCustomCom(e.target.value)}>
+                    <Select value={customCom} disabled={!customReg || isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCustomCom(e.target.value)}>
                       <option value="">Commune</option>
-                      {communes.map(c => <option key={c}>{c}</option>)}
+                      {communes.map((c: any) => <option key={c}>{c}</option>)}
                     </Select>
-                    <Input value={customNom} disabled={isSubmitting} onChange={e=>setCustomNom(e.target.value)} placeholder="Nom du Vendeur ou Lieu-dit" />
+                    <Input value={customNom} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setCustomNom(e.target.value)} placeholder="Nom du Vendeur ou Lieu-dit" />
                   </div>
                 </div>
               )}
               <div style={{ display: "flex", gap: 16, alignItems: "flex-end" }}>
                 <FF label="Cépage" style={{ width: 140 }}>
-                  <Select value={newApport.cepage} disabled={isSubmitting} onChange={(e) => setNewApport({...newApport, cepage: e.target.value})}>
+                  <Select value={newApport.cepage} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewApport({...newApport, cepage: e.target.value})}>
                     <option value="CH">Chardonnay</option><option value="PN">Pinot Noir</option><option value="PM">Meunier</option><option value="PBL">Pinot Blanc</option><option value="ARB">Arbane</option><option value="PMES">Petit Meslier</option><option value="PG">Pinot Gris</option><option value="VOLTIS">Voltis</option>
                   </Select>
                 </FF>
                 <FF label="Poids (kg)" style={{ width: 120 }}>
-                  <Input type="text" value={newApport.poids} disabled={isSubmitting} onChange={(e) => setNewApport({...newApport, poids: e.target.value})} placeholder="Ex: 4000" />
+                  <Input type="text" value={newApport.poids} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewApport({...newApport, poids: e.target.value})} placeholder="Ex: 4000" />
                 </FF>
                 <Btn onClick={handleAddApport} disabled={isSubmitting} style={{ height: 38 }}>{isSubmitting ? "..." : "+ Ajouter l'apport"}</Btn>
               </div>
@@ -1596,7 +1589,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px 100px 150px 40px", padding: "12px 20px", borderBottom: `1px solid ${T.border}`, fontSize: 11, color: T.textDim, textTransform: "uppercase" }}>
                   <div>Provenance</div><div>Cépage</div><div>Poids restant</div><div>Vol. Estimé</div><div>Statut</div><div></div>
                 </div>
-                {apportsEnAttente.map(a => {
+                {apportsEnAttente.map((a: any) => {
                   const volEstime = calculateFractions(a.weight || a.poids || 0);
                   const totalEstime = (Number(volEstime.cuvee) + Number(volEstime.taille)).toFixed(2);
                   return (
@@ -1627,7 +1620,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
               <div style={{ padding:"30px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucune machine en route.</div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 20 }}>
-                {pressoirsActifs.map(p => {
+                {pressoirsActifs.map((p: any) => {
                   const isPret = p.status === "PRET_ECOULAGE";
                   const fillPct = ((p.loadKg || 0) / p.capacite) * 100;
                   
@@ -1665,7 +1658,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                                 
                                 <div style={{ display: "flex", gap: 8 }}>
                                   <button disabled={isSubmitting} style={{ background:"none", border:"none", color: T.accentLight, fontWeight: "bold", cursor: isSubmitting ? "default" : "pointer" }} onClick={() => {
-                                      setActionModal({ type: "LOAD", press: p });
+                                      setActionModal({ type: "LOAD", press: p } as any);
                                       setSelectedApport("");
                                       setLoadWeight(""); 
                                   }}>
@@ -1681,7 +1674,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                           )}
                         </div>
                         {isPret && (<Btn style={{ width: "100%", background: T.green, borderColor: T.green }} disabled={isSubmitting} onClick={() => {
-                          setActionModal({ type: "ECOULEMENT", press: p });
+                          setActionModal({ type: "ECOULEMENT", press: p } as any);
                         }}>🍷 Fractionner & Écouler</Btn>)}
                       </div>
                     </div>
@@ -1697,7 +1690,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
               <div style={{ padding:"30px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucune machine disponible.</div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 20 }}>
-                {pressoirsArret.map(p => (
+                {pressoirsArret.map((p: any) => (
                   <div key={p.id} style={{ background: T.surfaceHigh, border: `1px solid ${T.border}`, borderRadius: 8, overflow: "hidden", display: "flex", flexDirection: "column", opacity: 0.8 }}>
                     <div style={{ padding: "16px 20px", borderBottom: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div><div style={{ fontSize: 18, fontWeight: "bold", color: T.textStrong, fontFamily: "monospace" }}>{p.nom}</div><div style={{ fontSize: 11, color: T.textDim }}>{p.type} • {p.capacite} kg max</div></div>
@@ -1705,7 +1698,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                     </div>
                     <div style={{ padding: 20, textAlign: "center", color: T.textDim, fontSize: 13 }}>
                       <Btn disabled={isSubmitting || apportsEnAttente.length === 0} onClick={() => { 
-                        setActionModal({ type: "LOAD", press: p }); 
+                        setActionModal({ type: "LOAD", press: p } as any); 
                         setSelectedApport(""); 
                         setLoadWeight("");
                       }} style={{ width: "100%" }}>📥 Démarrer cycle (Nouveau Marc)</Btn>
@@ -1756,13 +1749,13 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
       {/* --- MODALES --- */}
 
-      {actionModal?.type === "LOAD" && actionModal.press && (
-        <Modal title={`Charger : ${actionModal.press.nom}`} onClose={() => setActionModal(null)}>
+      {(actionModal as any)?.type === "LOAD" && (actionModal as any).press && (
+        <Modal title={`Charger : ${(actionModal as any).press.nom}`} onClose={() => setActionModal(null)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
             <FF label="Lot de raisins à charger">
-              <Select value={selectedApport} disabled={isSubmitting} onChange={e => setSelectedApport(e.target.value)}>
+              <Select value={selectedApport} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedApport(e.target.value)}>
                 <option value="">-- Sélectionner un apport sur le quai --</option>
-                {apportsEnAttente.map(a => (
+                {apportsEnAttente.map((a: any) => (
                   <option key={a.id} value={a.id}>
                     {a.cru || a.parcelle} ({a.cepage}) - Reste: {a.weight || a.poids} kg
                   </option>
@@ -1774,12 +1767,12 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                 type="number"
                 disabled={isSubmitting}
                 value={loadWeight}
-                onChange={e => setLoadWeight(e.target.value)}
-                placeholder={`Ex: ${actionModal.press.capacite}`}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLoadWeight(e.target.value)}
+                placeholder={`Ex: ${(actionModal as any).press.capacite}`}
               />
             </FF>
             <div style={{ fontSize: 11, color: T.textDim }}>
-              Capacité max du pressoir : {actionModal.press.capacite} kg
+              Capacité max du pressoir : {(actionModal as any).press.capacite} kg
             </div>
           </div>
           <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
@@ -1795,8 +1788,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       {mixWarning && (
         <Modal title="⚠️ Mélange de cépages détecté" onClose={() => setMixWarning(null)}>
           <div style={{ padding: "10px 0 20px 0", color: T.text, lineHeight: 1.5, fontSize: 14 }}>
-            Le pressoir contient actuellement du <strong>{mixWarning.press.cepage}</strong>.<br/><br/>
-            Vous vous apprêtez à y ajouter <strong>{mixWarning.weightToLoad} kg de {mixWarning.apport.cepage}</strong>.<br/><br/>
+            Le pressoir contient actuellement du <strong>{(mixWarning as any).press.cepage}</strong>.<br/><br/>
+            Vous vous apprêtez à y ajouter <strong>{(mixWarning as any).weightToLoad} kg de {(mixWarning as any).apport.cepage}</strong>.<br/><br/>
             Le système conservera l'identité du cépage majoritaire, mais gardera la trace exacte de ce mélange dans la provenance du lot.<br/>
             Voulez-vous vraiment procéder à ce mélange ?
           </div>
@@ -1813,38 +1806,38 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       )}
 
       {loadWarning && (
-        <Modal title={loadWarning.type === 'UNDER' ? "⚠️ Sous-charge détectée" : "🚨 Surcharge détectée"} onClose={() => setLoadWarning(null)}>
+        <Modal title={(loadWarning as any).type === 'UNDER' ? "⚠️ Sous-charge détectée" : "🚨 Surcharge détectée"} onClose={() => setLoadWarning(null)}>
           <div style={{ padding: "10px 0 20px 0", color: T.text, lineHeight: 1.5, fontSize: 14 }}>
-            {loadWarning.type === 'UNDER' ? (
+            {(loadWarning as any).type === 'UNDER' ? (
               <>
-                Le pressoir ne sera rempli qu'à <strong>{loadWarning.fillPct.toFixed(1)}%</strong> ({loadWarning.totalLoad} kg sur {actionModal.press.capacite} kg max).<br/><br/>
-                Il vous manque <strong>{loadWarning.missing.toFixed(0)} kg</strong> pour atteindre la pleine capacité de la machine.<br/>
+                Le pressoir ne sera rempli qu'à <strong>{(loadWarning as any).fillPct.toFixed(1)}%</strong> ({(loadWarning as any).totalLoad} kg sur {(actionModal as any).press.capacite} kg max).<br/><br/>
+                Il vous manque <strong>{(loadWarning as any).missing.toFixed(0)} kg</strong> pour atteindre la pleine capacité de la machine.<br/>
                 Voulez-vous vraiment lancer le cycle tel quel ?
               </>
             ) : (
               <>
-                Vous dépassez la capacité de la machine (<strong>{loadWarning.totalLoad} kg</strong> pour {actionModal.press.capacite} kg autorisés).<br/><br/>
-                Vous avez <strong>{loadWarning.excess.toFixed(0)} kg en trop</strong>. Cela peut entraîner une casse mécanique ou une extraction excessive.<br/>
+                Vous dépassez la capacité de la machine (<strong>{(loadWarning as any).totalLoad} kg</strong> pour {(actionModal as any).press.capacite} kg autorisés).<br/><br/>
+                Vous avez <strong>{(loadWarning as any).excess.toFixed(0)} kg en trop</strong>. Cela peut entraîner une casse mécanique ou une extraction excessive.<br/>
                 Voulez-vous forcer le chargement ?
               </>
             )}
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <Btn variant="secondary" onClick={() => setLoadWarning(null)} disabled={isSubmitting}>Annuler et modifier</Btn>
-            <Btn onClick={() => handleLoadSubmit(true, loadWarning.forceMix)} disabled={isSubmitting} style={{ background: loadWarning.type === 'OVER' ? T.red : T.accent, borderColor: loadWarning.type === 'OVER' ? T.red : T.accent, color: "#fff" }}>
-              {isSubmitting ? "Traitement..." : (loadWarning.type === 'OVER' ? "Forcer la surcharge" : "Lancer en sous-charge")}
+            <Btn onClick={() => handleLoadSubmit(true, (loadWarning as any).forceMix)} disabled={isSubmitting} style={{ background: (loadWarning as any).type === 'OVER' ? T.red : T.accent, borderColor: (loadWarning as any).type === 'OVER' ? T.red : T.accent, color: "#fff" }}>
+              {isSubmitting ? "Traitement..." : ((loadWarning as any).type === 'OVER' ? "Forcer la surcharge" : "Lancer en sous-charge")}
             </Btn>
           </div>
         </Modal>
       )}
 
       {/* --- MODALE D'ÉCOULEMENT (LA PLUS IMPORTANTE) --- */}
-      {actionModal?.type === "ECOULEMENT" && actionModal.press && (() => {
-        const cuvesCuvee = cuvesDebourbage.filter(c => c.type.includes("Cuvée") || (c.displayName || c.name || "").toLowerCase().includes("cuvée"));
-        const cuvesTaille = cuvesDebourbage.filter(c => c.type.includes("Taille") || (c.displayName || c.name || "").toLowerCase().includes("taille"));
-        const calcVol = calculateFractions(actionModal.press.loadKg); 
+      {(actionModal as any)?.type === "ECOULEMENT" && (actionModal as any).press && (() => {
+        const cuvesCuvee = cuvesDebourbage.filter((c: any) => c.type.includes("Cuvée") || (c.displayName || c.name || "").toLowerCase().includes("cuvée"));
+        const cuvesTaille = cuvesDebourbage.filter((c: any) => c.type.includes("Taille") || (c.displayName || c.name || "").toLowerCase().includes("taille"));
+        const calcVol = calculateFractions((actionModal as any).press.loadKg); 
 
-        const isDestInvalid = (dests, options) => dests.some(d => {
+        const isDestInvalid = (dests: any[], options: any[]) => dests.some((d: any) => {
             const v = parseToHl(d.vol); 
             if (v > 0 && !d.cuveId) return true;
             if (d.cuveId && v <= 0) return true;
@@ -1856,9 +1849,9 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
             return false;
         });
 
-        const totalC = cuveeDests.reduce((s,d)=>parseToHl(s+parseToHl(d.vol)),0); 
-        const totalT = tailleDests.reduce((s,d)=>parseToHl(s+parseToHl(d.vol)),0); 
-        const totalR = rebechesDests.reduce((s,d)=>parseToHl(s+parseToHl(d.vol)),0); 
+        const totalC = cuveeDests.reduce((s: any, d: any) => parseToHl(s + parseToHl(d.vol)), 0); 
+        const totalT = tailleDests.reduce((s: any, d: any) => parseToHl(s + parseToHl(d.vol)), 0); 
+        const totalR = rebechesDests.reduce((s: any, d: any) => parseToHl(s + parseToHl(d.vol)), 0); 
 
         const hasErrors =
            isDestInvalid(cuveeDests, cuvesCuvee) ||
@@ -1869,10 +1862,10 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
            totalR > parseToHl(calcVol.rebeches);
 
         return (
-          <Modal title={`Fractionnement : ${actionModal.press.nom}`} onClose={() => setActionModal(null)} wide={true}>
+          <Modal title={`Fractionnement : ${(actionModal as any).press.nom}`} onClose={() => setActionModal(null)} wide={true}>
             <div style={{ width: "100%" }}>
               <div style={{ fontSize: 13, marginBottom: 24, lineHeight: 1.5 }}>
-                Le pressurage de <strong>{actionModal.press.loadKg} kg</strong> de <strong>{actionModal.press.parcelle} ({actionModal.press.cepage})</strong> est terminé.<br/>
+                Le pressurage de <strong>{(actionModal as any).press.loadKg} kg</strong> de <strong>{(actionModal as any).press.parcelle} ({(actionModal as any).press.cepage})</strong> est terminé.<br/>
                 Ajustez les volumes et répartissez les jus dans un ou plusieurs Belons.
               </div>
 
@@ -1897,7 +1890,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       {apportToDelete && (
         <Modal title="Supprimer cet apport" onClose={() => setApportToDelete(null)}>
           <div style={{ fontSize: 14, color: T.text, marginBottom: 24 }}>
-            Êtes-vous sûr de vouloir supprimer l'apport de <strong>{apportToDelete.weight || apportToDelete.poids} kg</strong> ?<br/><br/>Cette action effacera l'enregistrement.
+            Êtes-vous sûr de vouloir supprimer l'apport de <strong>{(apportToDelete as any).weight || (apportToDelete as any).poids} kg</strong> ?<br/><br/>Cette action effacera l'enregistrement.
           </div>
           <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
             <Btn variant="secondary" onClick={() => setApportToDelete(null)} disabled={isSubmitting}>Annuler</Btn>
@@ -1909,17 +1902,17 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       {showAddPress && (
         <Modal title="Ajouter un pressoir" onClose={() => setShowAddPress(false)}>
           <div style={{ display: "grid", gap: 16, marginBottom: 24 }}>
-            <FF label="Nom du pressoir"><Input disabled={isSubmitting} value={newPress.nom} onChange={(e) => setNewPress({...newPress, nom: e.target.value})} placeholder="Ex: Pressoir 1" /></FF>
+            <FF label="Nom du pressoir"><Input disabled={isSubmitting} value={newPress.nom} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPress({...newPress, nom: e.target.value})} placeholder="Ex: Pressoir 1" /></FF>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <FF label="Type">
-                <Select disabled={isSubmitting} value={newPress.type} onChange={(e) => setNewPress({...newPress, type: e.target.value})}>
+                <Select disabled={isSubmitting} value={newPress.type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewPress({...newPress, type: e.target.value})}>
                   <option>Pneumatique</option><option>Traditionnel (Maie fixe)</option><option>Hydraulique (Maie tournante)</option><option>Mécanique (Plateaux)</option>
                 </Select>
               </FF>
-              <FF label="Constructeur"><Input disabled={isSubmitting} value={newPress.marque} onChange={(e) => setNewPress({...newPress, marque: e.target.value})} placeholder="Ex: Bücher..." /></FF>
+              <FF label="Constructeur"><Input disabled={isSubmitting} value={newPress.marque} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPress({...newPress, marque: e.target.value})} placeholder="Ex: Bücher..." /></FF>
             </div>
             <FF label="Capacité (Marc)">
-              <Select disabled={isSubmitting} value={newPress.capacite} onChange={(e) => setNewPress({...newPress, capacite: Number(e.target.value)})}>
+              <Select disabled={isSubmitting} value={newPress.capacite} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewPress({...newPress, capacite: Number(e.target.value)})}>
                 <option value={2000}>2 000 kg</option><option value={4000}>4 000 kg</option><option value={6000}>6 000 kg</option><option value={8000}>8 000 kg</option><option value={12000}>12 000 kg</option>
               </Select>
             </FF>
@@ -1941,12 +1934,18 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 // =============================================================================
 // MODALS ACTIONS CUVE (SÉCURISÉES)
 // =============================================================================
-function CorrectVolumeModal({ container, lot, onClose }) {
+type CorrectVolumeModalProps = {
+  container: any;
+  lot: any;
+  onClose: () => void;
+};
+
+function CorrectVolumeModal({ container, lot, onClose }: CorrectVolumeModalProps) {
   const T = useTheme(); 
   const { dispatch, refreshData } = useStore(); 
   const { user } = useAuth();
   
-  const [vol, setVol] = useState(lot.currentVolume || lot.volume); 
+  const [vol, setVol] = useState(String(lot.currentVolume || lot.volume || "")); 
   const [note, setNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
@@ -1957,7 +1956,6 @@ function CorrectVolumeModal({ container, lot, onClose }) {
       const res = await fetch('/api/lots/volume', { 
         method: 'POST', 
         headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
         body: JSON.stringify({ lotId: lot.id, newVolume: parseFloat(vol), operator: user.name, note, idempotencyKey }) 
       });
       
@@ -1966,8 +1964,9 @@ function CorrectVolumeModal({ container, lot, onClose }) {
       dispatch({ type: "TOAST_ADD", payload: { msg: `Volume corrigé à ${vol} hL`, color: "#2d6640" } }); 
       if (refreshData) await refreshData();
       onClose();
-    } catch(e) {
-      alert("Erreur : " + e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message);
       setIdempotencyKey(crypto.randomUUID()); // 👈 NOUVELLE CLÉ GÉNÉRÉE EN CAS D'ERREUR
     } finally {
       setIsSubmitting(false);
@@ -1980,10 +1979,10 @@ function CorrectVolumeModal({ container, lot, onClose }) {
         Volume actuel : <strong style={{ color:T.accent }}>{lot.currentVolume || lot.volume} hL</strong>
       </div>
       <FF label="Nouveau volume (hL)">
-        <Input type="number" step="0.1" value={vol} onChange={e => setVol(e.target.value)} disabled={isSubmitting} />
+        <Input type="number" step="0.1" value={vol} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVol(e.target.value)} disabled={isSubmitting} />
       </FF>
       <FF label="Raison">
-        <Input placeholder="Ex: Ouillage..." value={note} onChange={e => setNote(e.target.value)} disabled={isSubmitting} />
+        <Input placeholder="Ex: Ouillage..." value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} disabled={isSubmitting} />
       </FF>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
@@ -1996,7 +1995,13 @@ function CorrectVolumeModal({ container, lot, onClose }) {
 // =============================================================================
 // MODALE D'OPÉRATIONS / INTRANTS (SÉCURISÉE)
 // =============================================================================
-function AddIntrantModal({ container, lot, onClose }) {
+type AddIntrantModalProps = {
+  container: any;
+  lot: any;
+  onClose: () => void;
+};
+
+function AddIntrantModal({ container, lot, onClose }: AddIntrantModalProps) {
   const T = useTheme(); 
   const { dispatch, refreshData, state } = useStore(); 
   const { user } = useAuth();
@@ -2008,9 +2013,9 @@ function AddIntrantModal({ container, lot, onClose }) {
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   // Analyse historique pour interface
-  const lotEvents = (state.events || []).filter(e => String(e.lotId) === String(lot.id) && (e.type === "INTRANT" || e.eventType === "INTRANT"));
-  const hasChaptalise = lotEvents.some(e => (e.note || e.comment)?.toLowerCase().includes("sucre") || (e.note || e.comment)?.toLowerCase().includes("chaptalisation"));
-  const hasAcidifie = lotEvents.some(e => (e.note || e.comment)?.toLowerCase().includes("acide") || (e.note || e.comment)?.toLowerCase().includes("acidification"));
+  const lotEvents = (state.events || []).filter((e: any) => String(e.lotId) === String(lot.id) && (e.type === "INTRANT" || e.eventType === "INTRANT"));
+  const hasChaptalise = lotEvents.some((e: any) => (e.note || e.comment)?.toLowerCase().includes("sucre") || (e.note || e.comment)?.toLowerCase().includes("chaptalisation"));
+  const hasAcidifie = lotEvents.some((e: any) => (e.note || e.comment)?.toLowerCase().includes("acide") || (e.note || e.comment)?.toLowerCase().includes("acidification"));
 
   const isSelectingSucre = intrant === "Chaptalisation (Sucre)";
   const isSelectingAcide = intrant === "Acidification";
@@ -2021,7 +2026,6 @@ function AddIntrantModal({ container, lot, onClose }) {
     try {
       const res = await fetch('/api/lots/intrants', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ lotId: lot.id, intrant, quantity: parseFloat(qty), unit, operator: user.name, idempotencyKey }) 
       });
@@ -2037,8 +2041,10 @@ function AddIntrantModal({ container, lot, onClose }) {
 
       if (refreshData) await refreshData();
       onClose(); 
-    } catch(e) {
-      alert("Erreur : " + e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message);
+      setIdempotencyKey(crypto.randomUUID());
     } finally {
       setIsSubmitting(false);
     }
@@ -2048,7 +2054,7 @@ function AddIntrantModal({ container, lot, onClose }) {
     <Modal title="Opération / Intrant" onClose={onClose}>
       <div style={{ marginBottom: 16 }}>
         <FF label="Type d'opération">
-          <Select value={intrant} onChange={e => setIntrant(e.target.value)} style={{ borderColor: isBlockedAOC ? T.red : T.border }} disabled={isSubmitting}>
+          <Select value={intrant} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setIntrant(e.target.value)} style={{ borderColor: isBlockedAOC ? T.red : T.border }} disabled={isSubmitting}>
             <optgroup label="Opérations Œnologiques">
               <option value="Ouillage">Ouillage</option>
               <option value="Filtration">Filtration</option>
@@ -2075,10 +2081,10 @@ function AddIntrantModal({ container, lot, onClose }) {
 
       <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:10 }}>
         <FF label="Quantité">
-          <Input type="number" step="0.1" value={qty} onChange={e => setQty(e.target.value)} disabled={isBlockedAOC || isSubmitting} />
+          <Input type="number" step="0.1" value={qty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQty(e.target.value)} disabled={isBlockedAOC || isSubmitting} />
         </FF>
         <FF label="Unité">
-          <Select value={unit} onChange={e => setUnit(e.target.value)} disabled={isBlockedAOC || isSubmitting}>
+          <Select value={unit} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUnit(e.target.value)} disabled={isBlockedAOC || isSubmitting}>
             {["opération", "g", "kg", "mL", "cL", "L", "g/hL", "mL/hL"].map(u => <option key={u}>{u}</option>)}
           </Select>
         </FF>
@@ -2094,7 +2100,14 @@ function AddIntrantModal({ container, lot, onClose }) {
 // =============================================================================
 // MODALE AJOUT CONTENANT (SÉCURISÉE)
 // =============================================================================
-function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialType = "CUVE_INOX" }) {
+type AddContainerModalProps = {
+  onClose: () => void;
+  onSuccess?: (newId: string) => void;
+  initialCapacity?: string;
+  initialType?: string;
+};
+
+function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialType = "CUVE_INOX" }: AddContainerModalProps) {
   const T = useTheme(); 
   const { dispatch, refreshData } = useStore();
   
@@ -2104,7 +2117,7 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
 
   const isDebourbage = form.type.includes("DEBOURBAGE");
   
-  const handleCapacityChange = (e) => {
+  const handleCapacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value;
     if (isDebourbage && parseFloat(val) > 200) val = "200";
     setForm({ ...form, capacity: val });
@@ -2125,8 +2138,7 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
     try {
       const res = await fetch('/api/containers', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
+        headers: buildApiHeaders(undefined), 
         body: JSON.stringify({ ...form, type: finalType, capacity: parseFloat(form.capacity), idempotencyKey }) 
       });
       
@@ -2136,8 +2148,9 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
       dispatch({ type:"TOAST_ADD", payload:{ msg:`${form.name} ajouté`, color:"#2d6640" } }); 
       if (refreshData) await refreshData();
       if (onSuccess) onSuccess(dbC.id.toString()); else onClose(); 
-    } catch (e) {
-      alert("Erreur : " + e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message);
     } finally {
       setIsSubmitting(false);
     }
@@ -2146,16 +2159,16 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
   return (
     <Modal title="Ajouter contenant" onClose={onClose}>
       <FF label="Nom affiché">
-        <Input value={form.name} onChange={e => setForm({...form, name:e.target.value})} placeholder="Ex: Cuve Inox 1" disabled={isSubmitting} />
+        <Input value={form.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, name:e.target.value})} placeholder="Ex: Cuve Inox 1" disabled={isSubmitting} />
       </FF>
       <FF label="Type">
-        <Select value={form.type} onChange={e => setForm({...form, type:e.target.value})} disabled={isSubmitting}>
+        <Select value={form.type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, type:e.target.value})} disabled={isSubmitting}>
           {CONTAINER_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g," ")}</option>)}
         </Select>
       </FF>
       {form.type === "AUTRE" && (
         <FF label="Précisez le type (ex: AMPHORE)">
-          <Input value={form.customType || ""} onChange={e => setForm({...form, customType:e.target.value})} placeholder="AMPHORE..." disabled={isSubmitting} />
+          <Input value={form.customType || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, customType:e.target.value})} placeholder="AMPHORE..." disabled={isSubmitting} />
         </FF>
       )}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
@@ -2170,7 +2183,7 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
            {isDebourbage && <div style={{ fontSize: 10, color: T.red, marginTop: 4, fontWeight: "bold" }}>⚠️ Limite AOC : 200 hL max</div>}
          </FF>
          <FF label="Zone">
-           <Input value={form.zone} onChange={e => setForm({...form, zone:e.target.value})} disabled={isSubmitting} />
+	           <Input value={form.zone} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, zone:e.target.value})} disabled={isSubmitting} />
          </FF>
       </div>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
@@ -2184,7 +2197,12 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
 // =============================================================================
 // MODALE AJOUT COMPARTIMENT CITERNE
 // =============================================================================
-function AddCompartmentModal({ container, onClose }) {
+type AddCompartmentModalProps = {
+  container: any;
+  onClose: () => void;
+};
+
+function AddCompartmentModal({ container, onClose }: AddCompartmentModalProps) {
   const T = useTheme();
   const { dispatch, refreshData } = useStore();
   const [cap, setCap] = useState("");
@@ -2199,8 +2217,7 @@ function AddCompartmentModal({ container, onClose }) {
     try {
       const res = await fetch('/api/containers/compartment', {
         method: 'POST',
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify({ originalContainerId: container.id, newCapacity: parsedCap, idempotencyKey })
       });
       if (!res.ok) throw new Error((await res.json()).error || "Erreur serveur");
@@ -2208,8 +2225,9 @@ function AddCompartmentModal({ container, onClose }) {
       dispatch({ type: "TOAST_ADD", payload: { msg: "Compartiment créé !", color: T.green } });
       if (refreshData) await refreshData();
       onClose();
-    } catch(e) { 
-      alert("Erreur : " + e.message); 
+    } catch (e: unknown) { 
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message); 
     } finally {
       setIsSubmitting(false);
     }
@@ -2223,7 +2241,7 @@ function AddCompartmentModal({ container, onClose }) {
         </div>
       </div>
       <FF label={`Capacité du NOUVEAU compartiment (hL)`}>
-        <Input type="number" step="0.1" value={cap} onChange={e => setCap(e.target.value)} placeholder={`Ex: 25`} disabled={isSubmitting} />
+        <Input type="number" step="0.1" value={cap} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCap(e.target.value)} placeholder={`Ex: 25`} disabled={isSubmitting} />
       </FF>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
