@@ -1658,7 +1658,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                                 
                                 <div style={{ display: "flex", gap: 8 }}>
                                   <button disabled={isSubmitting} style={{ background:"none", border:"none", color: T.accentLight, fontWeight: "bold", cursor: isSubmitting ? "default" : "pointer" }} onClick={() => {
-                                      setActionModal({ type: "LOAD", press: p });
+                                      setActionModal({ type: "LOAD", press: p } as any);
                                       setSelectedApport("");
                                       setLoadWeight(""); 
                                   }}>
@@ -1674,7 +1674,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                           )}
                         </div>
                         {isPret && (<Btn style={{ width: "100%", background: T.green, borderColor: T.green }} disabled={isSubmitting} onClick={() => {
-                          setActionModal({ type: "ECOULEMENT", press: p });
+                          setActionModal({ type: "ECOULEMENT", press: p } as any);
                         }}>🍷 Fractionner & Écouler</Btn>)}
                       </div>
                     </div>
@@ -1690,7 +1690,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
               <div style={{ padding:"30px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucune machine disponible.</div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 20 }}>
-                {pressoirsArret.map(p => (
+                {pressoirsArret.map((p: any) => (
                   <div key={p.id} style={{ background: T.surfaceHigh, border: `1px solid ${T.border}`, borderRadius: 8, overflow: "hidden", display: "flex", flexDirection: "column", opacity: 0.8 }}>
                     <div style={{ padding: "16px 20px", borderBottom: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div><div style={{ fontSize: 18, fontWeight: "bold", color: T.textStrong, fontFamily: "monospace" }}>{p.nom}</div><div style={{ fontSize: 11, color: T.textDim }}>{p.type} • {p.capacite} kg max</div></div>
@@ -1698,7 +1698,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                     </div>
                     <div style={{ padding: 20, textAlign: "center", color: T.textDim, fontSize: 13 }}>
                       <Btn disabled={isSubmitting || apportsEnAttente.length === 0} onClick={() => { 
-                        setActionModal({ type: "LOAD", press: p }); 
+                        setActionModal({ type: "LOAD", press: p } as any); 
                         setSelectedApport(""); 
                         setLoadWeight("");
                       }} style={{ width: "100%" }}>📥 Démarrer cycle (Nouveau Marc)</Btn>
