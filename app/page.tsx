@@ -3448,9 +3448,10 @@ function CreateLotModal({ container, onClose }: { container: any; onClose: any }
 // MODALES BOUTEILLES (SÉCURISÉES & API-DRIVEN)
 // =============================================================================
 
-function RemuageModal({ bl, actionType, onClose }) {
+function RemuageModal({ bl, actionType, onClose }: { bl: any; actionType: any; onClose: any }) {
   const T = useTheme();
   const { dispatch, refreshData } = useStore();
+  const { user } = useAuth();
 
   const [location, setLocation] = useState(bl.zone || bl.locationZone || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -3466,7 +3467,6 @@ function RemuageModal({ bl, actionType, onClose }) {
       const res = await fetch('/api/bottles/status', {
         method: 'POST',
         headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           blId: parseInt(bl.id), 
           status: statusDest, 
@@ -3481,7 +3481,7 @@ function RemuageModal({ bl, actionType, onClose }) {
       dispatch({ type: "TOAST_ADD", payload: { msg: `Lot passé en statut: ${statusDest.replace('_', ' ')}`, color: T.accent } });
       if (refreshData) await refreshData();
       onClose();
-    } catch (e) {
+    } catch (e: any) {
       alert(e.message);
     } finally {
       setIsSubmitting(false);
@@ -3494,7 +3494,7 @@ function RemuageModal({ bl, actionType, onClose }) {
         Enregistre l'évolution du cycle de vieillissement en base de données.
       </div>
       <FF label="Nouvel emplacement physique">
-        <Input value={location} onChange={e => setLocation(e.target.value)} disabled={isSubmitting} placeholder={isRemuage ? "Ex: Gyropalette 4" : "Ex: Caisse-Palette 12"} />
+        <Input value={location} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLocation(e.target.value)} disabled={isSubmitting} placeholder={isRemuage ? "Ex: Gyropalette 4" : "Ex: Caisse-Palette 12"} />
       </FF>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:24 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
@@ -3504,9 +3504,10 @@ function RemuageModal({ bl, actionType, onClose }) {
   );
 }
 
-function DegorgerModal({ bl, onClose }) {
+function DegorgerModal({ bl, onClose }: { bl: any; onClose: any }) {
   const T = useTheme(); 
   const { dispatch, refreshData } = useStore(); 
+  const { user } = useAuth();
   
   const [count, setCount] = useState(""); 
   const [sugar, setSugar] = useState(""); 
@@ -3516,7 +3517,7 @@ function DegorgerModal({ bl, onClose }) {
   
   const max = bl.currentBottleCount || bl.currentCount || 0;
 
-  const getDosageInfo = (val) => {
+  const getDosageInfo = (val: string) => {
     if (val === "") return { label: "--", suffix: "", color: T.textDim };
     const g = parseFloat(val);
     if (g === 0)  return { label: "Brut Nature / Zéro Dosage", suffix: "-Nature", color: "#8c7355" }; 
