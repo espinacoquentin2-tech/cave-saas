@@ -1124,7 +1124,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
           type: fillPct < 90 ? 'UNDER' : 'OVER',
           fillPct, totalLoad, missing: p.capacite - totalLoad, excess: totalLoad - p.capacite,
           forceMix
-        });
+        } as any);
         return; 
       }
     }
@@ -1147,7 +1147,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
         const errorData = await res.json();
         // Gestion de l'erreur 409 (Mélange de cépage détecté par le backend)
         if (res.status === 409) {
-          setMixWarning({ apport, press: p, weightToLoad });
+          setMixWarning({ apport, press: p, weightToLoad } as any);
           setIsSubmitting(false);
           return;
         }
@@ -1206,7 +1206,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     }
     
     const sourceId = (transferModal as any).id;
-    const currentLot = (state.lots || []).find(l => String(l.currentContainerId || l.containerId) === String(sourceId) && parseFloat(l.currentVolume || l.volume) > 0);
+    const currentLot = (state.lots || []).find((l: any) => String(l.currentContainerId || l.containerId) === String(sourceId) && parseFloat(l.currentVolume || l.volume) > 0);
 
     if (!currentLot) {
        dispatch({ type: "TOAST_ADD", payload: { msg: "Erreur : La cuve source est vide ou le lot est introuvable.", color: T.red } });
