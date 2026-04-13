@@ -1979,10 +1979,10 @@ function CorrectVolumeModal({ container, lot, onClose }: CorrectVolumeModalProps
         Volume actuel : <strong style={{ color:T.accent }}>{lot.currentVolume || lot.volume} hL</strong>
       </div>
       <FF label="Nouveau volume (hL)">
-        <Input type="number" step="0.1" value={vol} onChange={e => setVol(e.target.value)} disabled={isSubmitting} />
+        <Input type="number" step="0.1" value={vol} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVol(e.target.value)} disabled={isSubmitting} />
       </FF>
       <FF label="Raison">
-        <Input placeholder="Ex: Ouillage..." value={note} onChange={e => setNote(e.target.value)} disabled={isSubmitting} />
+        <Input placeholder="Ex: Ouillage..." value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} disabled={isSubmitting} />
       </FF>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
@@ -2013,9 +2013,9 @@ function AddIntrantModal({ container, lot, onClose }: AddIntrantModalProps) {
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   // Analyse historique pour interface
-  const lotEvents = (state.events || []).filter(e => String(e.lotId) === String(lot.id) && (e.type === "INTRANT" || e.eventType === "INTRANT"));
-  const hasChaptalise = lotEvents.some(e => (e.note || e.comment)?.toLowerCase().includes("sucre") || (e.note || e.comment)?.toLowerCase().includes("chaptalisation"));
-  const hasAcidifie = lotEvents.some(e => (e.note || e.comment)?.toLowerCase().includes("acide") || (e.note || e.comment)?.toLowerCase().includes("acidification"));
+  const lotEvents = (state.events || []).filter((e: any) => String(e.lotId) === String(lot.id) && (e.type === "INTRANT" || e.eventType === "INTRANT"));
+  const hasChaptalise = lotEvents.some((e: any) => (e.note || e.comment)?.toLowerCase().includes("sucre") || (e.note || e.comment)?.toLowerCase().includes("chaptalisation"));
+  const hasAcidifie = lotEvents.some((e: any) => (e.note || e.comment)?.toLowerCase().includes("acide") || (e.note || e.comment)?.toLowerCase().includes("acidification"));
 
   const isSelectingSucre = intrant === "Chaptalisation (Sucre)";
   const isSelectingAcide = intrant === "Acidification";
