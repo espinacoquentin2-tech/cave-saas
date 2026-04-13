@@ -847,7 +847,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
         <FF label="État Sanitaire">
-          <Select value={form.sanitaire} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, sanitaire:e.target.value})} style={{ borderLeft: `4px solid ${sanColors[form.sanitaire]}`, fontWeight:"bold" }}>
+          <Select value={form.sanitaire} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, sanitaire:e.target.value})} style={{ borderLeft: `4px solid ${sanColors[form.sanitaire as keyof typeof sanColors]}`, fontWeight:"bold" }}>
             <option value="A+">A+ (Parfait)</option><option value="A">A (Très bon)</option><option value="B">B (Moyen, trié)</option><option value="C">C (Médiocre)</option>
           </Select>
         </FF>
@@ -868,9 +868,9 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
           </FF>
           <FF label="Envoyer vers (Cuve)">
             <div style={{ display: "flex", gap: 8 }}>
-              <Select value={form.cuveId} disabled={isSubmitting} onChange={e=>setForm({...form, cuveId:e.target.value})} style={{ flex: 1, borderColor: !form.cuveId ? T.red : T.border }}>
+              <Select value={form.cuveId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, cuveId:e.target.value})} style={{ flex: 1, borderColor: !form.cuveId ? T.red : T.border }}>
                 <option value="">-- Choisir une cuve --</option>
-                {availCuves.map(c => {
+                {availCuves.map((c: any) => {
                   const volDispo = Math.max(0, (c.capacityValue || c.capacity || 0) - (c.currentVolume || 0)).toFixed(1);
                   return (
                     <option key={c.id} value={c.id}>
@@ -885,7 +885,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
         </div>
         <div style={{ marginTop: 8 }}>
           <FF label="Observations (Sulfitage, levurage...)">
-            <Input value={form.notes} disabled={isSubmitting} onChange={e=>setForm({...form, notes:e.target.value})} placeholder="Ex: Sulfitage à la benne 3g/hL..." />
+            <Input value={form.notes} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, notes:e.target.value})} placeholder="Ex: Sulfitage à la benne 3g/hL..." />
           </FF>
         </div>
       </div>
@@ -1001,14 +1001,14 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
   const pressoirs = state.pressoirs || [];
   const apports = state.pressings || []; 
-  const apportsEnAttente = apports.filter(a => a.status !== "PRESSÉ");
+  const apportsEnAttente = apports.filter((a: any) => a.status !== "PRESSÉ");
 
   const depts = Object.keys(CHAMPAGNE_GEODATA || {});
-  const regions = customDep ? Object.keys(CHAMPAGNE_GEODATA[customDep] || {}) : [];
-  const communes = (customDep && customReg) ? (CHAMPAGNE_GEODATA[customDep][customReg] || []) : [];
+  const regions = customDep ? Object.keys((CHAMPAGNE_GEODATA as Record<string, any>)[customDep] || {}) : [];
+  const communes = (customDep && customReg) ? (((CHAMPAGNE_GEODATA as Record<string, any>)[customDep] || {})[customReg] || []) : [];
 
-  const safeParseFloat = (val) => parseFloat(String(val).replace(',', '.'));
-  const parseToHl = (val) => parseFloat((parseFloat(String(val).replace(',', '.')) || 0).toFixed(2));
+  const safeParseFloat = (val: any) => parseFloat(String(val).replace(',', '.'));
+  const parseToHl = (val: any) => parseFloat((parseFloat(String(val).replace(',', '.')) || 0).toFixed(2));
 
   // --- ACTIONS SIMPLES ---
   const handleAddApport = async () => {
@@ -1025,7 +1025,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       const res = await fetch('/api/pressings', { 
         method: 'POST', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           date: new Date().toISOString(), 
@@ -1044,7 +1043,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       setNewApport({ parcelle: "", cepage: "CH", poids: "" });
       setIsCustomOrigin(false); setCustomDep(""); setCustomReg(""); setCustomCom(""); setCustomNom("");
     } catch (e) { 
-      alert(e.message); 
+      alert(e instanceof Error ? e.message : String(e)); 
     } finally { 
       setIsSubmitting(false); 
     }
@@ -1058,7 +1057,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       if (!res.ok) throw new Error((await res.json()).error);
       if (refreshData) await refreshData();
     } catch(e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     }
     setApportToDelete(null); 
     setIsSubmitting(false);
@@ -1071,7 +1070,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       const res = await fetch('/api/pressoirs', { 
         method: 'POST', 
         headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
         body: JSON.stringify(newPress) 
       });
       if (!res.ok) throw new Error("Erreur serveur");
@@ -1080,18 +1078,17 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       setNewPress({ nom: "", type: "Pneumatique", marque: "Bücher", capacite: 4000 });
       setShowAddPress(false);
     } catch (e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const updatePressStatus = async (id, status, extraData = {}) => {
+  const updatePressStatus = async (id: any, status: any, extraData: any = {}) => {
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/pressoirs', { 
         method: 'PUT', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ id, status, ...extraData }) 
       });
@@ -1100,7 +1097,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       if (refreshData) await refreshData();
       if (status === "VIDE") setActionModal(null);
     } catch (e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSubmitting(false);
     }
@@ -1110,7 +1107,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
   const handleLoadSubmit = async (forceLoad = false, forceMix = false) => {
     if (!selectedApport || !loadWeight) return alert("Veuillez sélectionner un lot et indiquer le poids à charger.");
     
-    const apport = apports.find(a => String(a.id) === String(selectedApport));
+    const apport = apports.find((a: any) => String(a.id) === String(selectedApport));
     const weightToLoad = safeParseFloat(loadWeight);
     const p = actionModal.press;
 
