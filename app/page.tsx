@@ -5038,19 +5038,19 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
 
   // Helper local :
   const formatVolShort = (vol: any) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
-  const formatStatus = (s) => s ? s.replace(/_/g, ' ') : "INCONNU";
+  const formatStatus = (s: any) => s ? s.replace(/_/g, ' ') : "INCONNU";
 
   const isBottle = 'formatCode' in initialLot || 'format' in initialLot || 'initialCount' in initialLot || 'initialBottleCount' in initialLot;
   const lot = isBottle 
-    ? ((state.bottleLots || []).find(b => b.id === initialLot.id) || initialLot)
-    : ((state.lots || []).find(l => l.id === initialLot.id) || initialLot);
+    ? ((state.bottleLots || []).find((b: any) => b.id === initialLot.id) || initialLot)
+    : ((state.lots || []).find((l: any) => l.id === initialLot.id) || initialLot);
 
   const unifiedLots = [
-    ...(state.lots || []).map(l => ({ ...l, _type: 'bulk', code: l.businessCode || l.code })),
-    ...(state.bottleLots || []).map(b => ({ ...b, _type: 'bottle', code: b.businessCode || b.code }))
-  ].sort((a, b) => a.code.localeCompare(b.code));
+    ...(state.lots || []).map((l: any) => ({ ...l, _type: 'bulk', code: l.businessCode || l.code })),
+    ...(state.bottleLots || []).map((b: any) => ({ ...b, _type: 'bottle', code: b.businessCode || b.code }))
+  ].sort((a: any, b: any) => a.code.localeCompare(b.code));
 
-  const currentIndex = unifiedLots.findIndex(l => l.id === lot.id && l._type === (isBottle ? 'bottle' : 'bulk'));
+  const currentIndex = unifiedLots.findIndex((l: any) => l.id === lot.id && l._type === (isBottle ? 'bottle' : 'bulk'));
   const prevLot = currentIndex > 0 ? unifiedLots[currentIndex - 1] : null;
   const nextLot = currentIndex < unifiedLots.length - 1 ? unifiedLots[currentIndex + 1] : null;
 
@@ -5066,8 +5066,8 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
             onClick={() => prevLot && onSelectLot(prevLot)} 
             disabled={!prevLot}
             style={{ background:"none", border:`1px solid ${T.border}`, color: prevLot ? T.textStrong : T.textDim, padding:"6px 14px", borderRadius:3, cursor: prevLot ? "pointer" : "default", fontSize:11, fontFamily:"monospace", opacity: prevLot ? 1 : 0.3, transition: "all 0.2s" }}
-            onMouseEnter={e => prevLot && (e.currentTarget.style.background = T.surfaceHigh)}
-            onMouseLeave={e => prevLot && (e.currentTarget.style.background = "none")}
+            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => prevLot && (e.currentTarget.style.background = T.surfaceHigh)}
+            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => prevLot && (e.currentTarget.style.background = "none")}
           >
             {"< Précédent"}
           </button>
@@ -5075,8 +5075,8 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
             onClick={() => nextLot && onSelectLot(nextLot)} 
             disabled={!nextLot}
             style={{ background:"none", border:`1px solid ${T.border}`, color: nextLot ? T.textStrong : T.textDim, padding:"6px 14px", borderRadius:3, cursor: nextLot ? "pointer" : "default", fontSize:11, fontFamily:"monospace", opacity: nextLot ? 1 : 0.3, transition: "all 0.2s" }}
-            onMouseEnter={e => nextLot && (e.currentTarget.style.background = T.surfaceHigh)}
-            onMouseLeave={e => nextLot && (e.currentTarget.style.background = "none")}
+            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => nextLot && (e.currentTarget.style.background = T.surfaceHigh)}
+            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => nextLot && (e.currentTarget.style.background = "none")}
           >
             {"Suivant >"}
           </button>
@@ -5085,12 +5085,12 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
     </div>
   );
 
-  const sourceLot = isBottle ? (state.lots || []).find(l => l.id == lot.sourceLotId) : null;
-  const container = !isBottle ? (state.containers || []).find(c => c.id === (lot.currentContainerId || lot.containerId)) : null;
+  const sourceLot = isBottle ? (state.lots || []).find((l: any) => l.id == lot.sourceLotId) : null;
+  const container = !isBottle ? (state.containers || []).find((c: any) => c.id === (lot.currentContainerId || lot.containerId)) : null;
 
   const lotAnalyses = (isBottle && sourceLot)
-    ? (state.analyses || []).filter(a => a.lotId === sourceLot.id).sort((a,b) => new Date(b.analysisDate).getTime() - new Date(a.analysisDate).getTime())
-    : (state.analyses || []).filter(a => a.lotId === lot.id).sort((a,b) => new Date(b.analysisDate).getTime() - new Date(a.analysisDate).getTime());
+    ? (state.analyses || []).filter((a: any) => a.lotId === sourceLot.id).sort((a: any,b: any) => new Date(b.analysisDate).getTime() - new Date(a.analysisDate).getTime())
+    : (state.analyses || []).filter((a: any) => a.lotId === lot.id).sort((a: any,b: any) => new Date(b.analysisDate).getTime() - new Date(a.analysisDate).getTime());
 
   let displayRecette = "--";
   let sourceCodes = [];
@@ -5100,13 +5100,13 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
     if (notesToParse.includes("Sources:")) {
       const parts = notesToParse.split("Sources:");
       displayRecette = parts[0].replace("|", "").trim(); 
-      sourceCodes = parts[1].split(",").map(c => c.trim());
+      sourceCodes = parts[1].split(",").map((c: any) => c.trim());
     } else {
       displayRecette = notesToParse;
     }
   }
 
-  const getAgingMonths = (dateStr) => {
+  const getAgingMonths = (dateStr: any) => {
     if (!dateStr) return 0;
     const tirageDate = new Date(dateStr);
     const diffTime = Math.abs(new Date() - tirageDate);
