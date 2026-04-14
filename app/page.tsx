@@ -4442,15 +4442,15 @@ function PlanificateurTirage() {
               <div style={{ fontSize: 14, fontWeight: "bold", color: T.accentLight, marginBottom: 16 }}>1. Source & Levain</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
                 <FF label="Cuve d'assemblage (Vin clair)">
-                  <Select value={mixBaseTankId} disabled={isSubmitting} onChange={e => {
+                  <Select value={mixBaseTankId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                     setMixBaseTankId(e.target.value);
                     if (e.target.value) {
-                      const c = cuvesVinBase.find(x => String(x.id) === String(e.target.value));
+                      const c = cuvesVinBase.find((x: any) => String(x.id) === String(e.target.value));
                       if (c) setMixVolVinSaisi(c.currentVolume);
                     } else { setMixVolVinSaisi(""); }
                   }}>
                     <option value="">-- Mode Libre (Manuelle) --</option>
-                    {cuvesVinBase.map(c => {
+                    {cuvesVinBase.map((c: any) => {
                       const lot = getContainerLot(c);
                       const codeDisplay = lot ? `[${lot.code}]` : "";
                       return <option key={c.id} value={c.id}>{c.displayName || c.name} {codeDisplay} - {parseFloat(c.currentVolume).toFixed(2)} hL</option>
@@ -4458,14 +4458,14 @@ function PlanificateurTirage() {
                   </Select>
                 </FF>
                 <FF label="Volume de vin à tirer (hL)">
-                  <Input type="number" step="0.1" value={mixVolVinSaisi} disabled={isSubmitting} onChange={e => setMixVolVinSaisi(e.target.value)} />
+                  <Input type="number" step="0.1" value={mixVolVinSaisi} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMixVolVinSaisi(e.target.value)} />
                 </FF>
               </div>
               <FF label="Cuve de Levain (Mère)">
-                <Select value={mixLevainTankId} disabled={isSubmitting} onChange={e => setMixLevainTankId(e.target.value)} style={{ borderColor: !mixLevainTankId ? T.accent : T.border }}>
+                <Select value={mixLevainTankId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMixLevainTankId(e.target.value)} style={{ borderColor: !mixLevainTankId ? T.accent : T.border }}>
                   <option value="">-- Sélectionner le levain actif --</option>
                   {cuvesLevain.length === 0 && <option disabled>Aucune cuve à levain détectée en cuverie.</option>}
-                  {cuvesLevain.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name} - {parseFloat(c.currentVolume).toFixed(2)} hL dispo</option>)}
+                  {cuvesLevain.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name} - {parseFloat(c.currentVolume).toFixed(2)} hL dispo</option>)}
                 </Select>
               </FF>
             </div>
@@ -4473,8 +4473,8 @@ function PlanificateurTirage() {
             <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
               <div style={{ fontSize: 14, fontWeight: "bold", color: T.textStrong, marginBottom: 16 }}>2. Objectifs & Sucrage</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-                <FF label="Pression visée (Bars)"><Input type="number" step="0.1" value={config.mixTargetPressure} disabled={isSubmitting} onChange={e => updateConfig('mixTargetPressure', e.target.value)} /></FF>
-                <FF label="% de Levain"><Input type="number" step="0.1" value={config.mixLevainPct} disabled={isSubmitting} onChange={e => updateConfig('mixLevainPct', e.target.value)} /></FF>
+                <FF label="Pression visée (Bars)"><Input type="number" step="0.1" value={config.mixTargetPressure} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateConfig('mixTargetPressure', e.target.value)} /></FF>
+                <FF label="% de Levain"><Input type="number" step="0.1" value={config.mixLevainPct} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateConfig('mixLevainPct', e.target.value)} /></FF>
               </div>
               <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 8, color: T.text, fontSize: 13, cursor: "pointer" }}>
@@ -4486,7 +4486,7 @@ function PlanificateurTirage() {
               </div>
               {config.mixSugarSource === "LIQUEUR" && (
                 <FF label="Concentration Liqueur (g/L)">
-                  <Input type="number" value={config.mixLiqueurSugar} disabled={isSubmitting} onChange={e => updateConfig('mixLiqueurSugar', e.target.value)} />
+                  <Input type="number" value={config.mixLiqueurSugar} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateConfig('mixLiqueurSugar', e.target.value)} />
                 </FF>
               )}
             </div>
@@ -4494,20 +4494,20 @@ function PlanificateurTirage() {
             <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.accent}55` }}>
               <div style={{ fontSize: 14, fontWeight: "bold", color: T.accentLight, marginBottom: 16 }}>3. Embouteillage</div>
               <FF label="Cuve de Destination (Mixtion & Tirage)" style={{ marginBottom: 16 }}>
-                <Select value={mixDestTankId} disabled={isSubmitting} onChange={e => setMixDestTankId(e.target.value)} style={{ borderColor: !mixDestTankId ? T.accent : T.border }}>
+                <Select value={mixDestTankId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMixDestTankId(e.target.value)} style={{ borderColor: !mixDestTankId ? T.accent : T.border }}>
                   <option value="">-- Sélectionner une cuve de tirage vide --</option>
-                  {cuvesTirage.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name}</option>)}
+                  {cuvesTirage.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name}</option>)}
                 </Select>
               </FF>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <FF label="Format Bouteille">
-                  <Select value={config.tirageFormat} disabled={isSubmitting} onChange={e => updateConfig('tirageFormat', parseFloat(e.target.value))}>
+                  <Select value={config.tirageFormat} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateConfig('tirageFormat', parseFloat(e.target.value))}>
                     <option value={0.75}>Champenoise (75 cl)</option>
                     <option value={1.5}>Magnum (1.5 L)</option>
                   </Select>
                 </FF>
                 <FF label="Type Bouchage">
-                  <Select value={config.tirageBouchage} disabled={isSubmitting} onChange={e => updateConfig('tirageBouchage', e.target.value)}>
+                  <Select value={config.tirageBouchage} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateConfig('tirageBouchage', e.target.value)}>
                     <option value="CAPSULE">Capsule + Bidule</option>
                     <option value="LIEGE">Liège + Agrafe</option>
                   </Select>
