@@ -3738,12 +3738,12 @@ function ExpedierModal({ bl, onClose }: { bl: any; onClose: any }) {
     <Modal title="Expédition" onClose={onClose}>
       <FF label={`Nombre (max ${max})`}>
         <div style={{ display: "flex", gap: 8 }}>
-          <Input type="number" value={count} onChange={e => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }} />
+          <Input type="number" value={count} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }} />
           <Btn variant="secondary" onClick={() => setCount(max.toString())} disabled={isSubmitting}>MAX</Btn>
         </div>
       </FF>
       <FF label="Nom du Client / Acheteur">
-        <Input value={clientName} onChange={e => setClientName(e.target.value)} disabled={isSubmitting} />
+        <Input value={clientName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setClientName(e.target.value)} disabled={isSubmitting} />
       </FF>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
@@ -3758,27 +3758,27 @@ function ExpedierModal({ bl, onClose }: { bl: any; onClose: any }) {
 // =============================================================================
 // STOCK BOUTEILLES (Cycle Complet)
 // =============================================================================
-function StockBouteilles({ onSelectLot }) {
+function StockBouteilles({ onSelectLot }: { onSelectLot?: any }) {
   const T = useTheme(); 
   const { state } = useStore();
   
   const [tab, setTab] = useState("vieillissement"); 
-  const [modal, setModal] = useState(null); 
-  const [selBl, setSelBl] = useState(null);
+  const [modal, setModal] = useState<string | null>(null); 
+  const [selBl, setSelBl] = useState<any>(null);
   
-  const vieillissement = (state.bottleLots || []).filter(b => ["SUR_LATTES", "EN_REMUAGE", "SUR_POINTES", "A_DEGORGER"].includes(b.status));
-  const aHabiller = (state.bottleLots || []).filter(b => b.status === "EN_CAVE" || b.status === "DEGORGE");
-  const finis = (state.bottleLots || []).filter(b => b.status === "PRET_EXPEDITION");
-  const reserves = (state.bottleLots || []).filter(b => b.status === "RESERVE");
+  const vieillissement = (state.bottleLots || []).filter((b: any) => ["SUR_LATTES", "EN_REMUAGE", "SUR_POINTES", "A_DEGORGER"].includes(b.status));
+  const aHabiller = (state.bottleLots || []).filter((b: any) => b.status === "EN_CAVE" || b.status === "DEGORGE");
+  const finis = (state.bottleLots || []).filter((b: any) => b.status === "PRET_EXPEDITION");
+  const reserves = (state.bottleLots || []).filter((b: any) => b.status === "RESERVE");
 
-  const getAgingMonths = (dateStr) => {
+  const getAgingMonths = (dateStr: any) => {
     if (!dateStr) return 0;
     const tirageDate = new Date(dateStr);
-    const diffTime = Math.abs(new Date() - tirageDate);
+    const diffTime = Math.abs(new Date().getTime() - tirageDate.getTime());
     return Math.floor(diffTime / (1000 * 60 * 60 * 24 * 30.44));
   };
 
-  const formatStatus = (s) => s ? s.replace(/_/g, ' ') : "INCONNU";
+  const formatStatus = (s: any) => s ? s.replace(/_/g, ' ') : "INCONNU";
 
   return (
     <div>
@@ -3788,7 +3788,7 @@ function StockBouteilles({ onSelectLot }) {
       
       <div style={{ display:"flex", gap: 10, marginBottom:20, flexWrap: "wrap" }}>
         {["vieillissement", "habillage", "finis", "reserves"].map((t) => {
-          const labels = { vieillissement: `VIEILLISSEMENT (${vieillissement.length})`, habillage: `À HABILLER (${aHabiller.length})`, finis: `PRÊTS (${finis.length})`, reserves: `VINS DE RÉSERVE (${reserves.length})` };
+          const labels: Record<string, string> = { vieillissement: `VIEILLISSEMENT (${vieillissement.length})`, habillage: `À HABILLER (${aHabiller.length})`, finis: `PRÊTS (${finis.length})`, reserves: `VINS DE RÉSERVE (${reserves.length})` };
           return (
             <button key={t} onClick={() => setTab(t)} style={{ background: tab===t ? T.accent : "transparent", color: tab===t ? T.bg : T.accent, border: `1px solid ${T.accent}`, padding: "9px 18px", borderRadius: 3, fontSize: 11, fontWeight: "bold", letterSpacing: 1, cursor: "pointer", fontFamily: "monospace", transition:"all .2s" }}>
               {labels[t]}
@@ -3802,7 +3802,7 @@ function StockBouteilles({ onSelectLot }) {
           <div style={{ display:"grid", gridTemplateColumns:"2fr 70px 90px 100px 1fr 100px 180px", padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
             <div>Code Tirage</div><div>Format</div><div>Stock</div><div>Statut</div><div>Emplacement</div><div>Tirage (Âge)</div><div>Action (Cycle)</div>
           </div>
-          {vieillissement.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucune bouteille en vieillissement.</div> : vieillissement.map((b, i) => {
+          {vieillissement.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucune bouteille en vieillissement.</div> : vieillissement.map((b: any, i: number) => {
             const age = getAgingMonths(b.tirageDate);
             const isReady = age >= 15;
             const btlCount = b.currentBottleCount || b.currentCount || 0;
