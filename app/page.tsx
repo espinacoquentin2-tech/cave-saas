@@ -4052,12 +4052,12 @@ function Lots({ onSelectLot }: { onSelectLot: any }) {
           <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucun lot dans cette section.</div>
         )}
 
-        {filtered.map((l, i) => {
+        {filtered.map((l: any, i: number) => {
           const isDeadBulk = l._type === 'bulk' && (l.volume <= 0 || ["ASSEMBLE", "TIRE", "ARCHIVE"].includes(l.status));
-          const container = (l._type === 'bulk' && !isDeadBulk) ? (state.containers || []).find(c => c.id === l.containerId) : null;
+          const container = (l._type === 'bulk' && !isDeadBulk) ? (state.containers || []).find((c: any) => c.id === l.containerId) : null;
           
           return (
-            <div key={l.code} onClick={() => onSelectLot(l)} style={{ display:"grid", gridTemplateColumns:"2fr 60px 80px 90px 110px 1fr 130px", padding:"14px 16px", borderBottom: i < filtered.length-1 ? `1px solid ${T.border}` : "none", cursor:"pointer", alignItems:"center", opacity: tab === "historique" ? 0.6 : 1 }} onMouseEnter={e => e.currentTarget.style.background = T.surfaceHigh} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+            <div key={l.code} onClick={() => onSelectLot(l)} style={{ display:"grid", gridTemplateColumns:"2fr 60px 80px 90px 110px 1fr 130px", padding:"14px 16px", borderBottom: i < filtered.length-1 ? `1px solid ${T.border}` : "none", cursor:"pointer", alignItems:"center", opacity: tab === "historique" ? 0.6 : 1 }} onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = T.surfaceHigh} onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = "transparent"}>
               <div style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600 }}>{l.code}</div>
               <div style={{ fontSize:13, color:T.text }}>{l.millesime}</div>
               <div style={{ fontSize:12, color:T.accentLight, fontFamily:"monospace" }}>{l.cepage}</div>
@@ -4114,7 +4114,7 @@ function PlanificateurTirage() {
     alimDensiteVeille: 1005, alimDensiteMatin: 998, alimLiqueurG: 530, alimAlcVin: 11.0
   });
 
-  const updateConfig = (key, value) => { setConfig(prev => ({ ...prev, [key]: value })); };
+  const updateConfig = (key: any, value: any) => { setConfig(prev => ({ ...prev, [key]: value })); };
 
   // --- ÉTATS VOLATILES (Sélections actuelles de cuves) ---
   const [mixBaseTankId, setMixBaseTankId] = useState("");
@@ -4129,9 +4129,9 @@ function PlanificateurTirage() {
   // ===========================================================================
   // FILTRAGE DES CUVES
   // ===========================================================================
-  const getContainerLot = (c) => state.lots?.find(l => String(l.id) === String(c.lotId));
+  const getContainerLot = (c: any) => state.lots?.find((l: any) => String(l.id) === String(c.lotId));
 
-  const cuvesVinBase = (state.containers || []).filter(c => {
+  const cuvesVinBase = (state.containers || []).filter((c: any) => {
     if (parseFloat(c.currentVolume) <= 0) return false;
     const t = (c.type || "").toUpperCase();
     const n = (c.displayName || c.name || "").toUpperCase();
