@@ -3954,6 +3954,11 @@ function Lots({ onSelectLot }: { onSelectLot: any }) {
   const uniqueStatuses = [...new Set(unifiedLots.map(l => l.status))].sort();
   
   const containerCategories = ["Cuves", "Bois", "Citernes", "Bouteilles", "Sous-produits", "Vrac (Sans contenant)", "Autre"];
+  const selectedMillesimes = filterMillesimes as any[];
+  const selectedCepages = filterCepages as any[];
+  const selectedLieux = filterLieux as any[];
+  const selectedContainers = filterContainers as any[];
+  const selectedStatuses = filterStatuses as any[];
 
   const actifsCount = unifiedLots.filter(l => {
     const isDeadBulk = l._type === 'bulk' && (l.volume <= 0 || ["ASSEMBLE", "TIRE", "ARCHIVE"].includes(l.status));
@@ -3963,7 +3968,7 @@ function Lots({ onSelectLot }: { onSelectLot: any }) {
 
   const historiqueCount = unifiedLots.length - actifsCount;
 
-  const filtered = unifiedLots.filter(l => {
+  const filtered = unifiedLots.filter((l: any) => {
     const isDeadBulk = l._type === 'bulk' && (l.volume <= 0 || ["ASSEMBLE", "TIRE", "ARCHIVE"].includes(l.status));
     const isDeadBottle = l._type === 'bottle' && l.volume <= 0;
     const isDead = isDeadBulk || isDeadBottle;
@@ -3971,35 +3976,35 @@ function Lots({ onSelectLot }: { onSelectLot: any }) {
     if (tab === "actifs" && isDead) return false;
     if (tab === "historique" && !isDead) return false;
 
-    const container = (l._type === 'bulk' && !isDeadBulk) ? (state.containers || []).find(c => c.id === l.containerId) : null;
+    const container = (l._type === 'bulk' && !isDeadBulk) ? (state.containers || []).find((c: any) => c.id === l.containerId) : null;
 
     const matchSearch = !search || (l.code || "").toLowerCase().includes(search.toLowerCase());
-    const matchMillesime = filterMillesimes.length === 0 || filterMillesimes.includes(l.millesime?.toString());
-    const matchCepage = filterCepages.length === 0 || filterCepages.includes(l.cepage);
-    const matchLieu = filterLieux.length === 0 || filterLieux.includes(l.lieu);
-    const matchStatus = filterStatuses.length === 0 || filterStatuses.includes(l.status);
+    const matchMillesime = selectedMillesimes.length === 0 || selectedMillesimes.includes(l.millesime?.toString());
+    const matchCepage = selectedCepages.length === 0 || selectedCepages.includes(l.cepage);
+    const matchLieu = selectedLieux.length === 0 || selectedLieux.includes(l.lieu);
+    const matchStatus = selectedStatuses.length === 0 || selectedStatuses.includes(l.status);
     
     let matchContainer = true;
-    if (filterContainers.length > 0) {
+    if (selectedContainers.length > 0) {
       if (l._type === 'bottle') {
-        matchContainer = filterContainers.includes("Bouteilles");
+        matchContainer = selectedContainers.includes("Bouteilles");
       } else if (!container) {
-        matchContainer = filterContainers.includes("Vrac (Sans contenant)");
+        matchContainer = selectedContainers.includes("Vrac (Sans contenant)");
       } else {
         const t = (container.type || "").toLowerCase();
         const n = ((container.displayName || container.name) || "").toLowerCase();
         const isSousProduit = GROUPS.SOUS_PRODUITS.includes(container.type) || t.includes("bourbe") || t.includes("lies") || t.includes("rebeche") || n.includes("bourbe") || n.includes("lies") || n.includes("rebeche");
 
         if (isSousProduit) {
-          matchContainer = filterContainers.includes("Sous-produits");
+          matchContainer = selectedContainers.includes("Sous-produits");
         } else if (GROUPS.CUVES.includes(container.type)) {
-          matchContainer = filterContainers.includes("Cuves");
+          matchContainer = selectedContainers.includes("Cuves");
         } else if (GROUPS.BOIS.includes(container.type)) {
-          matchContainer = filterContainers.includes("Bois");
+          matchContainer = selectedContainers.includes("Bois");
         } else if (container.type === "CITERNE" || container.type === "COMPARTIMENT") {
-          matchContainer = filterContainers.includes("Citernes");
+          matchContainer = selectedContainers.includes("Citernes");
         } else {
-          matchContainer = filterContainers.includes("Autre");
+          matchContainer = selectedContainers.includes("Autre");
         }
       }
     }
@@ -4023,13 +4028,13 @@ function Lots({ onSelectLot }: { onSelectLot: any }) {
       </div>
 
       <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap", alignItems:"center" }}>
-        <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Recherche code..." style={{ width:180 }} />
+        <Input value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} placeholder="Recherche code..." style={{ width:180 }} />
         
-        <MultiSelectDrop label="Tous millésimes" options={uniqueMillesimes} selected={filterMillesimes} onChange={setFilterMillesimes} width={150} />
-        <MultiSelectDrop label="Tous cépages" options={CEPAGES} selected={filterCepages} onChange={setFilterCepages} width={130} />
-        <MultiSelectDrop label="Tous lieux-dits" options={uniqueLieux} selected={filterLieux} onChange={setFilterLieux} width={150} />
-        <MultiSelectDrop label="Tous contenants" options={containerCategories} selected={filterContainers} onChange={setFilterContainers} width={180} />
-        <MultiSelectDrop label="Tous statuts" options={uniqueStatuses} selected={filterStatuses} onChange={setFilterStatuses} format={formatStatus} width={160} />
+        <MultiSelectDrop label="Tous millésimes" options={uniqueMillesimes} selected={selectedMillesimes} onChange={(next: any[]) => setFilterMillesimes(next as any)} width={150} />
+        <MultiSelectDrop label="Tous cépages" options={CEPAGES} selected={selectedCepages} onChange={(next: any[]) => setFilterCepages(next as any)} width={130} />
+        <MultiSelectDrop label="Tous lieux-dits" options={uniqueLieux} selected={selectedLieux} onChange={(next: any[]) => setFilterLieux(next as any)} width={150} />
+        <MultiSelectDrop label="Tous contenants" options={containerCategories} selected={selectedContainers} onChange={(next: any[]) => setFilterContainers(next as any)} width={180} />
+        <MultiSelectDrop label="Tous statuts" options={uniqueStatuses} selected={selectedStatuses} onChange={(next: any[]) => setFilterStatuses(next as any)} format={formatStatus} width={160} />
 
         {(search || filterMillesimes.length > 0 || filterCepages.length > 0 || filterLieux.length > 0 || filterContainers.length > 0 || filterStatuses.length > 0) && (
           <Btn variant="ghost" onClick={() => { setSearch(""); setFilterMillesimes([]); setFilterCepages([]); setFilterLieux([]); setFilterContainers([]); setFilterStatuses([]); }}>
