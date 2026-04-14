@@ -4351,11 +4351,11 @@ function PlanificateurTirage() {
 
     // Ici on applique la mise à jour optimiste frontend (en attendant ton API d'alimentation dédiée)
     const newSourceVol = Math.max(0, parseFloat(sourceTank.currentVolume) - vVinNeeded);
-    const newLevainVol = parseFloat(config.alimVolFinal);
+    const newLevainVol = parseFloat(String(config.alimVolFinal));
 
     dispatch({
       type: "SET_CONTAINERS",
-      payload: state.containers.map(c => {
+      payload: state.containers.map((c: any) => {
         if (c.id === sourceTank.id) return { ...c, currentVolume: newSourceVol };
         if (c.id === levainTank.id) return { ...c, currentVolume: newLevainVol };
         return c;
@@ -4383,20 +4383,19 @@ function PlanificateurTirage() {
         levainTankId: mixLevainTankId,
         destTankId: mixDestTankId,
         baseVolToDraw: parseFloat(mixVolVinSaisi) || parseFloat(selectedBaseTank.currentVolume),
-        targetPressure: parseFloat(config.mixTargetPressure),
-        levainPct: parseFloat(config.mixLevainPct),
-        levainSugar: parseFloat(config.mixLevainSugar),
+        targetPressure: parseFloat(String(config.mixTargetPressure)),
+        levainPct: parseFloat(String(config.mixLevainPct)),
+        levainSugar: parseFloat(String(config.mixLevainSugar)),
         sugarSource: config.mixSugarSource,
-        liqueurSugar: parseFloat(config.mixLiqueurSugar),
-        tirageFormat: parseFloat(config.tirageFormat),
+        liqueurSugar: parseFloat(String(config.mixLiqueurSugar)),
+        tirageFormat: parseFloat(String(config.tirageFormat)),
         tirageBouchage: config.tirageBouchage,
         idempotencyKey: idempotencyKey || crypto.randomUUID()
       };
 
       const res = await fetch('/api/mixtion/execute', {
         method: 'POST',
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify(payload)
       });
 
