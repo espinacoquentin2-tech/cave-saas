@@ -4939,11 +4939,11 @@ function Assemblages() {
           <div style={{ fontSize:11, textTransform:"uppercase", color:T.textDim, marginBottom:16, letterSpacing:1 }}>Volumes prélevés</div>
           {selected.length === 0 && <div style={{ color:T.textDim, fontSize:12, fontStyle:"italic" }}>Sélectionnez des lots à gauche.</div>}
           
-          {selected.map(l => {
+          {selected.map((l: any) => {
             const isBot = l._type === 'bottle';
             const maxVal = l.volume;
             const inputVal = volumes[l.id] || "";
-            const computedHl = isBot && inputVal ? (parseInt(inputVal) * (fmtHL[l.format] || 0)).toFixed(2) : null;
+            const computedHl = isBot && inputVal ? (parseInt(inputVal) * (fmtHL[l.format as keyof typeof fmtHL] || 0)) : 0;
 
             return (
               <div key={l.id} style={{ marginBottom:14 }}>
@@ -4953,14 +4953,14 @@ function Assemblages() {
                     type="number" step={isBot ? "1" : "0.1"} 
                     placeholder={isBot ? "Nbr de bouteilles" : "Volume hL"}
                     value={inputVal} disabled={isSubmitting}
-                    onChange={e => { setSim(false); setVolumes({...volumes,[l.id]:e.target.value}); }} 
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setSim(false); setVolumes({...volumes,[l.id]:e.target.value}); }} 
                     style={{ flex:1 }} 
                   />
                   <Btn variant="secondary" onClick={() => { setSim(false); setVolumes({...volumes, [l.id]: maxVal}) }} disabled={isSubmitting}>MAX</Btn>
                 </div>
                 {isBot && computedHl > 0 && (
                   <div style={{ fontSize:10, color:T.textDim, marginTop:4, textAlign:"right" }}>
-                    ↳ Équivaut à <span style={{color:T.textStrong, fontWeight:"bold"}}>{computedHl} hL</span>
+                    ↳ Équivaut à <span style={{color:T.textStrong, fontWeight:"bold"}}>{computedHl.toFixed(2)} hL</span>
                   </div>
                 )}
               </div>
@@ -4996,9 +4996,9 @@ function Assemblages() {
               {validCuves.length > 0 ? (
                 <FF label="Cuve de réception">
                   <div style={{ display: "flex", gap: 8 }}>
-                    <Select value={targetCuveId} onChange={e => setTargetCuveId(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }}>
+                    <Select value={targetCuveId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTargetCuveId(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }}>
                       <option value="">-- Choisir --</option>
-                      {validCuves.map(c => (<option key={c.id} value={c.id}>{c.displayName || c.name} (Capacité: {c.capacityValue || c.capacity} hL)</option>))}
+                      {validCuves.map((c: any) => (<option key={c.id} value={c.id}>{c.displayName || c.name} (Capacité: {c.capacityValue || c.capacity} hL)</option>))}
                     </Select>
                   </div>
                 </FF>
@@ -5008,7 +5008,7 @@ function Assemblages() {
                 </div>
               )}
               
-              <Btn onClick={submitAssemblage} disabled={isSubmitting || !targetCuveId || totalVol <= 0 || !validCuves.find(c => String(c.id) === String(targetCuveId))} style={{ width:"100%", marginTop:10 }}>
+              <Btn onClick={submitAssemblage} disabled={isSubmitting || !targetCuveId || totalVol <= 0 || !validCuves.find((c: any) => String(c.id) === String(targetCuveId))} style={{ width:"100%", marginTop:10 }}>
                 {isSubmitting ? "Enregistrement base..." : "Valider l'assemblage"}
               </Btn>
             </>
@@ -5022,7 +5022,7 @@ function Assemblages() {
 // =============================================================================
 // LOT DETAIL (Composant Principal pour Fiche Lot)
 // =============================================================================
-function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
+function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack: any; onSelectLot: any }) {
   const T = useTheme(); 
   const { user } = useAuth(); 
   const { state, dispatch, refreshData } = useStore();
@@ -5037,7 +5037,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   // Helper local :
-  const formatVolShort = (vol) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
+  const formatVolShort = (vol: any) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
   const formatStatus = (s) => s ? s.replace(/_/g, ' ') : "INCONNU";
 
   const isBottle = 'formatCode' in initialLot || 'format' in initialLot || 'initialCount' in initialLot || 'initialBottleCount' in initialLot;
