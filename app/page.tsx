@@ -5155,7 +5155,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
           <table>
             <thead><tr><th>Date</th><th>pH</th><th>AT (g/L)</th><th>SO2 Libre (mg/L)</th><th>Alcool (% vol)</th></tr></thead>
             <tbody>
-              ${lotAnalyses.length > 0 ? lotAnalyses.map(a => `<tr><td>${new Date(a.analysisDate).toLocaleDateString('fr-FR')}</td><td>${a.ph||'--'}</td><td>${a.at||'--'}</td><td>${a.so2Free||'--'}</td><td>${a.alcohol||'--'}</td></tr>`).join('') : `<tr><td colspan="5" style="text-align:center; font-style:italic;">Aucune analyse enregistrée</td></tr>`}
+              ${lotAnalyses.length > 0 ? lotAnalyses.map((a: any) => `<tr><td>${new Date(a.analysisDate).toLocaleDateString('fr-FR')}</td><td>${a.ph||'--'}</td><td>${a.at||'--'}</td><td>${a.so2Free||'--'}</td><td>${a.alcohol||'--'}</td></tr>`).join('') : `<tr><td colspan="5" style="text-align:center; font-style:italic;">Aucune analyse enregistrée</td></tr>`}
             </tbody>
           </table>
           
@@ -5164,6 +5164,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
       </html>
     `;
     const printWindow = window.open('', '_blank', 'width=900,height=800');
+    if (!printWindow) return;
     printWindow.document.write(html);
     printWindow.document.close();
   };
@@ -5199,10 +5200,10 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
               {!isDeadBottle && (
                 <>
                   {["DEGORGE", "EN_CAVE"].includes(lot.status) && (
-                    <Btn variant="primary" onClick={() => setModal("habiller")} style={{ background: "#9960aa", borderColor: "#9960aa", color: "#fff" }}>👗 Habiller</Btn>
+                    <Btn variant="primary" onClick={() => setModal("habiller" as any)} style={{ background: "#9960aa", borderColor: "#9960aa", color: "#fff" }}>👗 Habiller</Btn>
                   )}
                   {lot.status === "PRET_EXPEDITION" && (
-                     <Btn variant="primary" onClick={() => setModal("expedier")}>📦 Expédier</Btn>
+                     <Btn variant="primary" onClick={() => setModal("expedier" as any)}>📦 Expédier</Btn>
                   )}
                 </>
               )}
@@ -5216,7 +5217,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
               ["Date Tirage", lot.tirageDate ? new Date(lot.tirageDate).toLocaleDateString('fr-FR') : "--"],
               ["Sur Lattes", lot.tirageDate ? `${ageMois} mois` : "--"], 
               ["Recette Base", displayRecette]
-            ].map(([k,v]) => (
+            ].map(([k,v]: any) => (
               <div key={k} style={{gridColumn: k==="Recette Base"?"span 2":"span 1"}}>
                 <div style={{ fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>{k}</div>
                 <div style={{ fontSize:14, color: isDeadBottle ? T.textDim : T.textStrong, fontFamily:"monospace", fontWeight: k==="Sur Lattes" && ageMois>=15 ? "bold" : "normal" }}>
