@@ -5242,8 +5242,8 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
                    <div 
                       onClick={() => onSelectLot(sourceLot)}
                       style={{ background: T.surfaceHigh, border:`1px solid ${T.border}`, borderRadius:4, padding:"12px 16px", cursor:"pointer", display:"inline-flex", flexDirection:"column", gap:4, minWidth:200 }}
-                      onMouseEnter={e => (e.currentTarget.style.transform = "translateY(-2px)", e.currentTarget.style.borderColor = T.accent)}
-                      onMouseLeave={e => (e.currentTarget.style.transform = "none", e.currentTarget.style.borderColor = T.border)}
+                      onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => (e.currentTarget.style.transform = "translateY(-2px)", e.currentTarget.style.borderColor = T.accent)}
+                      onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => (e.currentTarget.style.transform = "none", e.currentTarget.style.borderColor = T.border)}
                     >
                       <div style={{ fontSize:10, color:T.textDim }}>Tiré à partir du lot :</div>
                       <div style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, textDecoration: "underline" }}>{sourceLot.businessCode || sourceLot.code}</div>
@@ -5265,8 +5265,8 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
   // =========================================================
   // RENDU POUR LE VRAC (CUVES / ASSEMBLAGES)
   // =========================================================
-  const lotEvents  = (state.events || []).filter(e => e.lotId === lot.id).sort((a,b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
-  const lotFas     = (state.faReadings || []).filter(f => f.lotId === parseInt(lot.id));
+  const lotEvents  = (state.events || []).filter((e: any) => e.lotId === lot.id).sort((a: any,b: any) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+  const lotFas     = (state.faReadings || []).filter((f: any) => f.lotId === parseInt(lot.id));
   const bulkVol    = lot.currentVolume || lot.volume || 0;
   const isDeadBulk = bulkVol <= 0 || ["ASSEMBLE", "TIRE", "ARCHIVE"].includes(lot.status);
 
@@ -5276,7 +5276,6 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
     try {
       const res = await fetch('/api/lots/statuts', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         // 👈 INJECTION DE LA CLÉ ICI :
         body: JSON.stringify({ lotId: lot.id, newStatus: statusForm.status, operator: user.name, note: statusForm.note, idempotencyKey }) 
@@ -5288,7 +5287,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
       setModal(null); 
       if (refreshData) await refreshData(); 
       
-    } catch(e) {
+    } catch(e: any) {
       alert("Erreur : " + e.message);
       setIdempotencyKey(crypto.randomUUID()); // 👈 NOUVELLE CLÉ GÉNÉRÉE EN CAS D'ERREUR
     } finally { 
@@ -5333,7 +5332,6 @@ const submitTirage = async () => {
     // 4. Appel à l'API blindée
     const res = await fetch('/api/tirage', { 
       method: 'POST', 
-      headers: buildApiHeaders(user), 
       headers: buildApiHeaders(user), 
       body: JSON.stringify(payload) 
     });
