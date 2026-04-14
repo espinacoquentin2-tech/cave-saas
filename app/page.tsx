@@ -3844,7 +3844,7 @@ function StockBouteilles({ onSelectLot }: { onSelectLot?: any }) {
           <div style={{ display:"grid", gridTemplateColumns:"2fr 80px 120px 140px 1fr 110px", padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
             <div>Code Lot</div><div>Format</div><div>Stock (Nues)</div><div>Emplacement</div><div>Statut</div><div>Action</div>
           </div>
-          {aHabiller.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucune bouteille nue en attente d'habillage.</div> : aHabiller.map((b, i) => (
+          {aHabiller.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucune bouteille nue en attente d'habillage.</div> : aHabiller.map((b: any, i: number) => (
             <div key={b.id} style={{ display:"grid", gridTemplateColumns:"2fr 80px 120px 140px 1fr 110px", padding:"14px 16px", alignItems:"center", borderBottom:i<aHabiller.length-1?`1px solid ${T.border}`:"none" }}>
               <div onClick={() => onSelectLot && onSelectLot(b)} style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, cursor:"pointer", textDecoration:"underline" }}>{b.code || b.businessCode}</div>
               <div style={{ fontSize:13, color:T.text }}>{b.format || b.formatCode}</div>
@@ -3866,7 +3866,7 @@ function StockBouteilles({ onSelectLot }: { onSelectLot?: any }) {
           <div style={{ display:"grid", gridTemplateColumns:"2fr 80px 120px 140px 1fr 110px", padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
             <div>Code Dégorgement</div><div>Format</div><div>Stock Dispo</div><div>Date Dégorg.</div><div>Dosage</div><div>Action</div>
           </div>
-          {finis.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucun produit fini prêt à l'expédition.</div> : finis.map((b, i) => (
+          {finis.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucun produit fini prêt à l'expédition.</div> : finis.map((b: any, i: number) => (
             <div key={b.id} style={{ display:"grid", gridTemplateColumns:"2fr 80px 120px 140px 1fr 110px", padding:"14px 16px", alignItems:"center", borderBottom:i<finis.length-1?`1px solid ${T.border}`:"none" }}>
               <div onClick={() => onSelectLot && onSelectLot(b)} style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, cursor:"pointer", textDecoration:"underline" }}>{b.code || b.businessCode}</div>
               <div style={{ fontSize:13, color:T.text }}>{b.format || b.formatCode}</div>
@@ -3886,7 +3886,7 @@ function StockBouteilles({ onSelectLot }: { onSelectLot?: any }) {
           </div>
           {reserves.length === 0 ? (
              <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucun vin de réserve en bouteilles.</div>
-          ) : reserves.map((b, i) => (
+	          ) : reserves.map((b: any, i: number) => (
             <div key={b.id} style={{ display:"grid", gridTemplateColumns:"2fr 80px 120px 140px 1fr", padding:"14px 16px", alignItems:"center", borderBottom:i<reserves.length-1?`1px solid ${T.border}`:"none" }}>
               <div onClick={() => onSelectLot && onSelectLot(b)} style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, cursor:"pointer", textDecoration:"underline" }}>{b.code || b.businessCode}</div>
               <div style={{ fontSize:13, color:T.text }}>{b.format || b.formatCode}</div>
@@ -3910,7 +3910,7 @@ function StockBouteilles({ onSelectLot }: { onSelectLot?: any }) {
 // =============================================================================
 // LISTE DES LOTS (ACTIFS / HISTORIQUE)
 // =============================================================================
-function Lots({ onSelectLot }) {
+function Lots({ onSelectLot }: { onSelectLot: any }) {
   const T = useTheme(); 
   const { state } = useStore();
   
@@ -3928,13 +3928,13 @@ function Lots({ onSelectLot }) {
     SOUS_PRODUITS: ["CUVE_BOURBES", "CUVE_LIES", "CUVE_REBECHES"]
   };
 
-  const formatVolShort = (vol) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
-  const formatStatus = (s) => s ? s.replace(/_/g, ' ') : "INCONNU";
+  const formatVolShort = (vol: any) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
+  const formatStatus = (s: any) => s ? s.replace(/_/g, ' ') : "INCONNU";
 
   const unifiedLots = [
-    ...(state.lots || []).map(l => ({ ...l, _type: 'bulk', code: l.businessCode || l.code, millesime: l.year || l.millesime, volume: l.currentVolume || l.volume, containerId: l.currentContainerId || l.containerId })),
-    ...(state.bottleLots || []).map(b => {
-      const src = (state.lots || []).find(l => l.id == b.sourceLotId);
+    ...(state.lots || []).map((l: any) => ({ ...l, _type: 'bulk', code: l.businessCode || l.code, millesime: l.year || l.millesime, volume: l.currentVolume || l.volume, containerId: l.currentContainerId || l.containerId })),
+    ...(state.bottleLots || []).map((b: any) => {
+      const src = (state.lots || []).find((l: any) => l.id == b.sourceLotId);
       return {
         ...b,
         _type: 'bottle',
