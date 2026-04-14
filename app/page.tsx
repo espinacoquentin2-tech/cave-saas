@@ -4841,23 +4841,23 @@ function Assemblages() {
     if (totalVol > 0) cmap[l.cepage] = (cmap[l.cepage] || 0) + (volHl / totalVol * 100); 
   });
 
-  const isBdB = Object.keys(cmap).length > 0 && Object.keys(cmap).every(c => CEPAGES_BLANCS.includes(c.toUpperCase()));
-  const isBdN = Object.keys(cmap).length > 0 && Object.keys(cmap).every(c => CEPAGES_NOIRS.includes(c.toUpperCase()));
+  const isBdB = Object.keys(cmap).length > 0 && Object.keys(cmap).every((c: any) => CEPAGES_BLANCS.includes(c.toUpperCase()));
+  const isBdN = Object.keys(cmap).length > 0 && Object.keys(cmap).every((c: any) => CEPAGES_NOIRS.includes(c.toUpperCase()));
   
-  const uniqueYears = [...new Set(selected.map(l => l.millesime?.toString()))].filter(y => y && y !== "--" && y !== "SA" && y !== "NV");
-  const isMillesime = uniqueYears.length === 1 && selected.length > 0 && selected.every(l => l.millesime?.toString() === uniqueYears[0]);
+  const uniqueYears = [...new Set(selected.map((l: any) => l.millesime?.toString()))].filter((y: any) => y && y !== "--" && y !== "SA" && y !== "NV");
+  const isMillesime = uniqueYears.length === 1 && selected.length > 0 && selected.every((l: any) => l.millesime?.toString() === uniqueYears[0]);
   const anneeMillesime = isMillesime ? uniqueYears[0] : null;
 
   let warning80 = null;
   if (isMillesime && anneeMillesime) {
-    const kgYear = (state.pressings || []).filter(p => p.date?.startsWith(anneeMillesime)).reduce((s, p) => s + (parseFloat(p.weight)||0), 0);
+    const kgYear = (state.pressings || []).filter((p: any) => p.date?.startsWith(anneeMillesime)).reduce((s: any, p: any) => s + (parseFloat(p.weight)||0), 0);
     const volTotalYear = (kgYear / 4000) * 25.5;
 
     let volDejaTire = 0;
-    (state.bottleLots || []).forEach(b => {
-       const src = (state.lots || []).find(l => l.id == b.sourceLotId);
+    (state.bottleLots || []).forEach((b: any) => {
+       const src = (state.lots || []).find((l: any) => l.id == b.sourceLotId);
        if (src && String(src.year || src.millesime) === String(anneeMillesime)) {
-           volDejaTire += (b.initialBottleCount || b.initialCount || b.currentBottleCount) * (fmtHL[b.formatCode || b.format] || 0.0075); 
+           volDejaTire += (b.initialBottleCount || b.initialCount || b.currentBottleCount) * (fmtHL[(b.formatCode || b.format) as keyof typeof fmtHL] || 0.0075); 
        }
     });
 
@@ -4876,11 +4876,11 @@ function Assemblages() {
   if (isMillesime) suffix += `-M${anneeMillesime}`;
 
   const proposedCode = `${new Date().getFullYear()}-${baseCepage}-ASSEM-${String((state.lots || []).length+1).padStart(3,"0")}${suffix}`;
-  const compoDetails = Object.entries(cmap).map(([c,p]) => `${c} ${p.toFixed(1)}%`).join(" / ") + " | Sources: " + selected.map(l => l.code).join(", ");
+  const compoDetails = Object.entries(cmap).map(([c,p]: any) => `${c} ${p.toFixed(1)}%`).join(" / ") + " | Sources: " + selected.map((l: any) => l.code).join(", ");
 
   const submitAssemblage = async () => {
-    const sourceLotsData = selected.filter(l => l._type === 'bulk').map(l => ({ id: l.id, volumeUsed: parseFloat(volumes[l.id]) || 0 })).filter(s => s.volumeUsed > 0);
-    const sourceBottlesData = selected.filter(l => l._type === 'bottle').map(l => ({ id: l.id, countUsed: parseInt(volumes[l.id]) || 0, format: l.format })).filter(s => s.countUsed > 0);
+    const sourceLotsData = selected.filter((l: any) => l._type === 'bulk').map((l: any) => ({ id: l.id, volumeUsed: parseFloat(volumes[l.id]) || 0 })).filter((s: any) => s.volumeUsed > 0);
+    const sourceBottlesData = selected.filter((l: any) => l._type === 'bottle').map((l: any) => ({ id: l.id, countUsed: parseInt(volumes[l.id]) || 0, format: l.format })).filter((s: any) => s.countUsed > 0);
     
     const finalMillesime = isMillesime ? parseInt(anneeMillesime) : "SA";
     setIsSubmitting(true);
@@ -4888,7 +4888,6 @@ function Assemblages() {
     try {
       const res = await fetch('/api/lots/assemblage', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           code: proposedCode, millesime: finalMillesime, cepage: baseCepage, 
@@ -4904,7 +4903,7 @@ function Assemblages() {
       setSim(false); setVolumes({}); setSelected([]);
       setIdempotencyKey(crypto.randomUUID());
       if (refreshData) await refreshData();
-    } catch(e) {
+    } catch(e: any) {
       alert(e.message);
     } finally {
       setIsSubmitting(false);
@@ -4919,9 +4918,9 @@ function Assemblages() {
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 340px", gap:16 }}>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:4, padding:20 }}>
           <div style={{ fontSize:11, textTransform:"uppercase", color:T.textDim, marginBottom:16, letterSpacing:1 }}>Lots disponibles</div>
-          {availLots.map(l => {
+          {availLots.map((l: any) => {
             const isBot = l._type === 'bottle';
-            const isSel = selected.find(s=>s.id===l.id);
+            const isSel = selected.find((s: any)=>s.id===l.id);
             return (
               <div key={l.id} onClick={() => { if(!isSubmitting) toggle(l); }} style={{ padding:"12px 14px", marginBottom:8, borderRadius:3, cursor: isSubmitting ? "default" : "pointer", background: isSel ? T.accent+"22":T.surfaceHigh, border:`1px solid ${isSel ? T.accent : T.border}` }}>
                 <div style={{ display:"flex", justifyContent:"space-between" }}>
