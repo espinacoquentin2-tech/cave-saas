@@ -4263,8 +4263,8 @@ function PlanificateurTirage() {
   // CALCULS : ALIMENTATION (Page 3)
   // ===========================================================================
   const calcAlimentation = () => {
-    const vLevain = parseFloat(config.alimVolLevain) || 0;
-    const vFinal = parseFloat(config.alimVolFinal) || 0;
+    const vLevain = parseFloat(String(config.alimVolLevain)) || 0;
+    const vFinal = parseFloat(String(config.alimVolFinal)) || 0;
     if (!vLevain || !vFinal || vFinal <= vLevain) return null;
     const sucreConsomme = (config.alimDensiteVeille - config.alimDensiteMatin) * 2.5;
     const vLiqueur = (vFinal * (20 + sucreConsomme) - (vLevain * 20)) / config.alimLiqueurG;
@@ -4286,7 +4286,7 @@ function PlanificateurTirage() {
       return;
     }
     
-    const sourceTank = state.containers.find(c => String(c.id) === String(createLevainSourceId));
+    const sourceTank = state.containers.find((c: any) => String(c.id) === String(createLevainSourceId));
     if (!sourceTank || parseFloat(sourceTank.currentVolume) < maxLevainVol) {
       dispatch({ type: "TOAST_ADD", payload: { msg: `Volume insuffisant dans la cuve source. Il vous faut au moins ${maxLevainVol.toFixed(1)} hL.`, color: T.red } });
       return;
@@ -4297,8 +4297,7 @@ function PlanificateurTirage() {
     try {
       const res = await fetch('/api/containers', { 
         method: 'POST', 
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify({ 
           name: "Cuve à Levain", displayName: "Cuve Levain (Actif)", 
           type: "CUVE_INOX", capacityValue: suggestedCap,
@@ -4312,7 +4311,7 @@ function PlanificateurTirage() {
       const newSourceVol = parseFloat(sourceTank.currentVolume) - maxLevainVol;
       dispatch({
         type: "SET_CONTAINERS",
-        payload: state.containers.map(c => c.id === sourceTank.id ? { ...c, currentVolume: newSourceVol } : c)
+        payload: state.containers.map((c: any) => c.id === sourceTank.id ? { ...c, currentVolume: newSourceVol } : c)
       });
 
       dispatch({ type: "ADD_CONTAINER", payload: data });
@@ -4341,8 +4340,8 @@ function PlanificateurTirage() {
       return;
     }
 
-    const sourceTank = state.containers.find(c => String(c.id) === String(alimSourceTankId));
-    const levainTank = state.containers.find(c => String(c.id) === String(alimLevainTankId));
+    const sourceTank = state.containers.find((c: any) => String(c.id) === String(alimSourceTankId));
+    const levainTank = state.containers.find((c: any) => String(c.id) === String(alimLevainTankId));
 
     const vVinNeeded = parseFloat(resAlim.vVin);
     if (parseFloat(sourceTank.currentVolume) < vVinNeeded) {
