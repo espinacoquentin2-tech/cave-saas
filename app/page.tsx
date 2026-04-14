@@ -5390,8 +5390,8 @@ const submitTirage = async () => {
             
             {!isDeadBulk && (
               <>
-                <Btn variant="secondary" onClick={() => { setStatusForm({ status: lot.status, note: "" }); setModal("status"); }}>Modifier Statut</Btn>
-                <Btn variant="ghost" onClick={() => setModal("tirage")} disabled={!["VIN_DE_BASE", "ASSEMBLAGE", "RESERVE", "VIN_ROUGE"].includes(lot.status)}>
+                <Btn variant="secondary" onClick={() => { setStatusForm({ status: lot.status, note: "" }); setModal("status" as any); }}>Modifier Statut</Btn>
+                <Btn variant="ghost" onClick={() => setModal("tirage" as any)} disabled={!["VIN_DE_BASE", "ASSEMBLAGE", "RESERVE", "VIN_ROUGE"].includes(lot.status)}>
                   Tirer / Mettre en bouteille
                 </Btn>
               </>
@@ -5405,7 +5405,7 @@ const submitTirage = async () => {
             ["Contenant", container ? (container.displayName || container.name) : "--"], 
             ["Statut", formatStatus(lot.status)], 
             ["Recette", displayRecette]
-          ].map(([k,v]) => (
+          ].map(([k,v]: any) => (
             <div key={k} style={{gridColumn: k==="Recette"?"span 2":"span 1"}}>
               <div style={{ fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>{k}</div>
               <div style={{ fontSize:14, color: isDeadBulk ? T.textDim : T.textStrong, fontFamily:"monospace" }}>{v}</div>
@@ -5418,14 +5418,14 @@ const submitTirage = async () => {
         <div style={{ fontSize:11, textTransform:"uppercase", letterSpacing:2, color:T.textDim, marginBottom:14 }}>Généalogie & Origines 🧬</div>
         {sourceCodes.length > 0 ? (
           <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-            {sourceCodes.map(code => {
-              const sLot = (state.lots || []).find(l => (l.businessCode || l.code) === code);
+            {sourceCodes.map((code: any) => {
+              const sLot = (state.lots || []).find((l: any) => (l.businessCode || l.code) === code);
               return (
                 <div 
                   key={code} onClick={() => sLot && onSelectLot && onSelectLot(sLot)}
                   style={{ background: T.surfaceHigh, border:`1px solid ${T.border}`, borderRadius:4, padding:"12px 16px", cursor: sLot ? "pointer" : "default", transition:"all 0.15s", display:"flex", flexDirection:"column", gap:4, minWidth:200 }}
-                  onMouseEnter={e => sLot && (e.currentTarget.style.transform = "translateY(-2px)", e.currentTarget.style.borderColor = T.accent)}
-                  onMouseLeave={e => sLot && (e.currentTarget.style.transform = "none", e.currentTarget.style.borderColor = T.border)}
+                  onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => sLot && (e.currentTarget.style.transform = "translateY(-2px)", e.currentTarget.style.borderColor = T.accent)}
+                  onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => sLot && (e.currentTarget.style.transform = "none", e.currentTarget.style.borderColor = T.border)}
                 >
                   <div style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, textDecoration: sLot ? "underline" : "none" }}>{code}</div>
                   <div style={{ fontSize:11, color:T.textDim }}>{sLot ? `Vol actuel: ${formatVolShort(sLot.currentVolume || sLot.volume)}` : "Lot non disponible"}</div>
