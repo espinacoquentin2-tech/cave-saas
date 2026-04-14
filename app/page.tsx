@@ -4752,17 +4752,17 @@ function PlanificateurTirage() {
                   <div style={{ background: T.accent+"11", border: `1px solid ${T.accent}44`, padding: 20, borderRadius: 6, marginTop: 16 }}>
                     <div style={{ fontSize: 12, textTransform: "uppercase", color: T.accentLight, fontWeight: "bold", marginBottom: 12 }}>🔄 Exécuter l'alimentation</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-                      <Select value={alimSourceTankId} onChange={e => setAlimSourceTankId(e.target.value)} style={{ fontSize: 12 }}>
+                      <Select value={alimSourceTankId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAlimSourceTankId(e.target.value)} style={{ fontSize: 12 }}>
                         <option value="">-- Vin nourricier --</option>
-                        {cuvesVinBase.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
+                        {cuvesVinBase.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
                       </Select>
-                      <Select value={alimLevainTankId} onChange={e => {
+                      <Select value={alimLevainTankId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                           setAlimLevainTankId(e.target.value);
-                          const t = cuvesLevain.find(c => String(c.id) === String(e.target.value));
+                          const t = cuvesLevain.find((c: any) => String(c.id) === String(e.target.value));
                           if (t) updateConfig('alimVolLevain', t.currentVolume);
                       }} style={{ fontSize: 12 }}>
                         <option value="">-- Cuve à Levain --</option>
-                        {cuvesLevain.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
+                        {cuvesLevain.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
                       </Select>
                     </div>
                     <Btn onClick={handleValiderAlimentation} disabled={!alimSourceTankId || !alimLevainTankId} style={{ width: "100%", fontSize: 13 }}>Valider l'Alimentation</Btn>
@@ -4785,8 +4785,8 @@ function Assemblages() {
   const { user } = useAuth(); 
   const { state, dispatch, refreshData } = useStore();
   
-  const [selected, setSelected] = useState([]); 
-  const [volumes, setVolumes] = useState({});
+  const [selected, setSelected] = useState<any[]>([]); 
+  const [volumes, setVolumes] = useState<any>({});
   const [sim, setSim] = useState(false); 
   const [targetCuveId, setTargetCuveId] = useState("");
   const [showAddCuve, setShowAddCuve] = useState(false);
@@ -4799,13 +4799,13 @@ function Assemblages() {
   const CEPAGES_NOIRS = ["PN", "PM", "MEUNIER"];
 
   const availBulk = (state.lots || [])
-    .filter(l => l.currentVolume > 0 && l.status !== "TIRE" && l.status !== "ARCHIVE")
-    .map(l => ({ ...l, _type: 'bulk', code: l.businessCode || l.code, volume: l.currentVolume || l.volume, cepage: l.mainGrapeCode || l.cepage, millesime: l.year || l.millesime }));
+    .filter((l: any) => l.currentVolume > 0 && l.status !== "TIRE" && l.status !== "ARCHIVE")
+    .map((l: any) => ({ ...l, _type: 'bulk', code: l.businessCode || l.code, volume: l.currentVolume || l.volume, cepage: l.mainGrapeCode || l.cepage, millesime: l.year || l.millesime }));
     
   const availBottles = (state.bottleLots || [])
-    .filter(b => (b.currentBottleCount || b.currentCount) > 0 && b.status === "RESERVE")
-    .map(b => {
-      const src = (state.lots || []).find(l => l.id == b.sourceLotId);
+    .filter((b: any) => (b.currentBottleCount || b.currentCount) > 0 && b.status === "RESERVE")
+    .map((b: any) => {
+      const src = (state.lots || []).find((l: any) => l.id == b.sourceLotId);
       return { 
         ...b, _type: 'bottle', 
         code: b.businessCode || b.code,
@@ -4816,28 +4816,28 @@ function Assemblages() {
       };
     });
 
-  const availLots = [...availBulk, ...availBottles].sort((a,b) => a.code.localeCompare(b.code));
+  const availLots = [...availBulk, ...availBottles].sort((a: any, b: any) => a.code.localeCompare(b.code));
   
   const excludedTypes = ["CUVE_BOURBES", "CUVE_LIES", "CUVE_DEBOURBAGE", "COMPARTIMENT"];
-  const availCuves = (state.containers || []).filter(c => c.status === "VIDE" && !excludedTypes.includes(c.type) && c.status !== "ARCHIVÉE");
+  const availCuves = (state.containers || []).filter((c: any) => c.status === "VIDE" && !excludedTypes.includes(c.type) && c.status !== "ARCHIVÉE");
   
-  const toggle = lot => { 
+  const toggle = (lot: any) => { 
     setSim(false); 
-    setSelected(selected.find(s => s.id === lot.id) ? selected.filter(s => s.id !== lot.id) : [...selected, lot]); 
+    setSelected(selected.find((s: any) => s.id === lot.id) ? selected.filter((s: any) => s.id !== lot.id) : [...selected, lot]); 
   };
   
-  const totalVol = selected.reduce((s, l) => {
+  const totalVol = selected.reduce((s: any, l: any) => {
     const rawVal = parseFloat(volumes[l.id]) || 0;
-    if (l._type === 'bottle') return s + (rawVal * (fmtHL[l.format] || 0.0075));
+    if (l._type === 'bottle') return s + (rawVal * (fmtHL[l.format as keyof typeof fmtHL] || 0.0075));
     return s + rawVal;
   }, 0);
 
-  const validCuves = availCuves.filter(c => (c.capacityValue || c.capacity) >= totalVol);
+  const validCuves = availCuves.filter((c: any) => (c.capacityValue || c.capacity) >= totalVol);
   
-  const cmap = {}; 
-  selected.forEach(l => { 
+  const cmap: any = {}; 
+  selected.forEach((l: any) => { 
     const rawVal = parseFloat(volumes[l.id]) || 0;
-    const volHl = l._type === 'bottle' ? rawVal * (fmtHL[l.format] || 0.0075) : rawVal;
+    const volHl = l._type === 'bottle' ? rawVal * (fmtHL[l.format as keyof typeof fmtHL] || 0.0075) : rawVal;
     if (totalVol > 0) cmap[l.cepage] = (cmap[l.cepage] || 0) + (volHl / totalVol * 100); 
   });
 
