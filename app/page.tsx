@@ -4143,7 +4143,7 @@ function PlanificateurTirage() {
     return true;
   });
 
-  const cuvesTirage = (state.containers || []).filter(c => {
+  const cuvesTirage = (state.containers || []).filter((c: any) => {
     if (parseFloat(c.currentVolume) > 0) return false; 
     if (c.zone !== "Cuverie") return false;
     const t = (c.type || "").toUpperCase();
@@ -4156,7 +4156,7 @@ function PlanificateurTirage() {
     return false;
   });
 
-  const cuvesLevain = (state.containers || []).filter(c => {
+  const cuvesLevain = (state.containers || []).filter((c: any) => {
     const t = (c.type || "").toUpperCase();
     const n = (c.displayName || c.name || "").toUpperCase();
     return t.includes("LEVAIN") || n.includes("LEVAIN");
@@ -4165,9 +4165,9 @@ function PlanificateurTirage() {
   // ===========================================================================
   // CALCULS : MIXTION (PRÉVISUALISATION FRONTEND)
   // ===========================================================================
-  const selectedBaseTank = cuvesVinBase.find(c => String(c.id) === String(mixBaseTankId));
+  const selectedBaseTank = cuvesVinBase.find((c: any) => String(c.id) === String(mixBaseTankId));
   const baseVol = mixVolVinSaisi !== "" ? parseFloat(mixVolVinSaisi) : (selectedBaseTank ? parseFloat(selectedBaseTank.currentVolume) : 0);
-  const getTargetSugar = (bars) => (bars * 4) * (25.4 / 24.0); 
+  const getTargetSugar = (bars: any) => (bars * 4) * (25.4 / 24.0); 
 
   const calcMixtionPreview = () => {
     if (!baseVol || baseVol <= 0) return null;
@@ -4213,15 +4213,15 @@ function PlanificateurTirage() {
     const baseSugar = 1.0; 
     const targetSugarGF = getTargetSugar(config.mixTargetPressure);
 
-    const cascadeResult = [];
+    const cascadeResult: any[] = [];
     let volNextDayLevain = 0; 
     
     let cBtls = config.tirageFormat === 0.75 ? tirageStocks.bouteilles : tirageStocks.magnums;
     let cF1 = config.tirageBouchage === "CAPSULE" ? tirageStocks.bidules : tirageStocks.bouchonsLiege;
     let cF2 = config.tirageBouchage === "CAPSULE" ? tirageStocks.capsules : tirageStocks.agrafes;
 
-    const levainNeeds = [...tirageDays].reverse().map((day, index) => {
-      const vVin = parseFloat(day.vinBaseVolume) || 0;
+    const levainNeeds = [...tirageDays].reverse().map((day: any, index: number) => {
+      const vVin = parseFloat(String(day.vinBaseVolume)) || 0;
       const besoinLevain = vVin * (config.mixLevainPct / 100);
       let volToFeed = index === 0 ? 0 : volNextDayLevain * taux; 
       let totalLevainCuveMatin = volToFeed + besoinLevain;
@@ -4230,8 +4230,8 @@ function PlanificateurTirage() {
       return { ...day, besoinLevain, totalLevainCuveMatin, resteCuve: volToFeed, alimentation };
     }).reverse(); 
 
-    levainNeeds.forEach(day => {
-      const vVin = parseFloat(day.vinBaseVolume) || 0;
+    levainNeeds.forEach((day: any) => {
+      const vVin = parseFloat(String(day.vinBaseVolume)) || 0;
       const vLevain = day.besoinLevain;
       const volVinLevain = vVin + vLevain;
       let volMixtion = 0;
