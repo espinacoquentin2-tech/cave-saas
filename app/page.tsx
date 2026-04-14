@@ -5109,7 +5109,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
   const getAgingMonths = (dateStr: any) => {
     if (!dateStr) return 0;
     const tirageDate = new Date(dateStr);
-    const diffTime = Math.abs(new Date() - tirageDate);
+    const diffTime = Math.abs(new Date().getTime() - tirageDate.getTime());
     return Math.floor(diffTime / (1000 * 60 * 60 * 24 * 30.44));
   };
 
