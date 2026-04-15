@@ -5543,18 +5543,18 @@ const submitTirage = async () => {
 
             <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12, marginTop: 8 }}>
               <FF label="Type de bouchage">
-                <Select value={tirageForm.bouchage} onChange={e => setTirageForm({...tirageForm, bouchage:e.target.value})} disabled={isSubmitting}>
+                <Select value={tirageForm.bouchage} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTirageForm({...tirageForm, bouchage:e.target.value})} disabled={isSubmitting}>
                   {!isTranquille && <option value="Capsule">Capsule</option>}
                   <option value="Liège">Liège</option>
                 </Select>
               </FF>
               <FF label="Modèle (Marque - Réf)">
-                <Input value={tirageForm.modeleBouchage} onChange={e => setTirageForm({...tirageForm, modeleBouchage:e.target.value})} disabled={isSubmitting} placeholder="Ex: Trescases - 29x29" />
+                <Input value={tirageForm.modeleBouchage} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageForm({...tirageForm, modeleBouchage:e.target.value})} disabled={isSubmitting} placeholder="Ex: Trescases - 29x29" />
               </FF>
             </div>
 
             <FF label="Notes (Optionnel)">
-              <Input value={tirageForm.note} onChange={e => setTirageForm({...tirageForm, note:e.target.value})} disabled={isSubmitting} placeholder="Ex: Ajout de levures spécifiques..." />
+              <Input value={tirageForm.note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageForm({...tirageForm, note:e.target.value})} disabled={isSubmitting} placeholder="Ex: Ajout de levures spécifiques..." />
             </FF>
 
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
@@ -5573,7 +5573,7 @@ const submitTirage = async () => {
 // =============================================================================
 // EXPÉDITIONS & DISTILLERIE (100% BACKEND AUTHORITY)
 // =============================================================================
-function Expeditions({ onSelectLot }) {
+function Expeditions({ onSelectLot }: { onSelectLot: any }) {
   const T = useTheme(); 
   const { user } = useAuth();
   const { state, dispatch, refreshData } = useStore();
@@ -5589,15 +5589,15 @@ function Expeditions({ onSelectLot }) {
   // --- LOGIQUE MÉTIER ---
   // On filtre les expéditions depuis les événements du store (chargés via fetchAll)
   const expeditionsBouteilles = (state.events || [])
-    .filter(e => e.type === "EXPEDITION")
-    .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .filter((e: any) => e.type === "EXPEDITION")
+    .sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const expeditionsDistillerie = (state.events || [])
-    .filter(e => e.type === "DISTILLERIE" || (e.type === "PERTE" && e.note?.includes("[DISTILLERIE]")))
-    .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .filter((e: any) => e.type === "DISTILLERIE" || (e.type === "PERTE" && e.note?.includes("[DISTILLERIE]")))
+    .sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const citernesEtComps = (state.containers || []).filter(c => c.type === "CITERNE" || c.type === "COMPARTIMENT");
-  const vracLots = (state.lots || []).filter(l => citernesEtComps.some(c => String(c.id) === String(l.currentContainerId)));
+  const citernesEtComps = (state.containers || []).filter((c: any) => c.type === "CITERNE" || c.type === "COMPARTIMENT");
+  const vracLots = (state.lots || []).filter((l: any) => citernesEtComps.some((c: any) => String(c.id) === String(l.currentContainerId)));
 
   // --- ACTION SÉCURISÉE ---
   const executeDelivery = async () => {
@@ -5608,7 +5608,6 @@ function Expeditions({ onSelectLot }) {
       // On met à jour le statut DIRECTEMENT en base de données
       const res = await fetch('/api/containers', { 
         method: 'PUT',
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           id: parseInt(confirmDeliveryId), 
@@ -5626,15 +5625,15 @@ function Expeditions({ onSelectLot }) {
       // On rafraîchit les données pour que tous les utilisateurs voient le changement
       if (refreshData) await refreshData();
 
-    } catch(e) { 
-      dispatch({ type: "TOAST_ADD", payload: { msg: e.message, color: T.red } });
+    } catch(e: any) { 
+      dispatch({ type: "TOAST_ADD", payload: { msg: e?.message || "Erreur serveur", color: T.red } });
     } finally {
       setIsValidatingDelivery(false);
       setConfirmDeliveryId(null);
     }
   };
 
-  const parseBottleNote = (note) => {
+  const parseBottleNote = (note: any) => {
     const match = note?.match(/(\d+)\s*btl/);
     const qty = match ? match[0] : "--";
     let details = note || "";
