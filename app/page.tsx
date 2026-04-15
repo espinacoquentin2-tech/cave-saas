@@ -5746,11 +5746,11 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
             <div style={{ border: `1px solid ${T.border}`, borderRadius: 4, maxHeight: 220, overflowY: "auto", background: T.surfaceHigh }}>
               {filteredLots.length === 0 ? (
                 <div style={{ padding: 16, textAlign: "center", color: T.textDim, fontSize: 12 }}>Aucun lot trouvé.</div>
-              ) : filteredLots.map(l => (
+              ) : filteredLots.map((l: any) => (
                 <div 
                   key={l.id} onClick={() => { if(!isSubmitting){ setLotId(l.id); setVolume(l.currentVolume.toString()); } }} 
                   style={{ padding: "10px 14px", borderBottom: `1px solid ${T.border}`, cursor: isSubmitting ? "default" : "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "background 0.2s" }} 
-                  onMouseEnter={e => { if(!isSubmitting) e.currentTarget.style.background = T.accent+"15" }} onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                  onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => { if(!isSubmitting) e.currentTarget.style.background = T.accent+"15" }} onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = "transparent"}
                 >
                   <div>
                     <div style={{ fontSize: 13, color: T.accent, fontWeight: "bold", fontFamily: "monospace" }}>{l.code}</div>
@@ -5775,12 +5775,12 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <FF label={`Volume expédié (Max ${selectedLot.currentVolume} hL)`}>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <Input type="number" step="0.1" value={volume} onChange={e => setVolume(e.target.value)} disabled={isSubmitting} placeholder="0.0" style={{ flex: 1, fontWeight: "bold", color: parseFloat(volume) > selectedLot.currentVolume ? T.red : T.text }} />
+	                  <Input type="number" step="0.1" value={volume} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVolume(e.target.value)} disabled={isSubmitting} placeholder="0.0" style={{ flex: 1, fontWeight: "bold", color: parseFloat(volume) > selectedLot.currentVolume ? T.red : T.text }} />
                   <Btn variant="secondary" onClick={() => setVolume(selectedLot.currentVolume.toString())} disabled={isSubmitting}>MAX</Btn>
                 </div>
               </FF>
               <FF label="Motif légal">
-                <Select value={motif} onChange={e => setMotif(e.target.value)} disabled={isSubmitting}>
+	                <Select value={motif} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMotif(e.target.value)} disabled={isSubmitting}>
                   <option value="Lies">Lies</option>
                   <option value="Bourbes">Bourbes</option>
                   <option value="Rebêches">Rebêches</option>
@@ -5795,7 +5795,7 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
         {selectedLot && (
            <div style={{ marginTop: 12 }}>
              <FF label="Détails (Transporteur, n° de bon...)">
-               <Input value={notes} onChange={e => setNotes(e.target.value)} disabled={isSubmitting} placeholder="Ex: Enlèvement par Distillerie X..." />
+	               <Input value={notes} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNotes(e.target.value)} disabled={isSubmitting} placeholder="Ex: Enlèvement par Distillerie X..." />
              </FF>
            </div>
         )}
@@ -5847,10 +5847,10 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
           <>
             {expeditionsBouteilles.length === 0 ? (
               <div style={{ padding:"40px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucune expédition de bouteilles enregistrée.</div>
-            ) : expeditionsBouteilles.map((e, i) => {
-              const { qty, details } = parseBottleNote(e.comment || e.note);
-              const isDelivered = deliveredIds.includes(e.id);
-              const lotObj = (state.bottleLots || []).find(l => String(l.id) === String(e.lotId || e.bottleLotId));
+	            ) : expeditionsBouteilles.map((e: any, i: any) => {
+	              const { qty, details } = parseBottleNote(e.comment || e.note);
+	              const isDelivered = e.status === "LIVRE";
+	              const lotObj = (state.bottleLots || []).find((l: any) => String(l.id) === String(e.lotId || e.bottleLotId));
               
               return (
                 <div key={e.id} style={{ display:"grid", gridTemplateColumns:gridCols, gap:16, padding:"16px 16px", alignItems:"center", borderBottom: i<expeditionsBouteilles.length-1 ? `1px solid ${T.border}` : "none", textAlign: "center" }}>
@@ -5861,7 +5861,7 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
                   <div style={{ fontSize:13, color:T.textStrong }}>{qty}</div>
                   <div style={{ fontSize:13, color:T.text }}>📦 {details}</div>
                   <div style={{ fontSize:12, color:T.textDim }}>{e.operator}</div>
-                  <div onClick={() => toggleDelivery(e.id)} style={{cursor:"pointer", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
+	                  <div onClick={() => setConfirmDeliveryId(e.id)} style={{cursor:"pointer", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
                     <Badge label={isDelivered ? "Livré ✅" : "En livraison 🚚"} color={isDelivered ? T.textDim : T.accent} />
                   </div>
                 </div>
@@ -5875,13 +5875,13 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
           <>
             {expeditionsDistillerie.length === 0 ? (
               <div style={{ padding:"40px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucun envoi en distillerie enregistré.</div>
-            ) : expeditionsDistillerie.map((e, i) => {
-              const lotObj = (state.lots || []).find(l => String(l.id) === String(e.lotId));
+	            ) : expeditionsDistillerie.map((e: any, i: any) => {
+	              const lotObj = (state.lots || []).find((l: any) => String(l.id) === String(e.lotId));
               const noteText = e.comment || e.note || "";
               let cleanNote = noteText.replace(/\[DISTILLERIE\](\s*Motif:\s*)?/i, "");
               cleanNote = cleanNote.replace(/Perte\/Manquant de [\d.,]+\s*hL\.?\s*/i, "").trim();
               
-              const isDelivered = deliveredIds.includes(e.id);
+	              const isDelivered = e.status === "LIVRE";
               const fallbackVol = noteText.match(/(\d+(?:[.,]\d+)?)\s*(?:hL|btl)/i)?.[1] || 0;
               const displayVol = e.volumeChange ? Math.abs(e.volumeChange) : (e.volumeOut > 0 ? e.volumeOut : fallbackVol);
               
@@ -5894,7 +5894,7 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
                   <div style={{ fontSize:14, color:T.red, fontWeight: "bold", fontFamily: "monospace" }}>{displayVol} hL</div>
                   <div style={{ fontSize:13, color:T.textStrong }}>🏭 {cleanNote}</div>
                   <div style={{ fontSize:12, color:T.textDim }}>{e.operator}</div>
-                  <div onClick={() => toggleDelivery(e.id)} style={{cursor:"pointer", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
+	                  <div onClick={() => setConfirmDeliveryId(e.id)} style={{cursor:"pointer", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
                     <Badge label={isDelivered ? "Livré ✅" : "En livraison 🚚"} color={isDelivered ? T.textDim : T.accent} />
                   </div>
                 </div>
@@ -5927,7 +5927,7 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
 // =============================================================================
 // MODALE : AJOUTER UN NOUVEAU PRODUIT AU CATALOGUE (SÉCURISÉ)
 // =============================================================================
-function AddProductModal({ onClose }) {
+function AddProductModal({ onClose }: { onClose: any }) {
   const T = useTheme();
   const { dispatch, refreshData } = useStore();
   
@@ -5949,9 +5949,9 @@ function AddProductModal({ onClose }) {
     "Habillage": ["Coiffes", "Étiquettes", "Collerettes", "Autre"]
   };
 
-  const handleCategoryChange = (e) => {
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newCat = e.target.value;
-    setForm({ ...form, category: newCat, subCategory: CATEGORIES[newCat][0] });
+    setForm({ ...form, category: newCat, subCategory: CATEGORIES[newCat as keyof typeof CATEGORIES][0] });
   };
 
   const submit = async () => {
@@ -5968,8 +5968,7 @@ function AddProductModal({ onClose }) {
 
       const res = await fetch('/api/inventory/products', {
         method: 'POST',
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify(payload)
       });
 
@@ -5979,8 +5978,8 @@ function AddProductModal({ onClose }) {
       dispatch({ type: "TOAST_ADD", payload: { msg: `${form.name} ajouté au catalogue`, color: T.green } });
       if (refreshData) await refreshData();
       onClose();
-    } catch(e) {
-      alert(e.message);
+    } catch(e: any) {
+      alert(e?.message || "Erreur de création.");
       setIsSubmitting(false);
     }
   };
@@ -5988,25 +5987,25 @@ function AddProductModal({ onClose }) {
   return (
     <Modal title="Nouveau produit" onClose={onClose}>
       <FF label="Désignation du produit">
-        <Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} disabled={isSubmitting} placeholder="Ex: Bouchon Liège Extra, Nutrition Azotée..." />
+        <Input value={form.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, name: e.target.value})} disabled={isSubmitting} placeholder="Ex: Bouchon Liège Extra, Nutrition Azotée..." />
       </FF>
       
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
         <FF label="Catégorie principale">
           <Select value={form.category} onChange={handleCategoryChange} disabled={isSubmitting}>
-            {Object.keys(CATEGORIES).map(c => <option key={c} value={c}>{c}</option>)}
+            {Object.keys(CATEGORIES).map((c: any) => <option key={c} value={c}>{c}</option>)}
           </Select>
         </FF>
         <FF label="Sous-catégorie">
-          <Select value={form.subCategory} onChange={e => setForm({...form, subCategory: e.target.value})} disabled={isSubmitting}>
-            {CATEGORIES[form.category].map(sc => <option key={sc} value={sc}>{sc}</option>)}
+          <Select value={form.subCategory} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, subCategory: e.target.value})} disabled={isSubmitting}>
+            {CATEGORIES[form.category as keyof typeof CATEGORIES].map((sc: any) => <option key={sc} value={sc}>{sc}</option>)}
           </Select>
         </FF>
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginTop: 8 }}>
         <FF label="Unité de mesure">
-          <Select value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} disabled={isSubmitting}>
+          <Select value={form.unit} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, unit: e.target.value})} disabled={isSubmitting}>
             <option value="btl">Bouteilles (btl)</option>
             <option value="unités">Unités</option>
             <option value="kg">Kilogrammes (kg)</option>
@@ -6016,10 +6015,10 @@ function AddProductModal({ onClose }) {
           </Select>
         </FF>
         <FF label="Stock Actuel">
-          <Input type="number" step="1" value={form.currentStock} onChange={e => setForm({...form, currentStock: e.target.value})} disabled={isSubmitting} />
+          <Input type="number" step="1" value={form.currentStock} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, currentStock: e.target.value})} disabled={isSubmitting} />
         </FF>
         <FF label="Seuil d'alerte">
-          <Input type="number" step="1" value={form.minStock} onChange={e => setForm({...form, minStock: e.target.value})} disabled={isSubmitting} />
+          <Input type="number" step="1" value={form.minStock} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, minStock: e.target.value})} disabled={isSubmitting} />
         </FF>
       </div>
 
@@ -6036,7 +6035,7 @@ function AddProductModal({ onClose }) {
 // =============================================================================
 // MODALE : MOUVEMENT DE STOCK (SÉCURISÉ)
 // =============================================================================
-function StockMovementModal({ product, productsList, onSelectProduct, onClose }) {
+function StockMovementModal({ product, productsList, onSelectProduct, onClose }: { product: any; productsList: any; onSelectProduct: any; onClose: any }) {
   const T = useTheme();
   const { state, dispatch, refreshData } = useStore();
   
@@ -6046,11 +6045,11 @@ function StockMovementModal({ product, productsList, onSelectProduct, onClose })
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
-  const currentIndex = productsList.findIndex(p => p.id === product.id);
+  const currentIndex = productsList.findIndex((p: any) => p.id === product.id);
   const prevProduct = currentIndex > 0 ? productsList[currentIndex - 1] : null;
   const nextProduct = currentIndex < productsList.length - 1 ? productsList[currentIndex + 1] : null;
 
-  const handleNav = (targetProduct) => {
+  const handleNav = (targetProduct: any) => {
     setQuantity("");
     setNote("");
     setIdempotencyKey(crypto.randomUUID());
@@ -6075,8 +6074,7 @@ function StockMovementModal({ product, productsList, onSelectProduct, onClose })
 
       const res = await fetch('/api/inventory/movements', {
         method: 'POST',
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify(payload)
       });
 
@@ -6094,8 +6092,8 @@ function StockMovementModal({ product, productsList, onSelectProduct, onClose })
       } else {
         onClose();
       }
-    } catch(e) {
-      alert(e.message);
+    } catch(e: any) {
+      alert(e?.message || "Erreur de mouvement.");
       setIsSubmitting(false);
     }
   };
@@ -6131,19 +6129,19 @@ function StockMovementModal({ product, productsList, onSelectProduct, onClose })
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12 }}>
         <FF label="Type d'opération">
-          <Select value={type} onChange={e => setType(e.target.value)} disabled={isSubmitting}>
+          <Select value={type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setType(e.target.value)} disabled={isSubmitting}>
             <option value="IN">Livraison (Entrée +)</option>
             <option value="OUT">Consommation/Perte (Sortie -)</option>
           </Select>
         </FF>
         <FF label={`Quantité (${product.unit})`}>
-          <Input type="number" step="0.1" min="0.1" value={quantity} onChange={e => setQuantity(e.target.value)} disabled={isSubmitting} placeholder="Ex: 5000" />
+          <Input type="number" step="0.1" min="0.1" value={quantity} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuantity(e.target.value)} disabled={isSubmitting} placeholder="Ex: 5000" />
         </FF>
       </div>
 
       <div style={{ marginTop: 12 }}>
         <FF label="Raison / Bon de livraison (Optionnel)">
-          <Input value={note} onChange={e => setNote(e.target.value)} disabled={isSubmitting} placeholder={type === "IN" ? "BL Fournisseur n°..." : "Tirage imprévu, casse, inventaire..."} />
+          <Input value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} disabled={isSubmitting} placeholder={type === "IN" ? "BL Fournisseur n°..." : "Tirage imprévu, casse, inventaire..."} />
         </FF>
       </div>
 
@@ -6183,17 +6181,17 @@ function Stocks() {
   };
 
   const categoriesKeys = ["TOUTES", ...Object.keys(CATEGORIES)];
-  const alertsCount = products.filter(p => p.currentStock <= p.minStock).length;
+  const alertsCount = products.filter((p: any) => p.currentStock <= p.minStock).length;
 
-  const filteredProducts = products.filter(p => {
+  const filteredProducts = products.filter((p: any) => {
     const matchCat = filterCat === "TOUTES" || p.category === filterCat;
     const matchSubCat = !filterSubCat || p.subCategory === filterSubCat;
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
     return matchCat && matchSubCat && matchSearch;
-  }).sort((a,b) => a.category.localeCompare(b.category) || a.subCategory.localeCompare(b.subCategory) || a.name.localeCompare(b.name));
+  }).sort((a: any,b: any) => a.category.localeCompare(b.category) || a.subCategory.localeCompare(b.subCategory) || a.name.localeCompare(b.name));
 
-  const subtotals = {};
-  filteredProducts.forEach(p => {
+  const subtotals: any = {};
+  filteredProducts.forEach((p: any) => {
     if (!subtotals[p.subCategory]) subtotals[p.subCategory] = { sum: 0, unit: p.unit };
     subtotals[p.subCategory].sum += p.currentStock;
   });
@@ -6227,10 +6225,10 @@ function Stocks() {
       {tab === "inventaire" && (
         <>
           <div style={{ display:"flex", gap:10, marginBottom: filterCat !== "TOUTES" ? 10 : 20, flexWrap:"wrap" }}>
-            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher article..." style={{ minWidth:200 }} />
+            <Input value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} placeholder="Rechercher article..." style={{ minWidth:200 }} />
             
             <div style={{ display:"flex", gap:6, background:T.surfaceHigh, padding:4, borderRadius:6, border:`1px solid ${T.border}` }}>
-              {categoriesKeys.map(c => (
+              {categoriesKeys.map((c: any) => (
                 <button key={c} onClick={() => { setFilterCat(c); setFilterSubCat(""); }} style={{ background: filterCat===c ? T.accent : "transparent", color: filterCat===c ? T.bg : T.textDim, border:"none", padding:"6px 12px", borderRadius:4, cursor:"pointer", fontSize:11, fontFamily:"monospace", transition:"all .2s", fontWeight: filterCat===c ? "bold" : "normal" }}>
                   {c}
                 </button>
@@ -6238,10 +6236,10 @@ function Stocks() {
             </div>
           </div>
 
-          {filterCat !== "TOUTES" && CATEGORIES[filterCat] && (
+          {filterCat !== "TOUTES" && CATEGORIES[filterCat as keyof typeof CATEGORIES] && (
             <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap", background:T.surfaceHigh, padding:10, borderRadius:6, border:`1px solid ${T.border}` }}>
               <span style={{fontSize:10, color:T.textDim, textTransform:"uppercase", alignSelf:"center", marginRight:10, fontWeight: "bold"}}>Sous-catégories :</span>
-              {CATEGORIES[filterCat].map(sc => (
+	              {CATEGORIES[filterCat as keyof typeof CATEGORIES].map((sc: any) => (
                 <button key={sc} onClick={() => setFilterSubCat(filterSubCat === sc ? "" : sc)} style={{ background: filterSubCat===sc ? T.accent : "transparent", color: filterSubCat===sc ? T.bg : T.textDim, border:`1px solid ${filterSubCat===sc ? T.accent : T.border}`, padding:"5px 12px", borderRadius:4, cursor:"pointer", fontSize:10, fontFamily:"monospace", transition:"all 0.2s" }}>
                   {sc}
                 </button>
@@ -6251,7 +6249,7 @@ function Stocks() {
 
           {Object.keys(subtotals).length > 0 && (
             <div style={{ display:"flex", gap:12, marginBottom:16, flexWrap:"wrap" }}>
-              {Object.entries(subtotals).map(([sub, data]) => (
+	              {Object.entries(subtotals).map(([sub, data]: any) => (
                 <div key={sub} style={{ background:T.surfaceHigh, padding:"10px 14px", borderRadius:6, border:`1px solid ${T.border}`, display:"flex", alignItems:"center", gap:10 }}>
                   <span style={{ color:T.textDim, fontSize:11, textTransform:"uppercase", letterSpacing:1 }}>Total {sub}</span>
                   <span style={{ color:T.textStrong, fontSize:15, fontWeight:"bold", fontFamily:"monospace" }}>{data.sum.toLocaleString('fr-FR')} <span style={{fontSize:12, color:T.textDim}}>{data.unit}</span></span>
@@ -6265,7 +6263,7 @@ function Stocks() {
               <div>Catégorie</div><div>Désignation</div><div>Seuil Alerte</div><div>Stock Actuel</div><div>État</div><div>Action</div>
             </div>
             
-            {filteredProducts.map((p, i) => {
+	            {filteredProducts.map((p: any, i: any) => {
               const isAlert = p.currentStock <= p.minStock;
               const isCritical = p.currentStock === 0;
 
@@ -6301,8 +6299,8 @@ function Stocks() {
           </div>
           {movements.length === 0 ? (
              <div style={{ padding:"60px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucun mouvement enregistré.</div>
-          ) : [...movements].sort((a,b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()).map((m, i) => {
-            const product = products.find(p => p.id === m.productId);
+	          ) : [...movements].sort((a: any,b: any) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()).map((m: any, i: any) => {
+	            const product = products.find((p: any) => p.id === m.productId);
             return (
               <div key={m.id} style={{ display:"grid", gridTemplateColumns:"120px 80px 2fr 120px 2fr 120px", padding:"14px 16px", alignItems:"center", borderBottom:i<movements.length-1?`1px solid ${T.border}`:"none" }}>
                 <div style={{ fontSize:11, color:T.textDim, fontFamily:"monospace" }}>{new Date(m.createdAt || m.date).toLocaleDateString('fr-FR')}</div>
@@ -6335,7 +6333,7 @@ function Stocks() {
 // =============================================================================
 // TRACABILITÉ (Moteur Cartographique / API-Driven)
 // =============================================================================
-function Tracabilite({ onSelectLot }) {
+function Tracabilite({ onSelectLot }: { onSelectLot: any }) {
   const T = useTheme(); 
   const { state } = useStore();
   
