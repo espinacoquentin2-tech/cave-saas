@@ -5662,10 +5662,10 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
     const [search, setSearch] = useState("");
     const [filterStatus, setFilterStatus] = useState("TOUS");
 
-    const availLots = (state.lots || []).filter(l => l.currentVolume > 0 && l.status !== "TIRE" && l.status !== "ARCHIVE");
-    const selectedLot = availLots.find(l => String(l.id) === String(lotId));
+    const availLots = (state.lots || []).filter((l: any) => l.currentVolume > 0 && l.status !== "TIRE" && l.status !== "ARCHIVE");
+    const selectedLot = availLots.find((l: any) => String(l.id) === String(lotId));
 
-    const filteredLots = availLots.filter(l => {
+    const filteredLots = availLots.filter((l: any) => {
       if (search && !l.code.toLowerCase().includes(search.toLowerCase())) return false;
       if (filterStatus !== "TOUS") {
         if (filterStatus === "LIES" && l.status !== "LIES") return false;
@@ -5696,7 +5696,6 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
         const res = await fetch('/api/pertes', {
           method: 'POST',
           headers: buildApiHeaders(user),
-          headers: buildApiHeaders(user),
           body: JSON.stringify(payload)
         });
 
@@ -5706,20 +5705,19 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
 
         // Si on vide la cuve, on la passe en nettoyage (API Cuverie existante)
         if (volNum >= selectedLot.currentVolume && selectedLot.currentContainerId) {
-             await fetch('/api/containers', { 
-               method: 'PUT', 
-               headers: buildApiHeaders(user), 
-               headers: buildApiHeaders(user), 
-               body: JSON.stringify({ id: selectedLot.currentContainerId, status: 'NETTOYAGE' }) 
-             }).catch(()=>{});
+	             await fetch('/api/containers', { 
+	               method: 'PUT', 
+	               headers: buildApiHeaders(user), 
+	               body: JSON.stringify({ id: selectedLot.currentContainerId, status: 'NETTOYAGE' }) 
+	             }).catch(()=>{});
         }
 
         dispatch({ type: "TOAST_ADD", payload: { msg: "Envoi en distillerie enregistré et certifié !", color: T.accent } });
         if (refreshData) await refreshData();
         setModalDistillerie(false);
 
-      } catch(e) { 
-        alert(e.message); 
+      } catch(e: any) { 
+        alert(e?.message || "Erreur de sauvegarde."); 
         setIsSubmitting(false);
       }
     };
@@ -5735,8 +5733,8 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
             <div style={{ fontSize: 11, color: T.textDim, textTransform: "uppercase", letterSpacing: 1 }}>Sélectionner le lot à expédier</div>
             
             <div style={{ display: "flex", gap: 8 }}>
-              <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher code..." style={{ flex: 1 }} autoFocus disabled={isSubmitting} />
-              <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ width: 140 }} disabled={isSubmitting}>
+              <Input value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} placeholder="Rechercher code..." style={{ flex: 1 }} autoFocus disabled={isSubmitting} />
+              <Select value={filterStatus} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterStatus(e.target.value)} style={{ width: 140 }} disabled={isSubmitting}>
                 <option value="TOUS">Tous types</option>
                 <option value="LIES">Lies</option>
                 <option value="BOURBES">Bourbes</option>
