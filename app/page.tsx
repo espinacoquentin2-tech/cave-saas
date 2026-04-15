@@ -5443,7 +5443,7 @@ const submitTirage = async () => {
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:4, padding:20 }}>
           <div style={{ fontSize:11, textTransform:"uppercase", letterSpacing:2, color:T.textDim, marginBottom:14 }}>Timeline</div>
-          {lotEvents.map((e, i) => (
+          {lotEvents.map((e: any, i: any) => (
             <div key={e.id} style={{ display:"flex", gap:12, padding:"12px 0", borderBottom: i < lotEvents.length-1 ? `1px solid ${T.border}` : "none" }}>
               <div>
                 <div style={{ width:8, height:8, borderRadius:"50%", background:T.accent, marginTop:4 }} />
@@ -5469,13 +5469,13 @@ const submitTirage = async () => {
             
             {rightTab === "analyses" && (
               <div style={{ padding: 20 }}>
-                {lotAnalyses.length === 0 ? <div style={{ color:T.textDim, fontSize:12, fontStyle:"italic" }}>Aucune analyse</div> : lotAnalyses.map(a => <div key={a.id} style={{paddingBottom:8, marginBottom:8, borderBottom:`1px solid ${T.border}`}}><span style={{fontFamily:"monospace", color:T.textDim, fontSize:11}}>{new Date(a.analysisDate || a.date).toLocaleDateString('fr-FR')}</span> - <span style={{color:T.textStrong}}>pH {a.ph}</span></div>)}
+                {lotAnalyses.length === 0 ? <div style={{ color:T.textDim, fontSize:12, fontStyle:"italic" }}>Aucune analyse</div> : lotAnalyses.map((a: any) => <div key={a.id} style={{paddingBottom:8, marginBottom:8, borderBottom:`1px solid ${T.border}`}}><span style={{fontFamily:"monospace", color:T.textDim, fontSize:11}}>{new Date(a.analysisDate || a.date).toLocaleDateString('fr-FR')}</span> - <span style={{color:T.textStrong}}>pH {a.ph}</span></div>)}
               </div>
             )}
             
             {rightTab === "fa" && (
               <div style={{ padding: 20 }}>
-                <FaChartContainer data={lotFas} />
+                <div style={{ color:T.textDim, fontSize:12, fontStyle:"italic" }}>Graphique FA indisponible ({lotFas.length} relevés).</div>
               </div>
             )}
           </div>
@@ -5485,8 +5485,8 @@ const submitTirage = async () => {
       {modal === "status" && (
         <Modal title="Changer statut" onClose={() => setModal(null)}>
           <FF label="Nouveau statut">
-            <Select value={statusForm.status} onChange={e => setStatusForm({ ...statusForm, status: e.target.value })} disabled={isSubmitting}>
-              {LOT_STATUSES.map(s => <option key={s} value={s}>{formatStatus(s)}</option>)}
+            <Select value={statusForm.status} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStatusForm({ ...statusForm, status: e.target.value })} disabled={isSubmitting}>
+              {LOT_STATUSES.map((s: any) => <option key={s} value={s}>{formatStatus(s)}</option>)}
             </Select>
           </FF>
           <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
@@ -5509,7 +5509,7 @@ const submitTirage = async () => {
             
             <div style={{ marginBottom: 20, borderBottom:`1px solid ${T.border}`, paddingBottom: 16 }}>
               <FF label="Type de mise en bouteille">
-                <Select value={tirageForm.typeMise} onChange={e=>setTirageForm({...tirageForm, typeMise:e.target.value})} disabled={isSubmitting} style={{ fontWeight:"bold", color: isTranquille ? "#8b1c31" : T.accent }}>
+                <Select value={tirageForm.typeMise} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setTirageForm({...tirageForm, typeMise:e.target.value})} disabled={isSubmitting} style={{ fontWeight:"bold", color: isTranquille ? "#8b1c31" : T.accent }}>
                   <option value="EFFERVESCENT">Prise de mousse (Champagne)</option>
                   <option value="TRANQUILLE">Vin Tranquille (Coteaux / Rouge)</option>
                 </Select>
@@ -5532,12 +5532,12 @@ const submitTirage = async () => {
 
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
               <FF label="Format">
-                <Select value={tirageForm.format} onChange={e => setTirageForm({...tirageForm, format:e.target.value})} disabled={isSubmitting}>
-                  {["37.5cl","75cl","150cl"].map(f => <option key={f}>{f}</option>)}
+                <Select value={tirageForm.format} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTirageForm({...tirageForm, format:e.target.value})} disabled={isSubmitting}>
+                  {["37.5cl","75cl","150cl"].map((f: any) => <option key={f}>{f}</option>)}
                 </Select>
               </FF>
               <FF label={`Volume hL (Max ${bulkVol})`}>
-                <Input type="number" step="0.1" value={tirageForm.volume} onChange={e => setTirageForm({...tirageForm, volume:e.target.value})} disabled={isSubmitting} />
+                <Input type="number" step="0.1" value={tirageForm.volume} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageForm({...tirageForm, volume:e.target.value})} disabled={isSubmitting} />
               </FF>
             </div>
 
