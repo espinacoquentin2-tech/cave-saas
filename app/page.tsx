@@ -802,7 +802,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
       // 1. Création du Lot de macération (API Transactionnelle)
       const res = await fetch('/api/lots', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
+        headers: buildApiHeaders(undefined), 
         body: JSON.stringify({ 
           code: codeMac, millesime, cepage: pressing.cepage, lieu: pressing.cru || pressing.parcelle, 
           volume: parseFloat(form.volumeOccupe), containerId: parseInt(form.cuveId), 
@@ -816,7 +816,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
       // 2. MISE À JOUR DU QUAI (API)
       await fetch('/api/pressings', { 
         method: 'PATCH', 
-        headers: buildApiHeaders(user), 
+        headers: buildApiHeaders(undefined), 
         body: JSON.stringify({ id: pressing.id, status: "PRESSE" }) 
       }).catch(()=>{});
 
@@ -847,7 +847,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
         <FF label="État Sanitaire">
-          <Select value={form.sanitaire} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, sanitaire:e.target.value})} style={{ borderLeft: `4px solid ${sanColors[form.sanitaire]}`, fontWeight:"bold" }}>
+          <Select value={form.sanitaire} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, sanitaire:e.target.value})} style={{ borderLeft: `4px solid ${sanColors[form.sanitaire as keyof typeof sanColors]}`, fontWeight:"bold" }}>
             <option value="A+">A+ (Parfait)</option><option value="A">A (Très bon)</option><option value="B">B (Moyen, trié)</option><option value="C">C (Médiocre)</option>
           </Select>
         </FF>
@@ -868,9 +868,9 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
           </FF>
           <FF label="Envoyer vers (Cuve)">
             <div style={{ display: "flex", gap: 8 }}>
-              <Select value={form.cuveId} disabled={isSubmitting} onChange={e=>setForm({...form, cuveId:e.target.value})} style={{ flex: 1, borderColor: !form.cuveId ? T.red : T.border }}>
+              <Select value={form.cuveId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, cuveId:e.target.value})} style={{ flex: 1, borderColor: !form.cuveId ? T.red : T.border }}>
                 <option value="">-- Choisir une cuve --</option>
-                {availCuves.map(c => {
+                {availCuves.map((c: any) => {
                   const volDispo = Math.max(0, (c.capacityValue || c.capacity || 0) - (c.currentVolume || 0)).toFixed(1);
                   return (
                     <option key={c.id} value={c.id}>
@@ -885,7 +885,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
         </div>
         <div style={{ marginTop: 8 }}>
           <FF label="Observations (Sulfitage, levurage...)">
-            <Input value={form.notes} disabled={isSubmitting} onChange={e=>setForm({...form, notes:e.target.value})} placeholder="Ex: Sulfitage à la benne 3g/hL..." />
+            <Input value={form.notes} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, notes:e.target.value})} placeholder="Ex: Sulfitage à la benne 3g/hL..." />
           </FF>
         </div>
       </div>
@@ -1001,14 +1001,14 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
   const pressoirs = state.pressoirs || [];
   const apports = state.pressings || []; 
-  const apportsEnAttente = apports.filter(a => a.status !== "PRESSÉ");
+  const apportsEnAttente = apports.filter((a: any) => a.status !== "PRESSÉ");
 
   const depts = Object.keys(CHAMPAGNE_GEODATA || {});
-  const regions = customDep ? Object.keys(CHAMPAGNE_GEODATA[customDep] || {}) : [];
-  const communes = (customDep && customReg) ? (CHAMPAGNE_GEODATA[customDep][customReg] || []) : [];
+  const regions = customDep ? Object.keys((CHAMPAGNE_GEODATA as Record<string, any>)[customDep] || {}) : [];
+  const communes = (customDep && customReg) ? (((CHAMPAGNE_GEODATA as Record<string, any>)[customDep] || {})[customReg] || []) : [];
 
-  const safeParseFloat = (val) => parseFloat(String(val).replace(',', '.'));
-  const parseToHl = (val) => parseFloat((parseFloat(String(val).replace(',', '.')) || 0).toFixed(2));
+  const safeParseFloat = (val: any) => parseFloat(String(val).replace(',', '.'));
+  const parseToHl = (val: any) => parseFloat((parseFloat(String(val).replace(',', '.')) || 0).toFixed(2));
 
   // --- ACTIONS SIMPLES ---
   const handleAddApport = async () => {
@@ -1025,7 +1025,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       const res = await fetch('/api/pressings', { 
         method: 'POST', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           date: new Date().toISOString(), 
@@ -1044,7 +1043,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       setNewApport({ parcelle: "", cepage: "CH", poids: "" });
       setIsCustomOrigin(false); setCustomDep(""); setCustomReg(""); setCustomCom(""); setCustomNom("");
     } catch (e) { 
-      alert(e.message); 
+      alert(e instanceof Error ? e.message : String(e)); 
     } finally { 
       setIsSubmitting(false); 
     }
@@ -1054,11 +1053,11 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     if (!apportToDelete) return;
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/pressings?id=${apportToDelete.id}`, { method: 'DELETE' });
+      const res = await fetch(`/api/pressings?id=${(apportToDelete as any).id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error((await res.json()).error);
       if (refreshData) await refreshData();
     } catch(e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     }
     setApportToDelete(null); 
     setIsSubmitting(false);
@@ -1071,7 +1070,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       const res = await fetch('/api/pressoirs', { 
         method: 'POST', 
         headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
         body: JSON.stringify(newPress) 
       });
       if (!res.ok) throw new Error("Erreur serveur");
@@ -1080,18 +1078,17 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       setNewPress({ nom: "", type: "Pneumatique", marque: "Bücher", capacite: 4000 });
       setShowAddPress(false);
     } catch (e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const updatePressStatus = async (id, status, extraData = {}) => {
+  const updatePressStatus = async (id: any, status: any, extraData: any = {}) => {
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/pressoirs', { 
         method: 'PUT', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ id, status, ...extraData }) 
       });
@@ -1100,7 +1097,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       if (refreshData) await refreshData();
       if (status === "VIDE") setActionModal(null);
     } catch (e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSubmitting(false);
     }
@@ -1110,9 +1107,9 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
   const handleLoadSubmit = async (forceLoad = false, forceMix = false) => {
     if (!selectedApport || !loadWeight) return alert("Veuillez sélectionner un lot et indiquer le poids à charger.");
     
-    const apport = apports.find(a => String(a.id) === String(selectedApport));
+    const apport = apports.find((a: any) => String(a.id) === String(selectedApport));
     const weightToLoad = safeParseFloat(loadWeight);
-    const p = actionModal.press;
+    const p = (actionModal as any).press;
 
     if (weightToLoad > apport.poids) return alert("Vous ne pouvez pas charger plus que ce qu'il reste sur le quai !");
     
@@ -1127,7 +1124,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
           type: fillPct < 90 ? 'UNDER' : 'OVER',
           fillPct, totalLoad, missing: p.capacite - totalLoad, excess: totalLoad - p.capacite,
           forceMix
-        });
+        } as any);
         return; 
       }
     }
@@ -1136,7 +1133,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       const res = await fetch('/api/pressings/load', { 
         method: 'POST', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           pressId: p.id, 
@@ -1151,7 +1147,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
         const errorData = await res.json();
         // Gestion de l'erreur 409 (Mélange de cépage détecté par le backend)
         if (res.status === 409) {
-          setMixWarning({ apport, press: p, weightToLoad });
+          setMixWarning({ apport, press: p, weightToLoad } as any);
           setIsSubmitting(false);
           return;
         }
@@ -1166,7 +1162,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       if (refreshData) await refreshData();
 
     } catch(e) { 
-      alert(e.message); 
+      alert(e instanceof Error ? e.message : String(e)); 
     } finally {
       setIsSubmitting(false);
     }
@@ -1177,7 +1173,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       const res = await fetch('/api/containers', { 
         method: 'POST', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           name: newCuve.name, 
@@ -1193,7 +1188,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       setNewCuve({ name: "", type: "Débourbage Cuvée", capacityValue: "" });
       setShowAddCuve(false);
     } catch(e) { 
-      alert(e.message);
+      alert(e instanceof Error ? e.message : String(e));
     } finally {
       setIsSubmitting(false);
     }
@@ -1202,7 +1197,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
   // --- DÉBOURBAGE (TRANSFERT / SOUTIRAGE) ---
   const validerTransfert = async () => {
     // 1. Calcul du volume total saisi
-    const volSaisi = transferDests.reduce((sum, d) => sum + parseToHl(d.vol), 0);
+    const volSaisi = transferDests.reduce((sum: any, d: any) => sum + parseToHl(d.vol), 0);
     
     // Remplacement du "alert" par un Toast rouge
     if (volSaisi <= 0) {
@@ -1210,8 +1205,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       return;
     }
     
-    const sourceId = transferModal.id;
-    const currentLot = (state.lots || []).find(l => String(l.currentContainerId || l.containerId) === String(sourceId) && parseFloat(l.currentVolume || l.volume) > 0);
+    const sourceId = (transferModal as any).id;
+    const currentLot = (state.lots || []).find((l: any) => String(l.currentContainerId || l.containerId) === String(sourceId) && parseFloat(l.currentVolume || l.volume) > 0);
 
     if (!currentLot) {
        dispatch({ type: "TOAST_ADD", payload: { msg: "Erreur : La cuve source est vide ou le lot est introuvable.", color: T.red } });
@@ -1227,8 +1222,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       // 2. Préparation stricte des destinations
       const validDestinations = transferDests
-        .filter(d => d.cuveId && parseToHl(d.vol) > 0)
-        .map(d => ({ toId: parseInt(d.cuveId), volume: parseToHl(d.vol) }));
+        .filter((d: any) => d.cuveId && parseToHl(d.vol) > 0)
+        .map((d: any) => ({ toId: parseInt(d.cuveId), volume: parseToHl(d.vol) }));
 
       if (validDestinations.length === 0) {
         throw new Error("Aucune cuve de destination valide n'a été configurée.");
@@ -1236,7 +1231,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
       // 3. Payload Zod-compliant
       const payload = {
-          lotId: parseInt(currentLot.id),
+          lotId: parseInt((currentLot as any).id),
           fromId: parseInt(sourceId),
           volume: volSaisi, 
           destinations: validDestinations,
@@ -1250,7 +1245,6 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       // 4. Appel de l'API blindée
       const res = await fetch('/api/transfers', {
           method: 'POST',
-          headers: buildApiHeaders(user),
           headers: buildApiHeaders(user),
           body: JSON.stringify(payload)
       });
@@ -1280,7 +1274,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
   // --- ÉCOULEMENT DES JUS DU PRESSOIR (Création des lots de moût) ---
   const validerEcoulement = async () => {
-    const p = actionModal.press;
+    const p = (actionModal as any).press;
     setIsSubmitting(true);
     
     try {
@@ -1289,16 +1283,15 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
         pressoirId: p.id,
         parcelle: p.parcelle,
         cepage: p.cepage,
-        cuvees: cuveeDests.filter(d => d.cuveId && parseToHl(d.vol) > 0).map(d => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
-        tailles: tailleDests.filter(d => d.cuveId && parseToHl(d.vol) > 0).map(d => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
-        rebeches: rebechesDests.filter(d => d.cuveId && parseToHl(d.vol) > 0).map(d => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
+        cuvees: cuveeDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
+        tailles: tailleDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
+        rebeches: rebechesDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
         operator: user?.name || "Système",
         idempotencyKey: idempotencyKey || crypto.randomUUID()
       };
 
       const res = await fetch('/api/pressings/ecoulement', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify(payload) 
       });
@@ -1321,7 +1314,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     }
   };
 
-  const calculateFractions = (kg) => {
+  const calculateFractions = (kg: any) => {
     const cuvee = (kg / 4000) * 20.5;
     const taille = (kg / 4000) * 5.0;
     const maxRebeches = (cuvee + taille) * 0.10; 
@@ -1332,7 +1325,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     };
   };
 
-  const toggleCleaning = async (c) => {
+  const toggleCleaning = async (c: any) => {
     setIsSubmitting(true);
     const nextStatus = c.status === "NETTOYAGE" ? "VIDE" : "NETTOYAGE";
     try {
@@ -1343,15 +1336,15 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     finally { setIsSubmitting(false); }
   };
 
-  const pressoirsActifs = pressoirs.filter(p => p.status !== "VIDE");
-  const pressoirsArret = pressoirs.filter(p => p.status === "VIDE");
+  const pressoirsActifs = pressoirs.filter((p: any) => p.status !== "VIDE");
+  const pressoirsArret = pressoirs.filter((p: any) => p.status === "VIDE");
   
-  const cuvesDebourbage = (state.containers || []).filter(c => c.status !== "ARCHIVÉE" && (c.type?.includes("Débourbage") || c.type?.includes("Belon") || c.displayName?.toLowerCase().includes("cuvée") || c.displayName?.toLowerCase().includes("taille")));
+  const cuvesDebourbage = (state.containers || []).filter((c: any) => c.status !== "ARCHIVÉE" && (c.type?.includes("Débourbage") || c.type?.includes("Belon") || c.displayName?.toLowerCase().includes("cuvée") || c.displayName?.toLowerCase().includes("taille")));
   
-  const debourbageActifs = cuvesDebourbage.filter(c => (parseFloat(c.currentVolume || c.volume) || 0) > 0);
-  const debourbageVides = cuvesDebourbage.filter(c => (parseFloat(c.currentVolume || c.volume) || 0) <= 0);
+  const debourbageActifs = cuvesDebourbage.filter((c: any) => (parseFloat(c.currentVolume || c.volume) || 0) > 0);
+  const debourbageVides = cuvesDebourbage.filter((c: any) => (parseFloat(c.currentVolume || c.volume) || 0) <= 0);
 
-  const cuvesCuverie = (state.containers || []).filter(c => {
+  const cuvesCuverie = (state.containers || []).filter((c: any) => {
     if (c.status === "ARCHIVÉE") return false;
     const t = (c.type || "").toLowerCase();
     const n = ((c.displayName || c.name) || "").toLowerCase();
@@ -1365,10 +1358,10 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     return true;
   });
 
-  const cuvesBourbes = (state.containers || []).filter(c => c.status !== "ARCHIVÉE" && (c.type === "CUVE_BOURBES" || c.type?.includes("Bourbe") || (c.displayName || c.name || "").toLowerCase().includes("bourbe")));
-  const cuvesRebeches = (state.containers || []).filter(c => c.status !== "ARCHIVÉE" && (c.type === "CUVE_REBECHES" || c.type?.includes("Rebeche") || (c.displayName || c.name || "").toLowerCase().includes("rebêche") || (c.displayName || c.name || "").toLowerCase().includes("rebeche")));
+  const cuvesBourbes = (state.containers || []).filter((c: any) => c.status !== "ARCHIVÉE" && (c.type === "CUVE_BOURBES" || c.type?.includes("Bourbe") || (c.displayName || c.name || "").toLowerCase().includes("bourbe")));
+  const cuvesRebeches = (state.containers || []).filter((c: any) => c.status !== "ARCHIVÉE" && (c.type === "CUVE_REBECHES" || c.type?.includes("Rebeche") || (c.displayName || c.name || "").toLowerCase().includes("rebêche") || (c.displayName || c.name || "").toLowerCase().includes("rebeche")));
 
-  const renderDebourbageCard = (c) => {
+  const renderDebourbageCard = (c: any) => {
     const nameToDisplay = c.displayName || c.name || "Sans nom";
     const isCuvee = c.type.includes("Cuvée") || nameToDisplay.toLowerCase().includes("cuvée");
     const currentVol = parseFloat(c.currentVolume || c.volume) || 0;
@@ -1411,7 +1404,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                  disabled={isVide || isSubmitting} onClick={() => { 
                    const autoClair = parseToHl(currentVol * 0.98); 
                    setTransferModal(c); 
-                   setTransferDests([{ id: Date.now(), cuveId: "", vol: autoClair.toFixed(2) }]); 
+                   setTransferDests([{ id: Date.now(), cuveId: "", vol: autoClair.toFixed(2) }] as any); 
                    setTransferOptions({ actionRest: "ENVOYER_BOURBES", bourbesDestId: "" });
                    setQuickDestIndex(null);
                  }}>
@@ -1423,8 +1416,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     );
   };
 
-  const renderDestSection = (title, icon, color, dests, setDests, options, theoVol, defaultType, isHardLimit = false) => {
-    const total = dests.reduce((sum, d) => sum + parseToHl(d.vol), 0);
+  const renderDestSection = (title: any, icon: any, color: any, dests: any, setDests: any, options: any, theoVol: any, defaultType: any, isHardLimit = false) => {
+    const total = dests.reduce((sum: any, d: any) => sum + parseToHl(d.vol), 0);
     const isOverLimit = isHardLimit && total > (parseFloat(theoVol) + 0.05);
 
     return (
@@ -1441,8 +1434,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
           {isHardLimit ? "Maximum autorisé" : "Théorique attendu"} : {parseFloat(theoVol).toFixed(2)} hL
         </div>
 
-        {dests.map((d, i) => {
-           const targetCuve = options.find(c => String(c.id) === String(d.cuveId));
+        {dests.map((d: any, i: any) => {
+           const targetCuve = options.find((c: any) => String(c.id) === String(d.cuveId));
            const free = targetCuve ? Math.max(0, parseFloat(targetCuve.capacityValue || targetCuve.capacity || 0) - parseFloat(targetCuve.currentVolume || targetCuve.volume || 0)) : 0;
            const isOver = parseToHl(d.vol) > (free + 0.05);
 
@@ -1450,18 +1443,18 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
              <div key={d.id} style={{ marginBottom: 12 }}>
                <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
                  <div style={{ flex: 2 }}>
-                   <Select value={d.cuveId} disabled={isSubmitting} onChange={e => {
+                   <Select value={d.cuveId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                        const selectedCuveId = e.target.value;
                        const nd = [...dests]; 
                        nd[i] = { ...nd[i], cuveId: selectedCuveId }; 
                        
                        if (selectedCuveId) {
-                           const tCuve = options.find(c => String(c.id) === String(selectedCuveId));
+                           const tCuve = options.find((c: any) => String(c.id) === String(selectedCuveId));
                            if (tCuve) {
                                const freeSpace = Math.max(0, parseFloat(tCuve.capacityValue || tCuve.capacity || 0) - parseFloat(tCuve.currentVolume || tCuve.volume || 0));
                                const safeSpace = freeSpace * 0.9; 
                                
-                               const otherDestsVol = dests.filter((_, idx) => idx !== i).reduce((s, od) => s + parseToHl(od.vol), 0);
+                               const otherDestsVol = dests.filter((_: any, idx: any) => idx !== i).reduce((s: any, od: any) => s + parseToHl(od.vol), 0);
                                const remainingToDistribute = Math.max(0, parseFloat(theoVol) - otherDestsVol);
                                
                                const autoVol = Math.min(safeSpace, remainingToDistribute);
@@ -1473,24 +1466,24 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                        setDests(nd);
                    }} style={{ borderColor: isOver ? T.red : T.border }}>
                       <option value="">-- Choisir cuve --</option>
-                      {options.map(c => {
+                      {options.map((c: any) => {
                          const dispo = Math.max(0, parseFloat(c.capacityValue || c.capacity || 0) - parseFloat(c.currentVolume || c.volume || 0));
-                         const isAlreadySelected = dests.some((otherD, idx) => idx !== i && String(otherD.cuveId) === String(c.id));
+                         const isAlreadySelected = dests.some((otherD: any, idx: any) => idx !== i && String(otherD.cuveId) === String(c.id));
                          return <option key={c.id} value={c.id} disabled={isAlreadySelected}>{c.displayName || c.name} (Dispo: {dispo.toFixed(2)} hL)</option>
                       })}
                    </Select>
                  </div>
                  <div style={{ flex: 1, display:"flex", gap:4 }}>
-                   <Input type="number" step="0.1" value={d.vol} disabled={isSubmitting} onChange={e => {
+                   <Input type="number" step="0.1" value={d.vol} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                        const nd = [...dests]; 
                        nd[i] = { ...nd[i], vol: e.target.value }; 
                        setDests(nd);
                    }} placeholder="Vol." style={{ borderColor: isOver ? T.red : T.border }} />
                    <Btn variant="secondary" disabled={isSubmitting} onClick={() => {
-                       const tCuve = options.find(c => String(c.id) === String(d.cuveId));
+                       const tCuve = options.find((c: any) => String(c.id) === String(d.cuveId));
                        const freeSpace = tCuve ? Math.max(0, parseFloat(tCuve.capacityValue || tCuve.capacity || 0) - parseFloat(tCuve.currentVolume || tCuve.volume || 0)) : 0;
                        const safeSpace = freeSpace * 0.9;
-                       const otherDests = dests.filter((_, idx) => idx !== i).reduce((s, od) => s + parseToHl(od.vol), 0);
+                       const otherDests = dests.filter((_: any, idx: any) => idx !== i).reduce((s: any, od: any) => s + parseToHl(od.vol), 0);
                        const remTheo = Math.max(0, parseFloat(theoVol) - otherDests);
                        const maxVal = Math.min(remTheo, safeSpace);
                        if(maxVal > 0) {
@@ -1502,7 +1495,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                  </div>
                  {dests.length > 1 && (
                    <Btn variant="ghost" disabled={isSubmitting} style={{color:T.red, padding:"0 8px"}} onClick={() => {
-                      setDests(dests.filter((_, idx) => idx !== i));
+                      setDests(dests.filter((_: any, idx: any) => idx !== i));
                    }}>✕</Btn>
                  )}
                </div>
@@ -1511,7 +1504,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
         })}
         <div style={{ marginTop: 8 }}>
            <Btn variant="secondary" disabled={isSubmitting} style={{ fontSize: 10, padding: "4px 8px" }} onClick={() => {
-              setDests([...dests, { id: Date.now() + Math.random(), cuveId: "", vol: "" }]);
+              setDests([...dests, { id: Date.now() + Math.random(), cuveId: "", vol: "" }] as any);
            }}>+ Éclater dans une autre cuve</Btn>
         </div>
       </div>
@@ -1539,12 +1532,12 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
             <div style={{ display: "flex", gap: 16, alignItems: isCustomOrigin ? "flex-start" : "flex-end", flexWrap: "wrap" }}>
               {!isCustomOrigin ? (
                 <FF label="Provenance (Parcelle ou Autre)" style={{ flex: 1, minWidth: 200 }}>
-                  <Select value={newApport.parcelle} disabled={isSubmitting} onChange={(e) => {
+                  <Select value={newApport.parcelle} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                     if (e.target.value === "CUSTOM") setIsCustomOrigin(true);
                     else setNewApport({...newApport, parcelle: e.target.value});
                   }}>
                     <option value="">-- Sélectionner --</option>
-                    {(state.parcelles || []).map(p => <option key={p.id} value={p.nom}>{p.nom}</option>)}
+                    {(state.parcelles || []).map((p: any) => <option key={p.id} value={p.nom}>{p.nom}</option>)}
                     <option value="CUSTOM" style={{ fontWeight: "bold", color: T.accent }}>+ Autre origine (Négoce, Achat...)</option>
                   </Select>
                 </FF>
@@ -1555,32 +1548,32 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                     <button onClick={() => setIsCustomOrigin(false)} disabled={isSubmitting} style={{ background: "none", border: "none", color: T.textDim, cursor: "pointer", fontSize: 12 }}>✕ Annuler</button>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                    <Select value={customDep} disabled={isSubmitting} onChange={e => { setCustomDep(e.target.value); setCustomReg(""); setCustomCom(""); }}>
+                    <Select value={customDep} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setCustomDep(e.target.value); setCustomReg(""); setCustomCom(""); }}>
                       <option value="">Département</option>
                       {depts.map(d => <option key={d}>{d}</option>)}
                     </Select>
-                    <Select value={customReg} disabled={!customDep || isSubmitting} onChange={e => { setCustomReg(e.target.value); setCustomCom(""); }}>
+                    <Select value={customReg} disabled={!customDep || isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setCustomReg(e.target.value); setCustomCom(""); }}>
                       <option value="">Région / Sous-région</option>
                       {regions.map(r => <option key={r}>{r}</option>)}
                     </Select>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                    <Select value={customCom} disabled={!customReg || isSubmitting} onChange={e => setCustomCom(e.target.value)}>
+                    <Select value={customCom} disabled={!customReg || isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCustomCom(e.target.value)}>
                       <option value="">Commune</option>
-                      {communes.map(c => <option key={c}>{c}</option>)}
+                      {communes.map((c: any) => <option key={c}>{c}</option>)}
                     </Select>
-                    <Input value={customNom} disabled={isSubmitting} onChange={e=>setCustomNom(e.target.value)} placeholder="Nom du Vendeur ou Lieu-dit" />
+                    <Input value={customNom} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setCustomNom(e.target.value)} placeholder="Nom du Vendeur ou Lieu-dit" />
                   </div>
                 </div>
               )}
               <div style={{ display: "flex", gap: 16, alignItems: "flex-end" }}>
                 <FF label="Cépage" style={{ width: 140 }}>
-                  <Select value={newApport.cepage} disabled={isSubmitting} onChange={(e) => setNewApport({...newApport, cepage: e.target.value})}>
+                  <Select value={newApport.cepage} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewApport({...newApport, cepage: e.target.value})}>
                     <option value="CH">Chardonnay</option><option value="PN">Pinot Noir</option><option value="PM">Meunier</option><option value="PBL">Pinot Blanc</option><option value="ARB">Arbane</option><option value="PMES">Petit Meslier</option><option value="PG">Pinot Gris</option><option value="VOLTIS">Voltis</option>
                   </Select>
                 </FF>
                 <FF label="Poids (kg)" style={{ width: 120 }}>
-                  <Input type="text" value={newApport.poids} disabled={isSubmitting} onChange={(e) => setNewApport({...newApport, poids: e.target.value})} placeholder="Ex: 4000" />
+                  <Input type="text" value={newApport.poids} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewApport({...newApport, poids: e.target.value})} placeholder="Ex: 4000" />
                 </FF>
                 <Btn onClick={handleAddApport} disabled={isSubmitting} style={{ height: 38 }}>{isSubmitting ? "..." : "+ Ajouter l'apport"}</Btn>
               </div>
@@ -1596,7 +1589,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 100px 100px 150px 40px", padding: "12px 20px", borderBottom: `1px solid ${T.border}`, fontSize: 11, color: T.textDim, textTransform: "uppercase" }}>
                   <div>Provenance</div><div>Cépage</div><div>Poids restant</div><div>Vol. Estimé</div><div>Statut</div><div></div>
                 </div>
-                {apportsEnAttente.map(a => {
+                {apportsEnAttente.map((a: any) => {
                   const volEstime = calculateFractions(a.weight || a.poids || 0);
                   const totalEstime = (Number(volEstime.cuvee) + Number(volEstime.taille)).toFixed(2);
                   return (
@@ -1627,7 +1620,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
               <div style={{ padding:"30px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucune machine en route.</div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 20 }}>
-                {pressoirsActifs.map(p => {
+                {pressoirsActifs.map((p: any) => {
                   const isPret = p.status === "PRET_ECOULAGE";
                   const fillPct = ((p.loadKg || 0) / p.capacite) * 100;
                   
@@ -1665,7 +1658,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                                 
                                 <div style={{ display: "flex", gap: 8 }}>
                                   <button disabled={isSubmitting} style={{ background:"none", border:"none", color: T.accentLight, fontWeight: "bold", cursor: isSubmitting ? "default" : "pointer" }} onClick={() => {
-                                      setActionModal({ type: "LOAD", press: p });
+                                      setActionModal({ type: "LOAD", press: p } as any);
                                       setSelectedApport("");
                                       setLoadWeight(""); 
                                   }}>
@@ -1681,7 +1674,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                           )}
                         </div>
                         {isPret && (<Btn style={{ width: "100%", background: T.green, borderColor: T.green }} disabled={isSubmitting} onClick={() => {
-                          setActionModal({ type: "ECOULEMENT", press: p });
+                          setActionModal({ type: "ECOULEMENT", press: p } as any);
                         }}>🍷 Fractionner & Écouler</Btn>)}
                       </div>
                     </div>
@@ -1697,7 +1690,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
               <div style={{ padding:"30px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucune machine disponible.</div>
             ) : (
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 20 }}>
-                {pressoirsArret.map(p => (
+                {pressoirsArret.map((p: any) => (
                   <div key={p.id} style={{ background: T.surfaceHigh, border: `1px solid ${T.border}`, borderRadius: 8, overflow: "hidden", display: "flex", flexDirection: "column", opacity: 0.8 }}>
                     <div style={{ padding: "16px 20px", borderBottom: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                       <div><div style={{ fontSize: 18, fontWeight: "bold", color: T.textStrong, fontFamily: "monospace" }}>{p.nom}</div><div style={{ fontSize: 11, color: T.textDim }}>{p.type} • {p.capacite} kg max</div></div>
@@ -1705,7 +1698,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                     </div>
                     <div style={{ padding: 20, textAlign: "center", color: T.textDim, fontSize: 13 }}>
                       <Btn disabled={isSubmitting || apportsEnAttente.length === 0} onClick={() => { 
-                        setActionModal({ type: "LOAD", press: p }); 
+                        setActionModal({ type: "LOAD", press: p } as any); 
                         setSelectedApport(""); 
                         setLoadWeight("");
                       }} style={{ width: "100%" }}>📥 Démarrer cycle (Nouveau Marc)</Btn>
@@ -1756,13 +1749,13 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
       {/* --- MODALES --- */}
 
-      {actionModal?.type === "LOAD" && actionModal.press && (
-        <Modal title={`Charger : ${actionModal.press.nom}`} onClose={() => setActionModal(null)}>
+      {(actionModal as any)?.type === "LOAD" && (actionModal as any).press && (
+        <Modal title={`Charger : ${(actionModal as any).press.nom}`} onClose={() => setActionModal(null)}>
           <div style={{ display: "flex", flexDirection: "column", gap: 16, marginBottom: 24 }}>
             <FF label="Lot de raisins à charger">
-              <Select value={selectedApport} disabled={isSubmitting} onChange={e => setSelectedApport(e.target.value)}>
+              <Select value={selectedApport} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedApport(e.target.value)}>
                 <option value="">-- Sélectionner un apport sur le quai --</option>
-                {apportsEnAttente.map(a => (
+                {apportsEnAttente.map((a: any) => (
                   <option key={a.id} value={a.id}>
                     {a.cru || a.parcelle} ({a.cepage}) - Reste: {a.weight || a.poids} kg
                   </option>
@@ -1774,12 +1767,12 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                 type="number"
                 disabled={isSubmitting}
                 value={loadWeight}
-                onChange={e => setLoadWeight(e.target.value)}
-                placeholder={`Ex: ${actionModal.press.capacite}`}
+                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLoadWeight(e.target.value)}
+                placeholder={`Ex: ${(actionModal as any).press.capacite}`}
               />
             </FF>
             <div style={{ fontSize: 11, color: T.textDim }}>
-              Capacité max du pressoir : {actionModal.press.capacite} kg
+              Capacité max du pressoir : {(actionModal as any).press.capacite} kg
             </div>
           </div>
           <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
@@ -1795,8 +1788,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       {mixWarning && (
         <Modal title="⚠️ Mélange de cépages détecté" onClose={() => setMixWarning(null)}>
           <div style={{ padding: "10px 0 20px 0", color: T.text, lineHeight: 1.5, fontSize: 14 }}>
-            Le pressoir contient actuellement du <strong>{mixWarning.press.cepage}</strong>.<br/><br/>
-            Vous vous apprêtez à y ajouter <strong>{mixWarning.weightToLoad} kg de {mixWarning.apport.cepage}</strong>.<br/><br/>
+            Le pressoir contient actuellement du <strong>{(mixWarning as any).press.cepage}</strong>.<br/><br/>
+            Vous vous apprêtez à y ajouter <strong>{(mixWarning as any).weightToLoad} kg de {(mixWarning as any).apport.cepage}</strong>.<br/><br/>
             Le système conservera l'identité du cépage majoritaire, mais gardera la trace exacte de ce mélange dans la provenance du lot.<br/>
             Voulez-vous vraiment procéder à ce mélange ?
           </div>
@@ -1813,38 +1806,38 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       )}
 
       {loadWarning && (
-        <Modal title={loadWarning.type === 'UNDER' ? "⚠️ Sous-charge détectée" : "🚨 Surcharge détectée"} onClose={() => setLoadWarning(null)}>
+        <Modal title={(loadWarning as any).type === 'UNDER' ? "⚠️ Sous-charge détectée" : "🚨 Surcharge détectée"} onClose={() => setLoadWarning(null)}>
           <div style={{ padding: "10px 0 20px 0", color: T.text, lineHeight: 1.5, fontSize: 14 }}>
-            {loadWarning.type === 'UNDER' ? (
+            {(loadWarning as any).type === 'UNDER' ? (
               <>
-                Le pressoir ne sera rempli qu'à <strong>{loadWarning.fillPct.toFixed(1)}%</strong> ({loadWarning.totalLoad} kg sur {actionModal.press.capacite} kg max).<br/><br/>
-                Il vous manque <strong>{loadWarning.missing.toFixed(0)} kg</strong> pour atteindre la pleine capacité de la machine.<br/>
+                Le pressoir ne sera rempli qu'à <strong>{(loadWarning as any).fillPct.toFixed(1)}%</strong> ({(loadWarning as any).totalLoad} kg sur {(actionModal as any).press.capacite} kg max).<br/><br/>
+                Il vous manque <strong>{(loadWarning as any).missing.toFixed(0)} kg</strong> pour atteindre la pleine capacité de la machine.<br/>
                 Voulez-vous vraiment lancer le cycle tel quel ?
               </>
             ) : (
               <>
-                Vous dépassez la capacité de la machine (<strong>{loadWarning.totalLoad} kg</strong> pour {actionModal.press.capacite} kg autorisés).<br/><br/>
-                Vous avez <strong>{loadWarning.excess.toFixed(0)} kg en trop</strong>. Cela peut entraîner une casse mécanique ou une extraction excessive.<br/>
+                Vous dépassez la capacité de la machine (<strong>{(loadWarning as any).totalLoad} kg</strong> pour {(actionModal as any).press.capacite} kg autorisés).<br/><br/>
+                Vous avez <strong>{(loadWarning as any).excess.toFixed(0)} kg en trop</strong>. Cela peut entraîner une casse mécanique ou une extraction excessive.<br/>
                 Voulez-vous forcer le chargement ?
               </>
             )}
           </div>
           <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
             <Btn variant="secondary" onClick={() => setLoadWarning(null)} disabled={isSubmitting}>Annuler et modifier</Btn>
-            <Btn onClick={() => handleLoadSubmit(true, loadWarning.forceMix)} disabled={isSubmitting} style={{ background: loadWarning.type === 'OVER' ? T.red : T.accent, borderColor: loadWarning.type === 'OVER' ? T.red : T.accent, color: "#fff" }}>
-              {isSubmitting ? "Traitement..." : (loadWarning.type === 'OVER' ? "Forcer la surcharge" : "Lancer en sous-charge")}
+            <Btn onClick={() => handleLoadSubmit(true, (loadWarning as any).forceMix)} disabled={isSubmitting} style={{ background: (loadWarning as any).type === 'OVER' ? T.red : T.accent, borderColor: (loadWarning as any).type === 'OVER' ? T.red : T.accent, color: "#fff" }}>
+              {isSubmitting ? "Traitement..." : ((loadWarning as any).type === 'OVER' ? "Forcer la surcharge" : "Lancer en sous-charge")}
             </Btn>
           </div>
         </Modal>
       )}
 
       {/* --- MODALE D'ÉCOULEMENT (LA PLUS IMPORTANTE) --- */}
-      {actionModal?.type === "ECOULEMENT" && actionModal.press && (() => {
-        const cuvesCuvee = cuvesDebourbage.filter(c => c.type.includes("Cuvée") || (c.displayName || c.name || "").toLowerCase().includes("cuvée"));
-        const cuvesTaille = cuvesDebourbage.filter(c => c.type.includes("Taille") || (c.displayName || c.name || "").toLowerCase().includes("taille"));
-        const calcVol = calculateFractions(actionModal.press.loadKg); 
+      {(actionModal as any)?.type === "ECOULEMENT" && (actionModal as any).press && (() => {
+        const cuvesCuvee = cuvesDebourbage.filter((c: any) => c.type.includes("Cuvée") || (c.displayName || c.name || "").toLowerCase().includes("cuvée"));
+        const cuvesTaille = cuvesDebourbage.filter((c: any) => c.type.includes("Taille") || (c.displayName || c.name || "").toLowerCase().includes("taille"));
+        const calcVol = calculateFractions((actionModal as any).press.loadKg); 
 
-        const isDestInvalid = (dests, options) => dests.some(d => {
+        const isDestInvalid = (dests: any[], options: any[]) => dests.some((d: any) => {
             const v = parseToHl(d.vol); 
             if (v > 0 && !d.cuveId) return true;
             if (d.cuveId && v <= 0) return true;
@@ -1856,9 +1849,9 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
             return false;
         });
 
-        const totalC = cuveeDests.reduce((s,d)=>parseToHl(s+parseToHl(d.vol)),0); 
-        const totalT = tailleDests.reduce((s,d)=>parseToHl(s+parseToHl(d.vol)),0); 
-        const totalR = rebechesDests.reduce((s,d)=>parseToHl(s+parseToHl(d.vol)),0); 
+        const totalC = cuveeDests.reduce((s: any, d: any) => parseToHl(s + parseToHl(d.vol)), 0); 
+        const totalT = tailleDests.reduce((s: any, d: any) => parseToHl(s + parseToHl(d.vol)), 0); 
+        const totalR = rebechesDests.reduce((s: any, d: any) => parseToHl(s + parseToHl(d.vol)), 0); 
 
         const hasErrors =
            isDestInvalid(cuveeDests, cuvesCuvee) ||
@@ -1869,10 +1862,10 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
            totalR > parseToHl(calcVol.rebeches);
 
         return (
-          <Modal title={`Fractionnement : ${actionModal.press.nom}`} onClose={() => setActionModal(null)} wide={true}>
+          <Modal title={`Fractionnement : ${(actionModal as any).press.nom}`} onClose={() => setActionModal(null)} wide={true}>
             <div style={{ width: "100%" }}>
               <div style={{ fontSize: 13, marginBottom: 24, lineHeight: 1.5 }}>
-                Le pressurage de <strong>{actionModal.press.loadKg} kg</strong> de <strong>{actionModal.press.parcelle} ({actionModal.press.cepage})</strong> est terminé.<br/>
+                Le pressurage de <strong>{(actionModal as any).press.loadKg} kg</strong> de <strong>{(actionModal as any).press.parcelle} ({(actionModal as any).press.cepage})</strong> est terminé.<br/>
                 Ajustez les volumes et répartissez les jus dans un ou plusieurs Belons.
               </div>
 
@@ -1897,7 +1890,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       {apportToDelete && (
         <Modal title="Supprimer cet apport" onClose={() => setApportToDelete(null)}>
           <div style={{ fontSize: 14, color: T.text, marginBottom: 24 }}>
-            Êtes-vous sûr de vouloir supprimer l'apport de <strong>{apportToDelete.weight || apportToDelete.poids} kg</strong> ?<br/><br/>Cette action effacera l'enregistrement.
+            Êtes-vous sûr de vouloir supprimer l'apport de <strong>{(apportToDelete as any).weight || (apportToDelete as any).poids} kg</strong> ?<br/><br/>Cette action effacera l'enregistrement.
           </div>
           <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
             <Btn variant="secondary" onClick={() => setApportToDelete(null)} disabled={isSubmitting}>Annuler</Btn>
@@ -1909,17 +1902,17 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       {showAddPress && (
         <Modal title="Ajouter un pressoir" onClose={() => setShowAddPress(false)}>
           <div style={{ display: "grid", gap: 16, marginBottom: 24 }}>
-            <FF label="Nom du pressoir"><Input disabled={isSubmitting} value={newPress.nom} onChange={(e) => setNewPress({...newPress, nom: e.target.value})} placeholder="Ex: Pressoir 1" /></FF>
+            <FF label="Nom du pressoir"><Input disabled={isSubmitting} value={newPress.nom} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPress({...newPress, nom: e.target.value})} placeholder="Ex: Pressoir 1" /></FF>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
               <FF label="Type">
-                <Select disabled={isSubmitting} value={newPress.type} onChange={(e) => setNewPress({...newPress, type: e.target.value})}>
+                <Select disabled={isSubmitting} value={newPress.type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewPress({...newPress, type: e.target.value})}>
                   <option>Pneumatique</option><option>Traditionnel (Maie fixe)</option><option>Hydraulique (Maie tournante)</option><option>Mécanique (Plateaux)</option>
                 </Select>
               </FF>
-              <FF label="Constructeur"><Input disabled={isSubmitting} value={newPress.marque} onChange={(e) => setNewPress({...newPress, marque: e.target.value})} placeholder="Ex: Bücher..." /></FF>
+              <FF label="Constructeur"><Input disabled={isSubmitting} value={newPress.marque} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewPress({...newPress, marque: e.target.value})} placeholder="Ex: Bücher..." /></FF>
             </div>
             <FF label="Capacité (Marc)">
-              <Select disabled={isSubmitting} value={newPress.capacite} onChange={(e) => setNewPress({...newPress, capacite: Number(e.target.value)})}>
+              <Select disabled={isSubmitting} value={newPress.capacite} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewPress({...newPress, capacite: Number(e.target.value)})}>
                 <option value={2000}>2 000 kg</option><option value={4000}>4 000 kg</option><option value={6000}>6 000 kg</option><option value={8000}>8 000 kg</option><option value={12000}>12 000 kg</option>
               </Select>
             </FF>
@@ -1941,12 +1934,18 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 // =============================================================================
 // MODALS ACTIONS CUVE (SÉCURISÉES)
 // =============================================================================
-function CorrectVolumeModal({ container, lot, onClose }) {
+type CorrectVolumeModalProps = {
+  container: any;
+  lot: any;
+  onClose: () => void;
+};
+
+function CorrectVolumeModal({ container, lot, onClose }: CorrectVolumeModalProps) {
   const T = useTheme(); 
   const { dispatch, refreshData } = useStore(); 
   const { user } = useAuth();
   
-  const [vol, setVol] = useState(lot.currentVolume || lot.volume); 
+  const [vol, setVol] = useState(String(lot.currentVolume || lot.volume || "")); 
   const [note, setNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
@@ -1957,7 +1956,6 @@ function CorrectVolumeModal({ container, lot, onClose }) {
       const res = await fetch('/api/lots/volume', { 
         method: 'POST', 
         headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
         body: JSON.stringify({ lotId: lot.id, newVolume: parseFloat(vol), operator: user.name, note, idempotencyKey }) 
       });
       
@@ -1966,8 +1964,9 @@ function CorrectVolumeModal({ container, lot, onClose }) {
       dispatch({ type: "TOAST_ADD", payload: { msg: `Volume corrigé à ${vol} hL`, color: "#2d6640" } }); 
       if (refreshData) await refreshData();
       onClose();
-    } catch(e) {
-      alert("Erreur : " + e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message);
       setIdempotencyKey(crypto.randomUUID()); // 👈 NOUVELLE CLÉ GÉNÉRÉE EN CAS D'ERREUR
     } finally {
       setIsSubmitting(false);
@@ -1980,10 +1979,10 @@ function CorrectVolumeModal({ container, lot, onClose }) {
         Volume actuel : <strong style={{ color:T.accent }}>{lot.currentVolume || lot.volume} hL</strong>
       </div>
       <FF label="Nouveau volume (hL)">
-        <Input type="number" step="0.1" value={vol} onChange={e => setVol(e.target.value)} disabled={isSubmitting} />
+        <Input type="number" step="0.1" value={vol} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVol(e.target.value)} disabled={isSubmitting} />
       </FF>
       <FF label="Raison">
-        <Input placeholder="Ex: Ouillage..." value={note} onChange={e => setNote(e.target.value)} disabled={isSubmitting} />
+        <Input placeholder="Ex: Ouillage..." value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} disabled={isSubmitting} />
       </FF>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
@@ -1996,7 +1995,13 @@ function CorrectVolumeModal({ container, lot, onClose }) {
 // =============================================================================
 // MODALE D'OPÉRATIONS / INTRANTS (SÉCURISÉE)
 // =============================================================================
-function AddIntrantModal({ container, lot, onClose }) {
+type AddIntrantModalProps = {
+  container: any;
+  lot: any;
+  onClose: () => void;
+};
+
+function AddIntrantModal({ container, lot, onClose }: AddIntrantModalProps) {
   const T = useTheme(); 
   const { dispatch, refreshData, state } = useStore(); 
   const { user } = useAuth();
@@ -2008,9 +2013,9 @@ function AddIntrantModal({ container, lot, onClose }) {
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   // Analyse historique pour interface
-  const lotEvents = (state.events || []).filter(e => String(e.lotId) === String(lot.id) && (e.type === "INTRANT" || e.eventType === "INTRANT"));
-  const hasChaptalise = lotEvents.some(e => (e.note || e.comment)?.toLowerCase().includes("sucre") || (e.note || e.comment)?.toLowerCase().includes("chaptalisation"));
-  const hasAcidifie = lotEvents.some(e => (e.note || e.comment)?.toLowerCase().includes("acide") || (e.note || e.comment)?.toLowerCase().includes("acidification"));
+  const lotEvents = (state.events || []).filter((e: any) => String(e.lotId) === String(lot.id) && (e.type === "INTRANT" || e.eventType === "INTRANT"));
+  const hasChaptalise = lotEvents.some((e: any) => (e.note || e.comment)?.toLowerCase().includes("sucre") || (e.note || e.comment)?.toLowerCase().includes("chaptalisation"));
+  const hasAcidifie = lotEvents.some((e: any) => (e.note || e.comment)?.toLowerCase().includes("acide") || (e.note || e.comment)?.toLowerCase().includes("acidification"));
 
   const isSelectingSucre = intrant === "Chaptalisation (Sucre)";
   const isSelectingAcide = intrant === "Acidification";
@@ -2021,7 +2026,6 @@ function AddIntrantModal({ container, lot, onClose }) {
     try {
       const res = await fetch('/api/lots/intrants', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ lotId: lot.id, intrant, quantity: parseFloat(qty), unit, operator: user.name, idempotencyKey }) 
       });
@@ -2037,8 +2041,10 @@ function AddIntrantModal({ container, lot, onClose }) {
 
       if (refreshData) await refreshData();
       onClose(); 
-    } catch(e) {
-      alert("Erreur : " + e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message);
+      setIdempotencyKey(crypto.randomUUID());
     } finally {
       setIsSubmitting(false);
     }
@@ -2048,7 +2054,7 @@ function AddIntrantModal({ container, lot, onClose }) {
     <Modal title="Opération / Intrant" onClose={onClose}>
       <div style={{ marginBottom: 16 }}>
         <FF label="Type d'opération">
-          <Select value={intrant} onChange={e => setIntrant(e.target.value)} style={{ borderColor: isBlockedAOC ? T.red : T.border }} disabled={isSubmitting}>
+          <Select value={intrant} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setIntrant(e.target.value)} style={{ borderColor: isBlockedAOC ? T.red : T.border }} disabled={isSubmitting}>
             <optgroup label="Opérations Œnologiques">
               <option value="Ouillage">Ouillage</option>
               <option value="Filtration">Filtration</option>
@@ -2075,10 +2081,10 @@ function AddIntrantModal({ container, lot, onClose }) {
 
       <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:10 }}>
         <FF label="Quantité">
-          <Input type="number" step="0.1" value={qty} onChange={e => setQty(e.target.value)} disabled={isBlockedAOC || isSubmitting} />
+          <Input type="number" step="0.1" value={qty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQty(e.target.value)} disabled={isBlockedAOC || isSubmitting} />
         </FF>
         <FF label="Unité">
-          <Select value={unit} onChange={e => setUnit(e.target.value)} disabled={isBlockedAOC || isSubmitting}>
+          <Select value={unit} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUnit(e.target.value)} disabled={isBlockedAOC || isSubmitting}>
             {["opération", "g", "kg", "mL", "cL", "L", "g/hL", "mL/hL"].map(u => <option key={u}>{u}</option>)}
           </Select>
         </FF>
@@ -2094,7 +2100,14 @@ function AddIntrantModal({ container, lot, onClose }) {
 // =============================================================================
 // MODALE AJOUT CONTENANT (SÉCURISÉE)
 // =============================================================================
-function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialType = "CUVE_INOX" }) {
+type AddContainerModalProps = {
+  onClose: () => void;
+  onSuccess?: (newId: string) => void;
+  initialCapacity?: string;
+  initialType?: string;
+};
+
+function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialType = "CUVE_INOX" }: AddContainerModalProps) {
   const T = useTheme(); 
   const { dispatch, refreshData } = useStore();
   
@@ -2104,7 +2117,7 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
 
   const isDebourbage = form.type.includes("DEBOURBAGE");
   
-  const handleCapacityChange = (e) => {
+  const handleCapacityChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value;
     if (isDebourbage && parseFloat(val) > 200) val = "200";
     setForm({ ...form, capacity: val });
@@ -2125,8 +2138,7 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
     try {
       const res = await fetch('/api/containers', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
+        headers: buildApiHeaders(undefined), 
         body: JSON.stringify({ ...form, type: finalType, capacity: parseFloat(form.capacity), idempotencyKey }) 
       });
       
@@ -2136,8 +2148,9 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
       dispatch({ type:"TOAST_ADD", payload:{ msg:`${form.name} ajouté`, color:"#2d6640" } }); 
       if (refreshData) await refreshData();
       if (onSuccess) onSuccess(dbC.id.toString()); else onClose(); 
-    } catch (e) {
-      alert("Erreur : " + e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message);
     } finally {
       setIsSubmitting(false);
     }
@@ -2146,16 +2159,16 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
   return (
     <Modal title="Ajouter contenant" onClose={onClose}>
       <FF label="Nom affiché">
-        <Input value={form.name} onChange={e => setForm({...form, name:e.target.value})} placeholder="Ex: Cuve Inox 1" disabled={isSubmitting} />
+        <Input value={form.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, name:e.target.value})} placeholder="Ex: Cuve Inox 1" disabled={isSubmitting} />
       </FF>
       <FF label="Type">
-        <Select value={form.type} onChange={e => setForm({...form, type:e.target.value})} disabled={isSubmitting}>
+        <Select value={form.type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, type:e.target.value})} disabled={isSubmitting}>
           {CONTAINER_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g," ")}</option>)}
         </Select>
       </FF>
       {form.type === "AUTRE" && (
         <FF label="Précisez le type (ex: AMPHORE)">
-          <Input value={form.customType || ""} onChange={e => setForm({...form, customType:e.target.value})} placeholder="AMPHORE..." disabled={isSubmitting} />
+          <Input value={form.customType || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, customType:e.target.value})} placeholder="AMPHORE..." disabled={isSubmitting} />
         </FF>
       )}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
@@ -2170,7 +2183,7 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
            {isDebourbage && <div style={{ fontSize: 10, color: T.red, marginTop: 4, fontWeight: "bold" }}>⚠️ Limite AOC : 200 hL max</div>}
          </FF>
          <FF label="Zone">
-           <Input value={form.zone} onChange={e => setForm({...form, zone:e.target.value})} disabled={isSubmitting} />
+	           <Input value={form.zone} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, zone:e.target.value})} disabled={isSubmitting} />
          </FF>
       </div>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
@@ -2184,7 +2197,12 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
 // =============================================================================
 // MODALE AJOUT COMPARTIMENT CITERNE
 // =============================================================================
-function AddCompartmentModal({ container, onClose }) {
+type AddCompartmentModalProps = {
+  container: any;
+  onClose: () => void;
+};
+
+function AddCompartmentModal({ container, onClose }: AddCompartmentModalProps) {
   const T = useTheme();
   const { dispatch, refreshData } = useStore();
   const [cap, setCap] = useState("");
@@ -2199,8 +2217,7 @@ function AddCompartmentModal({ container, onClose }) {
     try {
       const res = await fetch('/api/containers/compartment', {
         method: 'POST',
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify({ originalContainerId: container.id, newCapacity: parsedCap, idempotencyKey })
       });
       if (!res.ok) throw new Error((await res.json()).error || "Erreur serveur");
@@ -2208,8 +2225,9 @@ function AddCompartmentModal({ container, onClose }) {
       dispatch({ type: "TOAST_ADD", payload: { msg: "Compartiment créé !", color: T.green } });
       if (refreshData) await refreshData();
       onClose();
-    } catch(e) { 
-      alert("Erreur : " + e.message); 
+    } catch (e: unknown) { 
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message); 
     } finally {
       setIsSubmitting(false);
     }
@@ -2223,7 +2241,7 @@ function AddCompartmentModal({ container, onClose }) {
         </div>
       </div>
       <FF label={`Capacité du NOUVEAU compartiment (hL)`}>
-        <Input type="number" step="0.1" value={cap} onChange={e => setCap(e.target.value)} placeholder={`Ex: 25`} disabled={isSubmitting} />
+        <Input type="number" step="0.1" value={cap} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCap(e.target.value)} placeholder={`Ex: 25`} disabled={isSubmitting} />
       </FF>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
@@ -2236,7 +2254,12 @@ function AddCompartmentModal({ container, onClose }) {
 // =============================================================================
 // MODALE DE TRANSFERT / SOUTIRAGE (UNIFIÉE EN BACKEND)
 // =============================================================================
-function TransferModal({ container, onClose }) {
+type TransferModalProps = {
+  container: any;
+  onClose: () => void;
+};
+
+function TransferModal({ container, onClose }: TransferModalProps) {
   const T = useTheme();
   const { state, dispatch, refreshData } = useStore(); 
   const { user } = useAuth();
@@ -2255,7 +2278,7 @@ function TransferModal({ container, onClose }) {
 
   const isAdmin = user?.role === "Admin" || user?.role === "Chef de cave";
   
-  const lotToTransfer = (state.lots || []).find(l => String(l.id) === String(container.lotId || container.currentLots?.[0]?.id));
+  const lotToTransfer = (state.lots || []).find((l: any) => String(l.id) === String(container.lotId || container.currentLots?.[0]?.id));
   const isSoutirageDebourbage = container.type === "CUVE_DEBOURBAGE" && lotToTransfer?.status === "MOUT_NON_DEBOURBE";
   const isMustTransfer = lotToTransfer?.status?.includes("MOUT") || lotToTransfer?.status?.includes("FERMENTATION");
 
@@ -2264,13 +2287,13 @@ function TransferModal({ container, onClose }) {
     BOIS: ["BARRIQUE", "FOUDRE"]
   };
 
-  const baseAvailTargets = (state.containers || []).filter(c => 
+  const baseAvailTargets = (state.containers || []).filter((c: any) => 
     String(c.id) !== String(container.id) && 
     c.status !== "ARCHIVÉE" && 
     (c.currentVolume || 0) < (c.capacityValue || c.capacity || 0)
   );
   
-  const uniqueZones = [...new Set(baseAvailTargets.map(c => c.zone).filter(Boolean))].sort();
+  const uniqueZones = [...new Set(baseAvailTargets.map((c: any) => c.zone).filter(Boolean))].sort();
 
   const sourceVol = Number((container.currentVolume || 0).toFixed(2));
   const totalVol = Number(dests.reduce((sum, d) => sum + (parseFloat(d.vol) || 0), 0).toFixed(2));
@@ -2278,9 +2301,9 @@ function TransferModal({ container, onClose }) {
   const isVolValid = totalVol > 0 && totalVol <= sourceVol;
   const isPartial = totalVol > 0 && totalVol < sourceVol;
 
-  const hasCapacityIssue = dests.some(d => {
+  const hasCapacityIssue = dests.some((d: any) => {
     if (!d.toId || !d.vol) return false;
-    const targetCuve = baseAvailTargets.find(c => String(c.id) === String(d.toId));
+    const targetCuve = baseAvailTargets.find((c: any) => String(c.id) === String(d.toId));
     if (!targetCuve) return true;
     const targetCap = targetCuve.capacityValue || targetCuve.capacity || 0;
     const targetCur = targetCuve.currentVolume || 0;
@@ -2288,16 +2311,16 @@ function TransferModal({ container, onClose }) {
     return Number(parseFloat(d.vol).toFixed(2)) > free;
   });
 
-  const hasCepageMismatch = dests.some(d => {
+  const hasCepageMismatch = dests.some((d: any) => {
     if (!d.toId || !isMustTransfer) return false;
-    const targetCuve = baseAvailTargets.find(c => String(c.id) === String(d.toId));
+    const targetCuve = baseAvailTargets.find((c: any) => String(c.id) === String(d.toId));
     if (!targetCuve || targetCuve.currentVolume <= 0) return false; 
-    const targetLot = (state.lots || []).find(l => String(l.currentContainerId || l.containerId) === String(targetCuve.id));
+    const targetLot = (state.lots || []).find((l: any) => String(l.currentContainerId || l.containerId) === String(targetCuve.id));
     if (!targetLot) return false;
     return (targetLot.mainGrapeCode || targetLot.cepage) !== "MULTI" && (targetLot.mainGrapeCode || targetLot.cepage) !== (lotToTransfer?.mainGrapeCode || lotToTransfer?.cepage);
   });
 
-  const updateDest = (id, field, value) => {
+  const updateDest = (id: any, field: any, value: any) => {
     if (["filterZone", "filterCat", "filterType"].includes(field)) {
       setDests(dests.map(d => d.id === id ? { ...d, [field]: value, toId: "" } : d));
     } else {
@@ -2305,11 +2328,11 @@ function TransferModal({ container, onClose }) {
     }
   };
 
-  const handleMax = (destId) => {
+  const handleMax = (destId: any) => {
     const otherDestsVol = dests.filter(d => d.id !== destId).reduce((sum, d) => sum + (parseFloat(d.vol) || 0), 0);
     const availableFromSource = Math.max(0, sourceVol - otherDestsVol);
     const dest = dests.find(d => d.id === destId);
-    const targetCuve = baseAvailTargets.find(c => String(c.id) === String(dest.toId));
+    const targetCuve = baseAvailTargets.find((c: any) => String(c.id) === String(dest?.toId));
     const targetCap = targetCuve ? (targetCuve.capacityValue || targetCuve.capacity || 0) : Infinity;
     const targetCur = targetCuve ? (targetCuve.currentVolume || 0) : 0;
     const freeSpaceTarget = Math.max(0, targetCap - targetCur);
@@ -2328,11 +2351,10 @@ function TransferModal({ container, onClose }) {
       const res = await fetch('/api/transfers', { 
         method: 'POST', 
         headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           lotId: lotToTransfer.id, 
           fromId: container.id, 
-          destinations: dests.map(d => ({ toId: parseInt(d.toId), volume: Number(parseFloat(d.vol).toFixed(2)) })), 
+          destinations: dests.map((d: any) => ({ toId: parseInt(d.toId), volume: Number(parseFloat(d.vol).toFixed(2)) })), 
           volume: totalVol,
           operator: user.name, 
           remainderType: isPartial ? remType : null, 
@@ -2349,8 +2371,9 @@ function TransferModal({ container, onClose }) {
       dispatch({ type:"TOAST_ADD", payload:{ msg:`Transfert éclaté validé`, color:"#2d6640" } }); 
       if (refreshData) await refreshData();
       onClose(); 
-    } catch(e) {
-      alert("Erreur : " + e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message);
     } finally {
       setIsSubmitting(false);
     }
@@ -2361,8 +2384,8 @@ function TransferModal({ container, onClose }) {
       <AddContainerModal 
         initialCapacity="50"
         onClose={() => setShowAdd(false)} 
-        onSuccess={(newId) => { 
-          const emptyRow = dests.find(d => !d.toId);
+        onSuccess={(newId: string) => { 
+          const emptyRow = dests.find((d: any) => !d.toId);
           if(emptyRow) updateDest(emptyRow.id, "toId", newId);
           setShowAdd(false); 
         }} 
@@ -2374,7 +2397,7 @@ function TransferModal({ container, onClose }) {
     <Modal title={`Transfert (Max ${sourceVol} hL)`} onClose={onClose} wide={true}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
         <FF label="Date de l'opération" style={{ flex: 1, maxWidth: 200 }}>
-          <Input type="date" value={transferDate} onChange={e => setTransferDate(e.target.value)} disabled={isSubmitting} />
+          <Input type="date" value={transferDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTransferDate(e.target.value)} disabled={isSubmitting} />
         </FF>
         {isAdmin && <Btn variant="ghost" onClick={() => setShowAdd(true)} style={{ fontSize:10, color:T.accent }} disabled={isSubmitting}>+ NOUVELLE CUVE</Btn>}
       </div>
@@ -2387,19 +2410,19 @@ function TransferModal({ container, onClose }) {
           </div>
         </div>
 
-        {dests.map((d, i) => {
-          const alreadySelectedIds = dests.filter(other => other.id !== d.id).map(other => String(other.toId));
-          let filteredTargets = baseAvailTargets.filter(c => !alreadySelectedIds.includes(String(c.id)));
+        {dests.map((d: any, i: number) => {
+          const alreadySelectedIds = dests.filter((other: any) => other.id !== d.id).map((other: any) => String(other.toId));
+          let filteredTargets = baseAvailTargets.filter((c: any) => !alreadySelectedIds.includes(String(c.id)));
 
-          if (d.filterZone) filteredTargets = filteredTargets.filter(c => c.zone === d.filterZone);
-          if (d.filterCat === "CUVES") filteredTargets = filteredTargets.filter(c => GROUPS.CUVES.includes(c.type));
-          if (d.filterCat === "BOIS") filteredTargets = filteredTargets.filter(c => GROUPS.BOIS.includes(c.type));
-          if (d.filterCat === "CITERNE") filteredTargets = filteredTargets.filter(c => c.type === "CITERNE" || c.type === "COMPARTIMENT");
-          if (d.filterCat === "AUTRE") filteredTargets = filteredTargets.filter(c => c.type === "AUTRE");
-          if (d.filterType) filteredTargets = filteredTargets.filter(c => c.type === d.filterType);
+          if (d.filterZone) filteredTargets = filteredTargets.filter((c: any) => c.zone === d.filterZone);
+          if (d.filterCat === "CUVES") filteredTargets = filteredTargets.filter((c: any) => GROUPS.CUVES.includes(c.type));
+          if (d.filterCat === "BOIS") filteredTargets = filteredTargets.filter((c: any) => GROUPS.BOIS.includes(c.type));
+          if (d.filterCat === "CITERNE") filteredTargets = filteredTargets.filter((c: any) => c.type === "CITERNE" || c.type === "COMPARTIMENT");
+          if (d.filterCat === "AUTRE") filteredTargets = filteredTargets.filter((c: any) => c.type === "AUTRE");
+          if (d.filterType) filteredTargets = filteredTargets.filter((c: any) => c.type === d.filterType);
 
-          const targetCuve = baseAvailTargets.find(c => String(c.id) === String(d.toId));
-          const targetLot = targetCuve && targetCuve.currentVolume > 0 ? (state.lots || []).find(l => String(l.currentContainerId || l.containerId) === String(targetCuve.id)) : null;
+          const targetCuve = baseAvailTargets.find((c: any) => String(c.id) === String(d.toId));
+          const targetLot = targetCuve && targetCuve.currentVolume > 0 ? (state.lots || []).find((l: any) => String(l.currentContainerId || l.containerId) === String(targetCuve.id)) : null;
           const free = targetCuve ? (targetCuve.capacityValue || targetCuve.capacity || 0) - (targetCuve.currentVolume || 0) : 0;
           
           const isError = parseFloat(d.vol) > free;
@@ -2408,27 +2431,27 @@ function TransferModal({ container, onClose }) {
           return (
             <div key={d.id} style={{ display:"flex", flexDirection:"column", gap:8, marginBottom:16, paddingBottom:16, borderBottom: i < dests.length-1 ? `1px dashed ${T.border}` : "none" }}>
               <div style={{ display:"flex", gap:8 }}>
-                <Select value={d.filterZone} onChange={e => updateDest(d.id, "filterZone", e.target.value)} style={{ flex: 1, fontSize: 11 }} disabled={isSubmitting}>
+                <Select value={d.filterZone} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateDest(d.id, "filterZone", e.target.value)} style={{ flex: 1, fontSize: 11 }} disabled={isSubmitting}>
                   <option value="">-- Zone --</option>
-                  {uniqueZones.map(z => <option key={z} value={z}>{z}</option>)}
+                  {uniqueZones.map((z: any) => <option key={z} value={z}>{z}</option>)}
                 </Select>
-                <Select value={d.filterCat} onChange={e => updateDest(d.id, "filterCat", e.target.value)} style={{ flex: 1, fontSize: 11 }} disabled={isSubmitting}>
+                <Select value={d.filterCat} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateDest(d.id, "filterCat", e.target.value)} style={{ flex: 1, fontSize: 11 }} disabled={isSubmitting}>
                   <option value="">-- Catégorie --</option>
                   <option value="CUVES">Cuves</option><option value="BOIS">Bois</option><option value="CITERNE">Citernes</option><option value="AUTRE">Autres</option>
                 </Select>
                 {(d.filterCat === "CUVES" || d.filterCat === "BOIS") && (
-                  <Select value={d.filterType} onChange={e => updateDest(d.id, "filterType", e.target.value)} style={{ flex: 1, fontSize: 11 }} disabled={isSubmitting}>
+                  <Select value={d.filterType} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateDest(d.id, "filterType", e.target.value)} style={{ flex: 1, fontSize: 11 }} disabled={isSubmitting}>
                     <option value="">-- Type --</option>
-                    {GROUPS[d.filterCat].map(t => <option key={t} value={t}>{t.replace("CUVE_", "")}</option>)}
+                    {GROUPS[d.filterCat as keyof typeof GROUPS].map((t: any) => <option key={t} value={t}>{t.replace("CUVE_", "")}</option>)}
                   </Select>
                 )}
               </div>
 
               <div style={{ display:"flex", gap:8, alignItems:"center" }}>
                 <div style={{ flex: 2 }}>
-                  <Select value={d.toId} onChange={e => updateDest(d.id, "toId", e.target.value)} style={{ borderColor: isError || isRowCepageMismatch ? T.red : T.border }} disabled={isSubmitting}>
+                  <Select value={d.toId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateDest(d.id, "toId", e.target.value)} style={{ borderColor: isError || isRowCepageMismatch ? T.red : T.border }} disabled={isSubmitting}>
                     <option value="">-- Sélectionner la cuve ({filteredTargets.length} trouvées) --</option>
-                    {filteredTargets.map(c => {
+                    {filteredTargets.map((c: any) => {
                       const dispo = Math.max(0, (c.capacityValue || c.capacity || 0) - (c.currentVolume || 0)).toFixed(2);
                       return <option key={c.id} value={c.id}>{c.displayName || c.name} ({dispo} hL dispo)</option>;
                     })}
@@ -2438,10 +2461,10 @@ function TransferModal({ container, onClose }) {
                 </div>
                 
                 <div style={{ flex: 1, display:"flex", gap:4 }}>
-                  <Input type="number" step="0.1" placeholder="Vol (hL)" value={d.vol} onChange={e => updateDest(d.id, "vol", e.target.value)} style={{ borderColor: isError ? T.red : T.border }} disabled={isRowCepageMismatch || isSubmitting} />
+                  <Input type="number" step="0.1" placeholder="Vol (hL)" value={d.vol} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateDest(d.id, "vol", e.target.value)} style={{ borderColor: isError ? T.red : T.border }} disabled={isRowCepageMismatch || isSubmitting} />
                   <Btn variant="secondary" onClick={() => handleMax(d.id)} disabled={isRowCepageMismatch || isSubmitting}>MAX</Btn>
                 </div>
-                {dests.length > 1 && <Btn variant="ghost" onClick={() => setDests(dests.filter(other => other.id !== d.id))} style={{ color:T.red, padding:"8px" }} disabled={isSubmitting}>✕</Btn>}
+                {dests.length > 1 && <Btn variant="ghost" onClick={() => setDests(dests.filter((other: any) => other.id !== d.id))} style={{ color:T.red, padding:"8px" }} disabled={isSubmitting}>✕</Btn>}
               </div>
             </div>
           )
@@ -2453,7 +2476,7 @@ function TransferModal({ container, onClose }) {
       
       {isPartial && (
          <FF label="Que devient le reste en cuve source ?">
-           <Select value={remType} onChange={e => setRemType(e.target.value)} disabled={isSubmitting}>
+	           <Select value={remType} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRemType(e.target.value)} disabled={isSubmitting}>
              <option value="">Garder le statut actuel</option><option value="BOURBES">Qualifier en Bourbes</option><option value="LIES">Qualifier en Lies</option>
            </Select>
          </FF>
@@ -2463,16 +2486,16 @@ function TransferModal({ container, onClose }) {
         <div style={{ marginTop: 16, borderTop: `1px solid ${T.border}`, paddingTop: 16 }}>
           <div style={{ fontSize: 11, color: T.accent, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>🔬 Résultats Labo (Moût clair)</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, background: T.surfaceHigh, padding: "12px", borderRadius: 4 }}>
-            <FF label="pH"><Input type="number" step="0.01" value={ph} onChange={e => setPh(e.target.value)} disabled={isSubmitting} /></FF>
-            <FF label="AT"><Input type="number" step="0.1" value={at} onChange={e => setAt(e.target.value)} disabled={isSubmitting} /></FF>
-            <FF label="TAVP"><Input type="number" step="0.1" value={tavp} onChange={e => setTavp(e.target.value)} disabled={isSubmitting} /></FF>
+	            <FF label="pH"><Input type="number" step="0.01" value={ph} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPh(e.target.value)} disabled={isSubmitting} /></FF>
+	            <FF label="AT"><Input type="number" step="0.1" value={at} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAt(e.target.value)} disabled={isSubmitting} /></FF>
+	            <FF label="TAVP"><Input type="number" step="0.1" value={tavp} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTavp(e.target.value)} disabled={isSubmitting} /></FF>
           </div>
         </div>
       )}
       
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
-        <Btn onClick={submit} disabled={!isVolValid || hasCapacityIssue || hasCepageMismatch || dests.some(d => !d.toId || !d.vol) || totalVol > sourceVol || isSubmitting}>
+	        <Btn onClick={submit} disabled={!isVolValid || hasCapacityIssue || hasCepageMismatch || dests.some((d: any) => !d.toId || !d.vol) || totalVol > sourceVol || isSubmitting}>
           {isSubmitting ? "Transfert en cours..." : "Valider le transfert"}
         </Btn>
       </div>
@@ -2483,7 +2506,13 @@ function TransferModal({ container, onClose }) {
 // =============================================================================
 // MODALE DE DÉCUVAGE (UNIFIÉE EN BACKEND)
 // =============================================================================
-function DecuvageModal({ container, lot, onClose }) {
+type DecuvageModalProps = {
+  container: any;
+  lot: any;
+  onClose: () => void;
+};
+
+function DecuvageModal({ container, lot, onClose }: DecuvageModalProps) {
   const T = useTheme();
   const { state, dispatch, refreshData } = useStore();
   const { user } = useAuth();
@@ -2498,7 +2527,7 @@ function DecuvageModal({ container, lot, onClose }) {
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   const [showAdd, setShowAdd] = useState(null);
 
-  const availCuves = state.containers.filter(c => 
+  const availCuves = state.containers.filter((c: any) => 
     c.status !== "PLEINE" && c.status !== "ARCHIVÉE" && String(c.id) !== String(container.id) && !c.type.includes("DEBOURBAGE")
   );
 
@@ -2512,7 +2541,6 @@ function DecuvageModal({ container, lot, onClose }) {
       // API UNIFIÉE : Tout le cycle de décuvage d'un coup
       const res = await fetch('/api/lots/decuvage', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           sourceLotId: lot.id, 
@@ -2533,8 +2561,9 @@ function DecuvageModal({ container, lot, onClose }) {
       dispatch({ type: "TOAST_ADD", payload: { msg: "Décuvage terminé avec succès !", color: "#8b1c31" } });
       if (refreshData) await refreshData();
       onClose();
-    } catch(e) { 
-      alert("Erreur : " + e.message); 
+    } catch (e: unknown) { 
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("Erreur : " + message); 
     } finally {
       setIsSubmitting(false);
     }
@@ -2545,7 +2574,7 @@ function DecuvageModal({ container, lot, onClose }) {
       <AddContainerModal 
         initialCapacity={showAdd === "goutte" ? Math.ceil(volG).toString() : Math.ceil(volP).toString()}
         onClose={() => setShowAdd(null)}
-        onSuccess={(newId) => {
+        onSuccess={(newId: string) => {
           if (showAdd === "goutte") setForm({ ...form, cuveGoutteId: newId });
           if (showAdd === "presse") setForm({ ...form, cuvePresseId: newId });
           setShowAdd(null);
@@ -2562,7 +2591,7 @@ function DecuvageModal({ container, lot, onClose }) {
 
       <div style={{ marginBottom: 20 }}>
         <FF label="Statut cible des jus écoulés">
-          <Select value={form.statusDest} onChange={e=>setForm({...form, statusDest:e.target.value})} disabled={isSubmitting}>
+          <Select value={form.statusDest} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, statusDest:e.target.value})} disabled={isSubmitting}>
             <option value="FERMENTATION_ALCOOLIQUE">Fermentation Alcoolique (Sucres à finir)</option>
             <option value="VIN_ROUGE">Vin Rouge (FA Terminée)</option>
             <option value="VIN_DE_BASE">Vin de Base (Rosé)</option>
@@ -2573,14 +2602,14 @@ function DecuvageModal({ container, lot, onClose }) {
       <div style={{ border:`1px solid ${T.border}`, borderRadius:4, padding:16, marginBottom:16 }}>
         <div style={{ fontSize:12, fontWeight:"bold", color:"#8b1c31", marginBottom:12, textTransform:"uppercase" }}>🍷 Vin de Goutte (-G)</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12 }}>
-          <FF label="Volume écoulé (hL)"><Input type="number" step="0.1" value={form.volGoutte} onChange={e=>setForm({...form, volGoutte:e.target.value})} disabled={isSubmitting} /></FF>
+	          <FF label="Volume écoulé (hL)"><Input type="number" step="0.1" value={form.volGoutte} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, volGoutte:e.target.value})} disabled={isSubmitting} /></FF>
           <FF label="Envoyer vers (Cuve/Foudre)">
             <div style={{ display: "flex", gap: 8 }}>
-              <Select value={form.cuveGoutteId} onChange={e=>setForm({...form, cuveGoutteId:e.target.value})} disabled={isSubmitting} style={{ flex: 1, borderColor: volG > 0 && !form.cuveGoutteId ? T.red : T.border }}>
+	              <Select value={form.cuveGoutteId} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, cuveGoutteId:e.target.value})} disabled={isSubmitting} style={{ flex: 1, borderColor: volG > 0 && !form.cuveGoutteId ? T.red : T.border }}>
                 <option value="">-- Choisir un contenant --</option>
-                {availCuves.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name}</option>)}
+	                {availCuves.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name}</option>)}
               </Select>
-              <Btn variant="secondary" onClick={() => setShowAdd("goutte")} disabled={isSubmitting}>+</Btn>
+	              <Btn variant="secondary" onClick={() => setShowAdd("goutte" as any)} disabled={isSubmitting}>+</Btn>
             </div>
           </FF>
         </div>
@@ -2589,21 +2618,21 @@ function DecuvageModal({ container, lot, onClose }) {
       <div style={{ border:`1px solid ${T.border}`, borderRadius:4, padding:16, marginBottom:20 }}>
         <div style={{ fontSize:12, fontWeight:"bold", color:T.textDim, marginBottom:12, textTransform:"uppercase" }}>🗜️ Vin de Presse (-P)</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12 }}>
-          <FF label="Volume pressé (hL)"><Input type="number" step="0.1" value={form.volPresse} onChange={e=>setForm({...form, volPresse:e.target.value})} disabled={isSubmitting} /></FF>
+	          <FF label="Volume pressé (hL)"><Input type="number" step="0.1" value={form.volPresse} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, volPresse:e.target.value})} disabled={isSubmitting} /></FF>
           <FF label="Envoyer vers (Cuve/Barrique)">
             <div style={{ display: "flex", gap: 8 }}>
-              <Select value={form.cuvePresseId} onChange={e=>setForm({...form, cuvePresseId:e.target.value})} disabled={isSubmitting} style={{ flex: 1, borderColor: volP > 0 && !form.cuvePresseId ? T.red : T.border }}>
+	              <Select value={form.cuvePresseId} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, cuvePresseId:e.target.value})} disabled={isSubmitting} style={{ flex: 1, borderColor: volP > 0 && !form.cuvePresseId ? T.red : T.border }}>
                 <option value="">-- Choisir un contenant --</option>
-                {availCuves.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name}</option>)}
+	                {availCuves.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name}</option>)}
               </Select>
-              <Btn variant="secondary" onClick={() => setShowAdd("presse")} disabled={isSubmitting}>+</Btn>
+	              <Btn variant="secondary" onClick={() => setShowAdd("presse" as any)} disabled={isSubmitting}>+</Btn>
             </div>
           </FF>
         </div>
       </div>
 
       <FF label="Observations générales">
-        <Input value={form.notes} onChange={e=>setForm({...form, notes:e.target.value})} disabled={isSubmitting} />
+        <Input value={form.notes} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, notes:e.target.value})} disabled={isSubmitting} />
       </FF>
 
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
@@ -2620,14 +2649,19 @@ function DecuvageModal({ container, lot, onClose }) {
 // COMPOSANTS CUVERIE (PRODUCTION READY)
 // =============================================================================
 
-function ContainerTile({ c, onClick }) {
+type ContainerTileProps = {
+  c: any;
+  onClick: () => void;
+};
+
+function ContainerTile({ c, onClick }: ContainerTileProps) {
   const T = useTheme(); 
   const { state } = useStore();
   
   // NOUVEAU : On récupère les enfants et on utilise les bons champs BDD
-  const enfants = (state.containers || []).filter(enfant => enfant.parentId === c.id);
-  const totalCapacity = (c.capacityValue || c.capacity || 0) + enfants.reduce((sum, e) => sum + (e.capacityValue || e.capacity || 0), 0);
-  let totalVolume = (c.currentVolume || 0) + enfants.reduce((sum, e) => sum + (e.currentVolume || 0), 0);
+  const enfants = (state.containers || []).filter((enfant: any) => enfant.parentId === c.id);
+  const totalCapacity = (c.capacityValue || c.capacity || 0) + enfants.reduce((sum: any, e: any) => sum + (e.capacityValue || e.capacity || 0), 0);
+  let totalVolume = (c.currentVolume || 0) + enfants.reduce((sum: any, e: any) => sum + (e.currentVolume || 0), 0);
 
   const isReallyEmpty = c.status === "VIDE" || c.status === "NETTOYAGE" || totalVolume <= 0;
   totalVolume = isReallyEmpty ? 0 : totalVolume;
@@ -2636,13 +2670,13 @@ function ContainerTile({ c, onClick }) {
   const tc = getTypeColor(c.type);
   
   // Utilisation de currentContainerId pour la correspondance
-  const lot = isReallyEmpty ? null : (state.lots || []).find(l => String(l.id) === String(c.lotId) || String(l.currentContainerId || l.containerId) === String(c.id));
+  const lot = isReallyEmpty ? null : (state.lots || []).find((l: any) => String(l.id) === String(c.lotId) || String(l.currentContainerId || l.containerId) === String(c.id));
   const displayStatus = isReallyEmpty && c.status !== "NETTOYAGE" ? "VIDE" : c.status;
 
-  const formatVolShort = (vol) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
+  const formatVolShort = (vol: any) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
 
   return (
-    <div onClick={onClick} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16, cursor:"pointer", position:"relative", overflow:"hidden", borderLeft:`3px solid ${displayStatus === "NETTOYAGE" ? T.blue : tc}`, transition: "transform 0.2s, box-shadow 0.2s" }} onMouseEnter={e => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = `0 4px 12px ${T.accent}11`; }} onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}>
+    <div onClick={onClick} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16, cursor:"pointer", position:"relative", overflow:"hidden", borderLeft:`3px solid ${displayStatus === "NETTOYAGE" ? T.blue : tc}`, transition: "transform 0.2s, box-shadow 0.2s" }} onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = `0 4px 12px ${T.accent}11`; }} onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}>
       <div style={{ position:"absolute", bottom:0, left:0, right:0, height:`${pct}%`, background:tc+"0d", pointerEvents:"none" }} />
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
         <div>
@@ -2673,17 +2707,24 @@ function ContainerTile({ c, onClick }) {
 // =============================================================================
 // DÉTAIL D'UNE CUVE / CITERNE (SÉCURISÉ)
 // =============================================================================
-function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onSelectContainer }) {
+type ContainerDetailProps = {
+  container: any;
+  onBack: () => void;
+  onSelectLot: (lot: any) => void;
+  onSelectContainer: (container: any) => void;
+};
+
+function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onSelectContainer }: ContainerDetailProps) {
   const T = useTheme(); 
   const { user } = useAuth(); 
   const { state, dispatch, refreshData } = useStore();
-  const container = (state.containers || []).find(c => c.id === initialContainer.id) || initialContainer;
+  const container = (state.containers || []).find((c: any) => c.id === initialContainer.id) || initialContainer;
   const [modal, setModal] = useState(null); 
   const [histTab, setHistTab] = useState("evenements");
   const [isSubmitting, setIsSubmitting] = useState(false);
   
   const navigableContainers = (state.containers || [])
-    .filter(c => 
+    .filter((c: any) => 
       c.status !== "LIVRE" && 
       c.status !== "ARCHIVÉE" && 
       !c.parentId && 
@@ -2692,24 +2733,24 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
       !c.type?.includes("Débourbage") && 
       !c.type?.includes("Belon")
     )
-    .sort((a, b) => (a.displayName || a.name).localeCompare(b.displayName || b.name));
+    .sort((a: any, b: any) => (a.displayName || a.name).localeCompare(b.displayName || b.name));
   
-  const currentIndex = navigableContainers.findIndex(c => c.id === container.id);
+  const currentIndex = navigableContainers.findIndex((c: any) => c.id === container.id);
   const prevContainer = currentIndex > 0 ? navigableContainers[currentIndex - 1] : null;
   const nextContainer = currentIndex < navigableContainers.length - 1 ? navigableContainers[currentIndex + 1] : null;
 
   const isCiterneMere = container.type === "CITERNE";
   const baseName = (container.displayName || container.name).split(" - Comp ")[0]; 
   
-  const enfants = (state.containers || []).filter(c => 
+  const enfants = (state.containers || []).filter((c: any) => 
     c.parentId === container.id || 
     (c.type === "COMPARTIMENT" && (c.displayName || c.name).startsWith(baseName) && c.id !== container.id)
   );
   
   const allCompartments = isCiterneMere ? [container, ...enfants] : [container]; 
   
-  const totalCapacity = isCiterneMere ? allCompartments.reduce((sum, c) => sum + (c.capacityValue || c.capacity || 0), 0) : (container.capacityValue || container.capacity || 0);
-  const totalVolume = isCiterneMere ? allCompartments.reduce((sum, c) => sum + (c.currentVolume || 0), 0) : (container.currentVolume || 0);
+  const totalCapacity = isCiterneMere ? allCompartments.reduce((sum: any, c: any) => sum + (c.capacityValue || c.capacity || 0), 0) : (container.capacityValue || container.capacity || 0);
+  const totalVolume = isCiterneMere ? allCompartments.reduce((sum: any, c: any) => sum + (c.currentVolume || 0), 0) : (container.currentVolume || 0);
 
   const isReallyEmpty = container.status === "VIDE" || container.status === "NETTOYAGE" || totalVolume <= 0;
   const currentVol = isReallyEmpty ? 0 : totalVolume;
@@ -2720,18 +2761,18 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
   const tc = getTypeColor(container.type);
   const displayStatus = isReallyEmpty && container.status !== "NETTOYAGE" ? "VIDE" : container.status;
 
-  const lot = isReallyEmpty ? null : (state.lots || []).find(l => String(l.id) === String(container.lotId) || String(l.currentContainerId || l.containerId) === String(container.id));
+  const lot = isReallyEmpty ? null : (state.lots || []).find((l: any) => String(l.id) === String(container.lotId) || String(l.currentContainerId || l.containerId) === String(container.id));
 
-  const hist = (state.events || []).filter(e => String(e.containerId) === String(container.id)).sort((a,b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+  const hist = (state.events || []).filter((e: any) => String(e.containerId) === String(container.id)).sort((a: any, b: any) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
   
-  const lotsPasses = [...new Set((state.events || []).filter(e => String(e.containerId) === String(container.id) && e.lotId).map(e => e.lotId))].map(id => { 
-    const l = (state.lots || []).find(x => String(x.id) === String(id)); 
+  const lotsPasses = [...new Set((state.events || []).filter((e: any) => String(e.containerId) === String(container.id) && e.lotId).map((e: any) => e.lotId))].map((id: any) => { 
+    const l = (state.lots || []).find((x: any) => String(x.id) === String(id)); 
     if (!l) return null; 
-    const evts = (state.events || []).filter(e => String(e.lotId) === String(id) && String(e.containerId) === String(container.id)).sort((a,b) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime()); 
+    const evts = (state.events || []).filter((e: any) => String(e.lotId) === String(id) && String(e.containerId) === String(container.id)).sort((a: any, b: any) => new Date(a.createdAt || a.date).getTime() - new Date(b.createdAt || b.date).getTime()); 
     return { lot:l, from: evts[0]?.createdAt || evts[0]?.date, to: evts[evts.length-1]?.createdAt || evts[evts.length-1]?.date }; 
   }).filter(Boolean).reverse();
   
-  const formatVolShort = (vol) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
+  const formatVolShort = (vol: any) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
 
   const toggleCleaning = async () => {
     setIsSubmitting(true);
@@ -2739,7 +2780,6 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
     try {
       const res = await fetch(`/api/containers`, { // Adaptez à votre route API
         method: 'PUT', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ id: container.id, status: nextStatus }) 
       });
@@ -2766,15 +2806,16 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
         const err = await res.json();
         throw new Error(err.error || "Raison inconnue");
       }
-    } catch(e) {
-      alert("BLOCAGE BASE DE DONNÉES : " + e.message);
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : "Erreur inconnue";
+      alert("BLOCAGE BASE DE DONNÉES : " + message);
     } finally {
       setIsSubmitting(false);
       setModal(null);
     }
   };
 
-  const formatEventDate = (dStr) => {
+  const formatEventDate = (dStr: any) => {
     if (!dStr) return "--";
     const d = new Date(dStr);
     if (isNaN(d.getTime())) return dStr; // Fallback pour les vieilles dates formatées manuellement
@@ -2794,8 +2835,8 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
               onClick={() => prevContainer && onSelectContainer(prevContainer)} 
               disabled={!prevContainer}
               style={{ background:"none", border:`1px solid ${T.border}`, color: prevContainer ? T.textStrong : T.textDim, padding:"6px 14px", borderRadius:3, cursor: prevContainer ? "pointer" : "default", fontSize:11, fontFamily:"monospace", opacity: prevContainer ? 1 : 0.3, transition: "all 0.2s" }}
-              onMouseEnter={e => prevContainer && (e.currentTarget.style.background = T.surfaceHigh)}
-              onMouseLeave={e => prevContainer && (e.currentTarget.style.background = "none")}
+              onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => prevContainer && (e.currentTarget.style.background = T.surfaceHigh)}
+              onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => prevContainer && (e.currentTarget.style.background = "none")}
             >
               {"< Précédent"}
             </button>
@@ -2803,8 +2844,8 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
               onClick={() => nextContainer && onSelectContainer(nextContainer)} 
               disabled={!nextContainer}
               style={{ background:"none", border:`1px solid ${T.border}`, color: nextContainer ? T.textStrong : T.textDim, padding:"6px 14px", borderRadius:3, cursor: nextContainer ? "pointer" : "default", fontSize:11, fontFamily:"monospace", opacity: nextContainer ? 1 : 0.3, transition: "all 0.2s" }}
-              onMouseEnter={e => nextContainer && (e.currentTarget.style.background = T.surfaceHigh)}
-              onMouseLeave={e => nextContainer && (e.currentTarget.style.background = "none")}
+              onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => nextContainer && (e.currentTarget.style.background = T.surfaceHigh)}
+              onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => nextContainer && (e.currentTarget.style.background = "none")}
             >
               {"Suivant >"}
             </button>
@@ -2854,31 +2895,31 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
                 
                 {(!isCiterneMere || enfants.length === 0) && (
                   <>
-                    {!lot && isReallyEmpty && <Btn onClick={() => setModal("createLot")} disabled={isSubmitting}>+ Créer lot</Btn>}
+                    {!lot && isReallyEmpty && <Btn onClick={() => setModal("createLot" as any)} disabled={isSubmitting}>+ Créer lot</Btn>}
                     
-                    {lot && <Btn variant="ghost" onClick={() => setModal("transfer")} disabled={isSubmitting}>Transférer</Btn>}
+                    {lot && <Btn variant="ghost" onClick={() => setModal("transfer" as any)} disabled={isSubmitting}>Transférer</Btn>}
                     
                     {lot && (lot.status === "MACERATION" || lot.status === "MOUT_NON_DEBOURBE") && (
-                      <Btn variant="primary" onClick={() => setModal("decuvage")} style={{ background: "#8b1c31", borderColor: "#8b1c31", color: "#fff" }} disabled={isSubmitting}>
+                      <Btn variant="primary" onClick={() => setModal("decuvage" as any)} style={{ background: "#8b1c31", borderColor: "#8b1c31", color: "#fff" }} disabled={isSubmitting}>
                         🍷 Décuver / Presser
                       </Btn>
                     )}
 
-                    {lot && <Btn variant="ghost" onClick={() => setModal("intrant")} disabled={isSubmitting}>Ajout intrant</Btn>}
-                    {lot && <Btn variant="ghost" onClick={() => setModal("volume")} disabled={isSubmitting}>Corriger volume</Btn>}
+                    {lot && <Btn variant="ghost" onClick={() => setModal("intrant" as any)} disabled={isSubmitting}>Ajout intrant</Btn>}
+                    {lot && <Btn variant="ghost" onClick={() => setModal("volume" as any)} disabled={isSubmitting}>Corriger volume</Btn>}
                   </>
                 )}
                 
                 {(user.role === "Admin" || user.role === "Chef de cave") && (
                   <>
-                    <Btn variant="ghost" onClick={() => setModal("rename")} disabled={isSubmitting}>✏️ Renommer</Btn>
+                    <Btn variant="ghost" onClick={() => setModal("rename" as any)} disabled={isSubmitting}>✏️ Renommer</Btn>
                     {isReallyEmpty && (
-                       <Btn variant="ghost" onClick={() => setModal("deleteConfirm")} style={{ color: T.red }} disabled={isSubmitting}>
+                       <Btn variant="ghost" onClick={() => setModal("deleteConfirm" as any)} style={{ color: T.red }} disabled={isSubmitting}>
                          🗑️ {isCiterneMere ? "Supprimer Tout" : "Supprimer"}
                        </Btn>
                     )}
                     {container.type === "CITERNE" && (
-                      <Btn variant="ghost" onClick={() => setModal("compartment")} disabled={isSubmitting}>+ Ajouter compartiment</Btn>
+                      <Btn variant="ghost" onClick={() => setModal("compartment" as any)} disabled={isSubmitting}>+ Ajouter compartiment</Btn>
                     )}
                   </>
                 )}
@@ -2894,7 +2935,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
               
               <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
                 {allCompartments.map((comp, index) => {
-                   const compLot = (comp.currentVolume || comp.volume) > 0 ? (state.lots || []).find(l => String(l.currentContainerId || l.containerId) === String(comp.id)) : null;
+	                   const compLot = (comp.currentVolume || comp.volume) > 0 ? (state.lots || []).find((l: any) => String(l.currentContainerId || l.containerId) === String(comp.id)) : null;
                    const compName = index === 0 ? "Compartiment 1 (Base)" : (comp.displayName || comp.name).split(" - ")[1] || (comp.displayName || comp.name);
                    const isCompEmpty = (comp.currentVolume || comp.volume) <= 0;
 
@@ -2909,7 +2950,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
                        </div>
                        <div style={{ display:"flex", justifyContent:"flex-end", gap:6 }}>
                           {isCompEmpty ? (
-                            <Btn variant="secondary" style={{fontSize:9, padding:"4px 8px", background:T.surface, color:T.textDim, borderColor:T.border}} onClick={() => setModal("createLot")}>+ Créer Lot</Btn>
+                            <Btn variant="secondary" style={{fontSize:9, padding:"4px 8px", background:T.surface, color:T.textDim, borderColor:T.border}} onClick={() => setModal("createLot" as any)}>+ Créer Lot</Btn>
                           ) : (
                             compLot && <Btn variant="secondary" style={{fontSize:9, padding:"4px 8px"}} onClick={() => {
                                if (onSelectLot) onSelectLot(compLot);
@@ -2935,7 +2976,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
                 {hist.length === 0 ? (
                   <div style={{ padding:"32px 20px", textAlign:"center", color:T.textDim, fontSize:12, fontStyle: "italic" }}>Aucun événement enregistré</div>
                 ) : (
-                  hist.map((h, i) => (
+                  hist.map((h: any, i: number) => (
                     <div key={h.id} style={{ display:"grid", gridTemplateColumns:"140px 110px 1fr 100px", gap:10, alignItems:"center", padding:"12px 16px", borderBottom:i<hist.length-1?`1px solid ${T.border}`:"none" }}>
                       <div style={{ fontSize:10, color:T.textDim, fontFamily:"monospace" }}>{formatEventDate(h.createdAt || h.date)}</div>
                       <div><Badge label={h.eventType || h.type} /></div>
@@ -2952,7 +2993,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
                 {lotsPasses.length === 0 ? (
                   <div style={{ padding:"32px 20px", textAlign:"center", color:T.textDim, fontSize:12, fontStyle: "italic" }}>Aucun lot n'a encore transité</div>
                 ) : (
-                  lotsPasses.map(({ lot:l, from, to }) => (
+                  lotsPasses.map(({ lot:l, from, to }: any) => (
                     <div key={l.id} style={{ display:"grid", gridTemplateColumns:"2fr 60px 120px 120px 100px", padding:"12px 16px", alignItems:"center", borderBottom:`1px solid ${T.border}` }}>
                       <div style={{ fontSize:11, color:T.accentLight, fontFamily:"monospace", fontWeight: "bold" }}>{l.businessCode || l.code}</div>
                       <div style={{ fontSize:12, color:T.text }}>{l.year || l.millesime}</div>
@@ -2999,6 +3040,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
 // =============================================================================
 function TourFA({ onSelectLot }: any) {
   const T = useTheme();
+  const { user } = useAuth();
   const { state, dispatch, refreshData } = useStore();
   
   const [tourDate, setTourDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -3038,7 +3080,6 @@ function TourFA({ onSelectLot }: any) {
       const res = await fetch('/api/fa', {
         method: 'POST',
         headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
         body: JSON.stringify({
           readings: payloadReadings,
           idempotencyKey
@@ -3073,7 +3114,7 @@ function TourFA({ onSelectLot }: any) {
         </div>
         <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
           <FF label="Date du relevé">
-            <Input type="date" value={tourDate} onChange={(e: any) => setTourDate(e.target.value)} disabled={isSubmitting} />
+            <Input type="date" value={tourDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTourDate(e.target.value)} disabled={isSubmitting} />
           </FF>
           <Btn onClick={submitTour} disabled={isSubmitting || Object.keys(readings).length === 0} style={{ background: isSubmitting ? T.textDim : T.accent, height: 38, marginTop: 16 }}>
             {isSubmitting ? "Enregistrement sécurisé..." : "Valider le Tour"}
@@ -3093,7 +3134,7 @@ function TourFA({ onSelectLot }: any) {
             const container = (state.containers || []).find((c: any) => String(c.id) === String(l.currentContainerId || l.containerId));
             
             return (
-              <div key={l.id} style={{ display: "grid", gridTemplateColumns: "150px 2fr 100px 1.5fr 1.5fr", padding: "12px 16px", alignItems: "center", borderBottom: i < faLots.length - 1 ? `1px solid ${T.border}` : "none", transition: "background .15s" }} onMouseEnter={e => e.currentTarget.style.background = T.surfaceHigh} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <div key={l.id} style={{ display: "grid", gridTemplateColumns: "150px 2fr 100px 1.5fr 1.5fr", padding: "12px 16px", alignItems: "center", borderBottom: i < faLots.length - 1 ? `1px solid ${T.border}` : "none", transition: "background .15s" }} onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = T.surfaceHigh} onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = "transparent"}>
                 <div onClick={() => onSelectLot(l)} style={{ fontSize: 13, color: T.accent, fontFamily: "monospace", fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}>
                   {l.businessCode || l.code}
                 </div>
@@ -3135,7 +3176,7 @@ function TourFA({ onSelectLot }: any) {
 // =============================================================================
 // COMPOSANT PRINCIPAL CUVERIE
 // =============================================================================
-function Cuverie({ onSelectContainer }) {
+function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
   const T = useTheme(); 
   const { state } = useStore(); 
   const { user } = useAuth();
@@ -3144,7 +3185,7 @@ function Cuverie({ onSelectContainer }) {
   const [subFilter, setSubFilter] = useState(""); 
   const [search, setSearch] = useState(""); 
   
-  const [filterZones, setFilterZones] = useState([]); 
+  const [filterZones, setFilterZones] = useState<string[]>([]); 
   const [modal, setModal] = useState(false);
   
   const GROUPS = {
@@ -3155,14 +3196,14 @@ function Cuverie({ onSelectContainer }) {
 
   const isAdmin = user?.role === "Admin" || user?.role === "Chef de cave";
   
-  const uniqueZones = [...new Set((state.containers || []).map(c => c.zone).filter(Boolean))].sort();
+  const uniqueZones = [...new Set((state.containers || []).map((c: any) => c.zone).filter(Boolean))].sort();
 
-  const handleMainFilter = (f) => {
+  const handleMainFilter = (f: string) => {
     setMainFilter(f);
     setSubFilter(""); 
   };
 
-  const filtered = (state.containers || []).filter(c => {
+  const filtered = (state.containers || []).filter((c: any) => {
     if (
       c.status === "LIVRE" || 
       c.status === "ARCHIVÉE" || 
@@ -3190,7 +3231,7 @@ function Cuverie({ onSelectContainer }) {
     if (mainFilter === "TOUS") { 
       matchFilter = true; 
     } else if (mainFilter === "RÉSERVES") {
-      matchFilter = (state.lots || []).some(l => (String(l.currentContainerId || l.containerId) === String(c.id) || String(l.id) === String(c.lotId)) && l.status === "RESERVE");
+      matchFilter = (state.lots || []).some((l: any) => (String(l.currentContainerId || l.containerId) === String(c.id) || String(l.id) === String(c.lotId)) && l.status === "RESERVE");
     } else if (mainFilter === "CUVES") {
       if (subFilter) matchFilter = c.type === subFilter && !isSousProduit;
       else matchFilter = GROUPS.CUVES.includes(c.type) && !isSousProduit;
@@ -3209,8 +3250,8 @@ function Cuverie({ onSelectContainer }) {
     return matchFilter && matchSearch && matchZone;
   });
 
-  const cuvesActives = filtered.filter(c => (parseFloat(c.currentVolume || 0)) > 0);
-  const cuvesVides = filtered.filter(c => (parseFloat(c.currentVolume || 0)) <= 0);
+  const cuvesActives = filtered.filter((c: any) => (parseFloat(c.currentVolume || 0)) > 0);
+  const cuvesVides = filtered.filter((c: any) => (parseFloat(c.currentVolume || 0)) <= 0);
 
   return (
     <div>
@@ -3220,7 +3261,7 @@ function Cuverie({ onSelectContainer }) {
       </div>
       
       <div style={{ display:"flex", gap:10, marginBottom: mainFilter === "CUVES" || mainFilter === "BOIS" || mainFilter === "SOUS-PRODUITS" ? 10 : 20, flexWrap:"wrap" }}>
-        <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher un contenant..." style={{ minWidth:200 }} />
+        <Input value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} placeholder="Rechercher un contenant..." style={{ minWidth:200 }} />
         
         {uniqueZones.length > 0 && (
           <MultiSelectDrop label="Toutes les zones" options={uniqueZones} selected={filterZones} onChange={setFilterZones} width={160} />
@@ -3258,7 +3299,7 @@ function Cuverie({ onSelectContainer }) {
                 Contenants pleins ou en cours d'utilisation ({cuvesActives.length})
               </h3>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(215px,1fr))", gap:16 }}>
-                {cuvesActives.map(c => <ContainerTile key={c.id} c={c} onClick={() => onSelectContainer(c)} />)}
+                {cuvesActives.map((c: any) => <ContainerTile key={c.id} c={c} onClick={() => onSelectContainer(c)} />)}
               </div>
             </div>
           )}
@@ -3269,7 +3310,7 @@ function Cuverie({ onSelectContainer }) {
                 Contenants vides ou en nettoyage ({cuvesVides.length})
               </h3>
               <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(215px,1fr))", gap:16 }}>
-                {cuvesVides.map(c => (
+                {cuvesVides.map((c: any) => (
                   <div key={c.id} style={{ opacity: c.status !== "NETTOYAGE" ? 0.7 : 1, transition: "opacity 0.2s" }}>
                     <ContainerTile c={c} onClick={() => onSelectContainer(c)} />
                   </div>
@@ -3285,7 +3326,7 @@ function Cuverie({ onSelectContainer }) {
   );
 }
 
-function RenameContainerModal({ container, onClose }) {
+function RenameContainerModal({ container, onClose }: { container: any; onClose: any }) {
   const T = useTheme(); 
   const { dispatch, refreshData } = useStore();
   const [newName, setNewName] = useState(container.displayName || container.name);
@@ -3297,8 +3338,7 @@ function RenameContainerModal({ container, onClose }) {
     try {
       const res = await fetch('/api/containers', { 
         method: 'PUT', 
-        headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
+        headers: buildApiHeaders(undefined), 
         body: JSON.stringify({ id: container.id, name: newName }) 
       });
       
@@ -3309,7 +3349,7 @@ function RenameContainerModal({ container, onClose }) {
       } else {
         throw new Error((await res.json()).error);
       }
-    } catch(e) {
+    } catch(e: any) {
       alert("Erreur : " + e.message);
     } finally {
       setIsSubmitting(false);
@@ -3319,7 +3359,7 @@ function RenameContainerModal({ container, onClose }) {
   return (
     <Modal title="Renommer le contenant" onClose={onClose}>
       <FF label="Nouveau nom">
-        <Input value={newName} onChange={e => setNewName(e.target.value)} disabled={isSubmitting} />
+        <Input value={newName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNewName(e.target.value)} disabled={isSubmitting} />
       </FF>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
@@ -3329,7 +3369,7 @@ function RenameContainerModal({ container, onClose }) {
   );
 }
 
-function CreateLotModal({ container, onClose }) {
+function CreateLotModal({ container, onClose }: { container: any; onClose: any }) {
   const T = useTheme();
   const { state, dispatch, refreshData } = useStore(); 
   const { user } = useAuth();
@@ -3349,7 +3389,6 @@ function CreateLotModal({ container, onClose }) {
       const res = await fetch('/api/lots', { 
         method: 'POST', 
         headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           code, millesime: parseInt(form.millesime), cepage: form.cepage, lieu: form.lieu.toUpperCase(), 
           volume: parseFloat(form.volume), containerId: container.id, status: form.status, 
@@ -3363,7 +3402,7 @@ function CreateLotModal({ container, onClose }) {
       dispatch({ type:"TOAST_ADD", payload:{ msg:`Lot ${code} créé !`, color:"#2d6640" } }); 
       if (refreshData) await refreshData();
       onClose(); 
-    } catch(e) {
+    } catch(e: any) {
       alert("Erreur : " + e.message);
       setIdempotencyKey(crypto.randomUUID()); // 👈 NOUVELLE CLÉ GÉNÉRÉE EN CAS D'ERREUR
     } finally {
@@ -3374,26 +3413,26 @@ function CreateLotModal({ container, onClose }) {
   return (
     <Modal title="Créer un lot" onClose={onClose}>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-        <FF label="Millésime"><Input type="number" value={form.millesime} onChange={e => setForm({...form, millesime:e.target.value})} disabled={isSubmitting}/></FF>
+        <FF label="Millésime"><Input type="number" value={form.millesime} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, millesime:e.target.value})} disabled={isSubmitting}/></FF>
         <FF label="Cépage">
-          <Select value={form.cepage} onChange={e => setForm({...form, cepage:e.target.value})} disabled={isSubmitting}>
-            {CEPAGES.map(c => <option key={c}>{c}</option>)}
+          <Select value={form.cepage} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, cepage:e.target.value})} disabled={isSubmitting}>
+            {CEPAGES.map((c: any) => <option key={c}>{c}</option>)}
           </Select>
         </FF>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:12 }}>
-        <FF label="Lieu-dit / Parcelle"><Input value={form.lieu} onChange={e => setForm({...form, lieu:e.target.value})} disabled={isSubmitting}/></FF>
+        <FF label="Lieu-dit / Parcelle"><Input value={form.lieu} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, lieu:e.target.value})} disabled={isSubmitting}/></FF>
         <FF label="Qualité">
-          <Select value={form.qualite} onChange={e => setForm({...form, qualite:e.target.value})} disabled={isSubmitting}>
+          <Select value={form.qualite} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, qualite:e.target.value})} disabled={isSubmitting}>
             <option value="">Standard</option><option value="Cuvée">Cuvée (-C)</option><option value="Taille">Taille (-T)</option>
           </Select>
         </FF>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-        <FF label="Volume initial (hL)"><Input type="number" step="0.1" value={form.volume} onChange={e => setForm({...form, volume:e.target.value})} disabled={isSubmitting}/></FF>
+        <FF label="Volume initial (hL)"><Input type="number" step="0.1" value={form.volume} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, volume:e.target.value})} disabled={isSubmitting}/></FF>
         <FF label="Statut initial">
-          <Select value={form.status} onChange={e => setForm({...form, status:e.target.value})} disabled={isSubmitting}>
-            {LOT_STATUSES.slice(0,4).map(s => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+          <Select value={form.status} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, status:e.target.value})} disabled={isSubmitting}>
+            {LOT_STATUSES.slice(0,4).map((s: any) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
           </Select>
         </FF>
       </div>
@@ -3409,9 +3448,10 @@ function CreateLotModal({ container, onClose }) {
 // MODALES BOUTEILLES (SÉCURISÉES & API-DRIVEN)
 // =============================================================================
 
-function RemuageModal({ bl, actionType, onClose }) {
+function RemuageModal({ bl, actionType, onClose }: { bl: any; actionType: any; onClose: any }) {
   const T = useTheme();
   const { dispatch, refreshData } = useStore();
+  const { user } = useAuth();
 
   const [location, setLocation] = useState(bl.zone || bl.locationZone || "");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -3427,7 +3467,6 @@ function RemuageModal({ bl, actionType, onClose }) {
       const res = await fetch('/api/bottles/status', {
         method: 'POST',
         headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
         body: JSON.stringify({ 
           blId: parseInt(bl.id), 
           status: statusDest, 
@@ -3442,7 +3481,7 @@ function RemuageModal({ bl, actionType, onClose }) {
       dispatch({ type: "TOAST_ADD", payload: { msg: `Lot passé en statut: ${statusDest.replace('_', ' ')}`, color: T.accent } });
       if (refreshData) await refreshData();
       onClose();
-    } catch (e) {
+    } catch (e: any) {
       alert(e.message);
     } finally {
       setIsSubmitting(false);
@@ -3455,7 +3494,7 @@ function RemuageModal({ bl, actionType, onClose }) {
         Enregistre l'évolution du cycle de vieillissement en base de données.
       </div>
       <FF label="Nouvel emplacement physique">
-        <Input value={location} onChange={e => setLocation(e.target.value)} disabled={isSubmitting} placeholder={isRemuage ? "Ex: Gyropalette 4" : "Ex: Caisse-Palette 12"} />
+        <Input value={location} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLocation(e.target.value)} disabled={isSubmitting} placeholder={isRemuage ? "Ex: Gyropalette 4" : "Ex: Caisse-Palette 12"} />
       </FF>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:24 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
@@ -3465,9 +3504,10 @@ function RemuageModal({ bl, actionType, onClose }) {
   );
 }
 
-function DegorgerModal({ bl, onClose }) {
+function DegorgerModal({ bl, onClose }: { bl: any; onClose: any }) {
   const T = useTheme(); 
   const { dispatch, refreshData } = useStore(); 
+  const { user } = useAuth();
   
   const [count, setCount] = useState(""); 
   const [sugar, setSugar] = useState(""); 
@@ -3477,7 +3517,7 @@ function DegorgerModal({ bl, onClose }) {
   
   const max = bl.currentBottleCount || bl.currentCount || 0;
 
-  const getDosageInfo = (val) => {
+  const getDosageInfo = (val: string) => {
     if (val === "") return { label: "--", suffix: "", color: T.textDim };
     const g = parseFloat(val);
     if (g === 0)  return { label: "Brut Nature / Zéro Dosage", suffix: "-Nature", color: "#8c7355" }; 
@@ -3501,7 +3541,6 @@ function DegorgerModal({ bl, onClose }) {
       const res = await fetch('/api/bottles/degorger', { 
         method: 'POST', 
         headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           blId: parseInt(bl.id), 
           count: qtyNum, 
@@ -3517,7 +3556,7 @@ function DegorgerModal({ bl, onClose }) {
       dispatch({ type:"TOAST_ADD", payload:{ msg:`${qtyNum} btl dégorgées ! (Création lot Produits Finis)`, color:T.green } }); 
       if (refreshData) await refreshData();
       onClose(); 
-    } catch(e) { 
+    } catch(e: any) { 
       alert(e.message); 
     } finally {
       setIsSubmitting(false);
@@ -3529,12 +3568,12 @@ function DegorgerModal({ bl, onClose }) {
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
         <FF label={`Nombre de btl (max ${max})`}>
           <div style={{ display: "flex", gap: 8 }}>
-            <Input type="number" value={count} onChange={e => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }} />
+            <Input type="number" value={count} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }} />
             <Btn variant="secondary" onClick={() => setCount(max.toString())} disabled={isSubmitting}>MAX</Btn>
           </div>
         </FF>
         <FF label="Sucre ajouté (g/L)">
-          <Input type="number" step="0.1" placeholder="Ex: 8" value={sugar} onChange={e => setSugar(e.target.value)} disabled={isSubmitting} />
+          <Input type="number" step="0.1" placeholder="Ex: 8" value={sugar} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSugar(e.target.value)} disabled={isSubmitting} />
         </FF>
       </div>
 
@@ -3544,7 +3583,7 @@ function DegorgerModal({ bl, onClose }) {
       
       <div style={{ marginTop: 8 }}>
         <FF label="Modèle de Bouchon Liège (Optionnel)">
-          <Input value={modeleBouchon} onChange={e => setModeleBouchon(e.target.value)} disabled={isSubmitting} placeholder="Ex: Mytik - MD5" />
+          <Input value={modeleBouchon} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModeleBouchon(e.target.value)} disabled={isSubmitting} placeholder="Ex: Mytik - MD5" />
         </FF>
       </div>
 
@@ -3558,9 +3597,10 @@ function DegorgerModal({ bl, onClose }) {
   );
 }
 
-function HabillerModal({ bl, onClose }) {
+function HabillerModal({ bl, onClose }: { bl: any; onClose: any }) {
   const T = useTheme(); 
   const { state, dispatch, refreshData } = useStore();
+  const { user } = useAuth();
   
   const [count, setCount] = useState(""); 
   const [coiffeId, setCoiffeId] = useState("");
@@ -3572,9 +3612,9 @@ function HabillerModal({ bl, onClose }) {
   
   const max = bl.currentBottleCount || bl.currentCount || 0;
 
-  const coiffes = (state.products || []).filter(p => p.subCategory === "Coiffes");
-  const etiquettes = (state.products || []).filter(p => p.subCategory === "Étiquettes" || p.subCategory === "Contre-étiquettes");
-  const cartons = (state.products || []).filter(p => p.subCategory === "Cartons");
+  const coiffes = (state.products || []).filter((p: any) => p.subCategory === "Coiffes");
+  const etiquettes = (state.products || []).filter((p: any) => p.subCategory === "Étiquettes" || p.subCategory === "Contre-étiquettes");
+  const cartons = (state.products || []).filter((p: any) => p.subCategory === "Cartons");
 
   const submit = async () => {
     const qtyNum = parseInt(count);
@@ -3584,7 +3624,6 @@ function HabillerModal({ bl, onClose }) {
     try {
       const res = await fetch('/api/bottles/habiller', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           blId: parseInt(bl.id), count: qtyNum, 
@@ -3601,7 +3640,7 @@ function HabillerModal({ bl, onClose }) {
       dispatch({ type:"TOAST_ADD", payload:{ msg:`${qtyNum} btl habillées. Stocks déduits !`, color:"#9960aa" } }); 
       if (refreshData) await refreshData();
       onClose(); 
-    } catch(e) { alert(e.message); }
+    } catch(e: any) { alert(e.message); }
     finally { setIsSubmitting(false); }
   };
 
@@ -3609,7 +3648,7 @@ function HabillerModal({ bl, onClose }) {
     <Modal title={`Habillage & Mise en carton`} onClose={onClose}>
       <FF label={`Nombre de bouteilles à habiller (max ${max})`}>
         <div style={{ display: "flex", gap: 8 }}>
-          <Input type="number" value={count} onChange={e => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }} />
+          <Input type="number" value={count} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }} />
           <Btn variant="secondary" onClick={() => setCount(max.toString())} disabled={isSubmitting}>MAX</Btn>
         </div>
       </FF>
@@ -3618,15 +3657,15 @@ function HabillerModal({ bl, onClose }) {
         <div style={{ fontSize:12, fontWeight:"bold", color:T.accent, marginBottom:12, textTransform:"uppercase" }}>Habillage (Unité)</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
           <FF label="Coiffe">
-            <Select value={coiffeId} onChange={e => setCoiffeId(e.target.value)} disabled={isSubmitting}>
+            <Select value={coiffeId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCoiffeId(e.target.value)} disabled={isSubmitting}>
               <option value="">-- Sans coiffe --</option>
-              {coiffes.map(p => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
+              {coiffes.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
             </Select>
           </FF>
           <FF label="Étiquette">
-            <Select value={etiquetteId} onChange={e => setEtiquetteId(e.target.value)} disabled={isSubmitting}>
+            <Select value={etiquetteId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEtiquetteId(e.target.value)} disabled={isSubmitting}>
               <option value="">-- Sans étiquette --</option>
-              {etiquettes.map(p => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
+              {etiquettes.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
             </Select>
           </FF>
         </div>
@@ -3636,14 +3675,14 @@ function HabillerModal({ bl, onClose }) {
         <div style={{ fontSize:12, fontWeight:"bold", color:T.textDim, marginBottom:12, textTransform:"uppercase" }}>Mise en Carton</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12 }}>
           <FF label="Format">
-            <Select value={cartonSize} onChange={e => setCartonSize(e.target.value)} disabled={isSubmitting}>
+            <Select value={cartonSize} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCartonSize(e.target.value)} disabled={isSubmitting}>
               <option value="1">Unité (1)</option><option value="3">Carton de 3</option><option value="6">Carton de 6</option>
             </Select>
           </FF>
           <FF label="Modèle de carton">
-            <Select value={cartonId} onChange={e => setCartonId(e.target.value)} disabled={isSubmitting}>
+            <Select value={cartonId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCartonId(e.target.value)} disabled={isSubmitting}>
               <option value="">-- Sans carton --</option>
-              {cartons.map(p => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
+              {cartons.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
             </Select>
           </FF>
         </div>
@@ -3659,9 +3698,10 @@ function HabillerModal({ bl, onClose }) {
   );
 }
 
-function ExpedierModal({ bl, onClose }) {
+function ExpedierModal({ bl, onClose }: { bl: any; onClose: any }) {
   const T = useTheme(); 
   const { dispatch, refreshData } = useStore();
+  const { user } = useAuth();
   
   const [count, setCount] = useState(""); 
   const [clientName, setClientName] = useState("");
@@ -3680,7 +3720,6 @@ function ExpedierModal({ bl, onClose }) {
       const res = await fetch('/api/bottles/expedier', { 
         method: 'POST', 
         headers: buildApiHeaders(user), 
-        headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           blId: parseInt(bl.id), count: qtyNum, clientName, idempotencyKey 
         }) 
@@ -3691,7 +3730,7 @@ function ExpedierModal({ bl, onClose }) {
       dispatch({ type:"TOAST_ADD", payload:{ msg:`${qtyNum} expédiées à ${clientName}`, color:T.green } }); 
       if (refreshData) await refreshData();
       onClose(); 
-    } catch(e) { alert(e.message); }
+    } catch(e: any) { alert(e.message); }
     finally { setIsSubmitting(false); }
   };
 
@@ -3699,12 +3738,12 @@ function ExpedierModal({ bl, onClose }) {
     <Modal title="Expédition" onClose={onClose}>
       <FF label={`Nombre (max ${max})`}>
         <div style={{ display: "flex", gap: 8 }}>
-          <Input type="number" value={count} onChange={e => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }} />
+          <Input type="number" value={count} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }} />
           <Btn variant="secondary" onClick={() => setCount(max.toString())} disabled={isSubmitting}>MAX</Btn>
         </div>
       </FF>
       <FF label="Nom du Client / Acheteur">
-        <Input value={clientName} onChange={e => setClientName(e.target.value)} disabled={isSubmitting} />
+        <Input value={clientName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setClientName(e.target.value)} disabled={isSubmitting} />
       </FF>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
@@ -3719,27 +3758,27 @@ function ExpedierModal({ bl, onClose }) {
 // =============================================================================
 // STOCK BOUTEILLES (Cycle Complet)
 // =============================================================================
-function StockBouteilles({ onSelectLot }) {
+function StockBouteilles({ onSelectLot }: { onSelectLot?: any }) {
   const T = useTheme(); 
   const { state } = useStore();
   
   const [tab, setTab] = useState("vieillissement"); 
-  const [modal, setModal] = useState(null); 
-  const [selBl, setSelBl] = useState(null);
+  const [modal, setModal] = useState<string | null>(null); 
+  const [selBl, setSelBl] = useState<any>(null);
   
-  const vieillissement = (state.bottleLots || []).filter(b => ["SUR_LATTES", "EN_REMUAGE", "SUR_POINTES", "A_DEGORGER"].includes(b.status));
-  const aHabiller = (state.bottleLots || []).filter(b => b.status === "EN_CAVE" || b.status === "DEGORGE");
-  const finis = (state.bottleLots || []).filter(b => b.status === "PRET_EXPEDITION");
-  const reserves = (state.bottleLots || []).filter(b => b.status === "RESERVE");
+  const vieillissement = (state.bottleLots || []).filter((b: any) => ["SUR_LATTES", "EN_REMUAGE", "SUR_POINTES", "A_DEGORGER"].includes(b.status));
+  const aHabiller = (state.bottleLots || []).filter((b: any) => b.status === "EN_CAVE" || b.status === "DEGORGE");
+  const finis = (state.bottleLots || []).filter((b: any) => b.status === "PRET_EXPEDITION");
+  const reserves = (state.bottleLots || []).filter((b: any) => b.status === "RESERVE");
 
-  const getAgingMonths = (dateStr) => {
+  const getAgingMonths = (dateStr: any) => {
     if (!dateStr) return 0;
     const tirageDate = new Date(dateStr);
-    const diffTime = Math.abs(new Date() - tirageDate);
+    const diffTime = Math.abs(new Date().getTime() - tirageDate.getTime());
     return Math.floor(diffTime / (1000 * 60 * 60 * 24 * 30.44));
   };
 
-  const formatStatus = (s) => s ? s.replace(/_/g, ' ') : "INCONNU";
+  const formatStatus = (s: any) => s ? s.replace(/_/g, ' ') : "INCONNU";
 
   return (
     <div>
@@ -3749,7 +3788,7 @@ function StockBouteilles({ onSelectLot }) {
       
       <div style={{ display:"flex", gap: 10, marginBottom:20, flexWrap: "wrap" }}>
         {["vieillissement", "habillage", "finis", "reserves"].map((t) => {
-          const labels = { vieillissement: `VIEILLISSEMENT (${vieillissement.length})`, habillage: `À HABILLER (${aHabiller.length})`, finis: `PRÊTS (${finis.length})`, reserves: `VINS DE RÉSERVE (${reserves.length})` };
+          const labels: Record<string, string> = { vieillissement: `VIEILLISSEMENT (${vieillissement.length})`, habillage: `À HABILLER (${aHabiller.length})`, finis: `PRÊTS (${finis.length})`, reserves: `VINS DE RÉSERVE (${reserves.length})` };
           return (
             <button key={t} onClick={() => setTab(t)} style={{ background: tab===t ? T.accent : "transparent", color: tab===t ? T.bg : T.accent, border: `1px solid ${T.accent}`, padding: "9px 18px", borderRadius: 3, fontSize: 11, fontWeight: "bold", letterSpacing: 1, cursor: "pointer", fontFamily: "monospace", transition:"all .2s" }}>
               {labels[t]}
@@ -3763,7 +3802,7 @@ function StockBouteilles({ onSelectLot }) {
           <div style={{ display:"grid", gridTemplateColumns:"2fr 70px 90px 100px 1fr 100px 180px", padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
             <div>Code Tirage</div><div>Format</div><div>Stock</div><div>Statut</div><div>Emplacement</div><div>Tirage (Âge)</div><div>Action (Cycle)</div>
           </div>
-          {vieillissement.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucune bouteille en vieillissement.</div> : vieillissement.map((b, i) => {
+          {vieillissement.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucune bouteille en vieillissement.</div> : vieillissement.map((b: any, i: number) => {
             const age = getAgingMonths(b.tirageDate);
             const isReady = age >= 15;
             const btlCount = b.currentBottleCount || b.currentCount || 0;
@@ -3805,7 +3844,7 @@ function StockBouteilles({ onSelectLot }) {
           <div style={{ display:"grid", gridTemplateColumns:"2fr 80px 120px 140px 1fr 110px", padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
             <div>Code Lot</div><div>Format</div><div>Stock (Nues)</div><div>Emplacement</div><div>Statut</div><div>Action</div>
           </div>
-          {aHabiller.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucune bouteille nue en attente d'habillage.</div> : aHabiller.map((b, i) => (
+          {aHabiller.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucune bouteille nue en attente d'habillage.</div> : aHabiller.map((b: any, i: number) => (
             <div key={b.id} style={{ display:"grid", gridTemplateColumns:"2fr 80px 120px 140px 1fr 110px", padding:"14px 16px", alignItems:"center", borderBottom:i<aHabiller.length-1?`1px solid ${T.border}`:"none" }}>
               <div onClick={() => onSelectLot && onSelectLot(b)} style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, cursor:"pointer", textDecoration:"underline" }}>{b.code || b.businessCode}</div>
               <div style={{ fontSize:13, color:T.text }}>{b.format || b.formatCode}</div>
@@ -3827,7 +3866,7 @@ function StockBouteilles({ onSelectLot }) {
           <div style={{ display:"grid", gridTemplateColumns:"2fr 80px 120px 140px 1fr 110px", padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
             <div>Code Dégorgement</div><div>Format</div><div>Stock Dispo</div><div>Date Dégorg.</div><div>Dosage</div><div>Action</div>
           </div>
-          {finis.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucun produit fini prêt à l'expédition.</div> : finis.map((b, i) => (
+          {finis.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucun produit fini prêt à l'expédition.</div> : finis.map((b: any, i: number) => (
             <div key={b.id} style={{ display:"grid", gridTemplateColumns:"2fr 80px 120px 140px 1fr 110px", padding:"14px 16px", alignItems:"center", borderBottom:i<finis.length-1?`1px solid ${T.border}`:"none" }}>
               <div onClick={() => onSelectLot && onSelectLot(b)} style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, cursor:"pointer", textDecoration:"underline" }}>{b.code || b.businessCode}</div>
               <div style={{ fontSize:13, color:T.text }}>{b.format || b.formatCode}</div>
@@ -3847,7 +3886,7 @@ function StockBouteilles({ onSelectLot }) {
           </div>
           {reserves.length === 0 ? (
              <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucun vin de réserve en bouteilles.</div>
-          ) : reserves.map((b, i) => (
+	          ) : reserves.map((b: any, i: number) => (
             <div key={b.id} style={{ display:"grid", gridTemplateColumns:"2fr 80px 120px 140px 1fr", padding:"14px 16px", alignItems:"center", borderBottom:i<reserves.length-1?`1px solid ${T.border}`:"none" }}>
               <div onClick={() => onSelectLot && onSelectLot(b)} style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, cursor:"pointer", textDecoration:"underline" }}>{b.code || b.businessCode}</div>
               <div style={{ fontSize:13, color:T.text }}>{b.format || b.formatCode}</div>
@@ -3871,7 +3910,7 @@ function StockBouteilles({ onSelectLot }) {
 // =============================================================================
 // LISTE DES LOTS (ACTIFS / HISTORIQUE)
 // =============================================================================
-function Lots({ onSelectLot }) {
+function Lots({ onSelectLot }: { onSelectLot: any }) {
   const T = useTheme(); 
   const { state } = useStore();
   
@@ -3889,13 +3928,13 @@ function Lots({ onSelectLot }) {
     SOUS_PRODUITS: ["CUVE_BOURBES", "CUVE_LIES", "CUVE_REBECHES"]
   };
 
-  const formatVolShort = (vol) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
-  const formatStatus = (s) => s ? s.replace(/_/g, ' ') : "INCONNU";
+  const formatVolShort = (vol: any) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
+  const formatStatus = (s: any) => s ? s.replace(/_/g, ' ') : "INCONNU";
 
   const unifiedLots = [
-    ...(state.lots || []).map(l => ({ ...l, _type: 'bulk', code: l.businessCode || l.code, millesime: l.year || l.millesime, volume: l.currentVolume || l.volume, containerId: l.currentContainerId || l.containerId })),
-    ...(state.bottleLots || []).map(b => {
-      const src = (state.lots || []).find(l => l.id == b.sourceLotId);
+    ...(state.lots || []).map((l: any) => ({ ...l, _type: 'bulk', code: l.businessCode || l.code, millesime: l.year || l.millesime, volume: l.currentVolume || l.volume, containerId: l.currentContainerId || l.containerId })),
+    ...(state.bottleLots || []).map((b: any) => {
+      const src = (state.lots || []).find((l: any) => l.id == b.sourceLotId);
       return {
         ...b,
         _type: 'bottle',
@@ -3915,6 +3954,11 @@ function Lots({ onSelectLot }) {
   const uniqueStatuses = [...new Set(unifiedLots.map(l => l.status))].sort();
   
   const containerCategories = ["Cuves", "Bois", "Citernes", "Bouteilles", "Sous-produits", "Vrac (Sans contenant)", "Autre"];
+  const selectedMillesimes = filterMillesimes as any[];
+  const selectedCepages = filterCepages as any[];
+  const selectedLieux = filterLieux as any[];
+  const selectedContainers = filterContainers as any[];
+  const selectedStatuses = filterStatuses as any[];
 
   const actifsCount = unifiedLots.filter(l => {
     const isDeadBulk = l._type === 'bulk' && (l.volume <= 0 || ["ASSEMBLE", "TIRE", "ARCHIVE"].includes(l.status));
@@ -3924,7 +3968,7 @@ function Lots({ onSelectLot }) {
 
   const historiqueCount = unifiedLots.length - actifsCount;
 
-  const filtered = unifiedLots.filter(l => {
+  const filtered = unifiedLots.filter((l: any) => {
     const isDeadBulk = l._type === 'bulk' && (l.volume <= 0 || ["ASSEMBLE", "TIRE", "ARCHIVE"].includes(l.status));
     const isDeadBottle = l._type === 'bottle' && l.volume <= 0;
     const isDead = isDeadBulk || isDeadBottle;
@@ -3932,35 +3976,35 @@ function Lots({ onSelectLot }) {
     if (tab === "actifs" && isDead) return false;
     if (tab === "historique" && !isDead) return false;
 
-    const container = (l._type === 'bulk' && !isDeadBulk) ? (state.containers || []).find(c => c.id === l.containerId) : null;
+    const container = (l._type === 'bulk' && !isDeadBulk) ? (state.containers || []).find((c: any) => c.id === l.containerId) : null;
 
     const matchSearch = !search || (l.code || "").toLowerCase().includes(search.toLowerCase());
-    const matchMillesime = filterMillesimes.length === 0 || filterMillesimes.includes(l.millesime?.toString());
-    const matchCepage = filterCepages.length === 0 || filterCepages.includes(l.cepage);
-    const matchLieu = filterLieux.length === 0 || filterLieux.includes(l.lieu);
-    const matchStatus = filterStatuses.length === 0 || filterStatuses.includes(l.status);
+    const matchMillesime = selectedMillesimes.length === 0 || selectedMillesimes.includes(l.millesime?.toString());
+    const matchCepage = selectedCepages.length === 0 || selectedCepages.includes(l.cepage);
+    const matchLieu = selectedLieux.length === 0 || selectedLieux.includes(l.lieu);
+    const matchStatus = selectedStatuses.length === 0 || selectedStatuses.includes(l.status);
     
     let matchContainer = true;
-    if (filterContainers.length > 0) {
+    if (selectedContainers.length > 0) {
       if (l._type === 'bottle') {
-        matchContainer = filterContainers.includes("Bouteilles");
+        matchContainer = selectedContainers.includes("Bouteilles");
       } else if (!container) {
-        matchContainer = filterContainers.includes("Vrac (Sans contenant)");
+        matchContainer = selectedContainers.includes("Vrac (Sans contenant)");
       } else {
         const t = (container.type || "").toLowerCase();
         const n = ((container.displayName || container.name) || "").toLowerCase();
         const isSousProduit = GROUPS.SOUS_PRODUITS.includes(container.type) || t.includes("bourbe") || t.includes("lies") || t.includes("rebeche") || n.includes("bourbe") || n.includes("lies") || n.includes("rebeche");
 
         if (isSousProduit) {
-          matchContainer = filterContainers.includes("Sous-produits");
+          matchContainer = selectedContainers.includes("Sous-produits");
         } else if (GROUPS.CUVES.includes(container.type)) {
-          matchContainer = filterContainers.includes("Cuves");
+          matchContainer = selectedContainers.includes("Cuves");
         } else if (GROUPS.BOIS.includes(container.type)) {
-          matchContainer = filterContainers.includes("Bois");
+          matchContainer = selectedContainers.includes("Bois");
         } else if (container.type === "CITERNE" || container.type === "COMPARTIMENT") {
-          matchContainer = filterContainers.includes("Citernes");
+          matchContainer = selectedContainers.includes("Citernes");
         } else {
-          matchContainer = filterContainers.includes("Autre");
+          matchContainer = selectedContainers.includes("Autre");
         }
       }
     }
@@ -3984,13 +4028,13 @@ function Lots({ onSelectLot }) {
       </div>
 
       <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap", alignItems:"center" }}>
-        <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Recherche code..." style={{ width:180 }} />
+        <Input value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} placeholder="Recherche code..." style={{ width:180 }} />
         
-        <MultiSelectDrop label="Tous millésimes" options={uniqueMillesimes} selected={filterMillesimes} onChange={setFilterMillesimes} width={150} />
-        <MultiSelectDrop label="Tous cépages" options={CEPAGES} selected={filterCepages} onChange={setFilterCepages} width={130} />
-        <MultiSelectDrop label="Tous lieux-dits" options={uniqueLieux} selected={filterLieux} onChange={setFilterLieux} width={150} />
-        <MultiSelectDrop label="Tous contenants" options={containerCategories} selected={filterContainers} onChange={setFilterContainers} width={180} />
-        <MultiSelectDrop label="Tous statuts" options={uniqueStatuses} selected={filterStatuses} onChange={setFilterStatuses} format={formatStatus} width={160} />
+        <MultiSelectDrop label="Tous millésimes" options={uniqueMillesimes} selected={selectedMillesimes} onChange={(next: any[]) => setFilterMillesimes(next as any)} width={150} />
+        <MultiSelectDrop label="Tous cépages" options={CEPAGES} selected={selectedCepages} onChange={(next: any[]) => setFilterCepages(next as any)} width={130} />
+        <MultiSelectDrop label="Tous lieux-dits" options={uniqueLieux} selected={selectedLieux} onChange={(next: any[]) => setFilterLieux(next as any)} width={150} />
+        <MultiSelectDrop label="Tous contenants" options={containerCategories} selected={selectedContainers} onChange={(next: any[]) => setFilterContainers(next as any)} width={180} />
+        <MultiSelectDrop label="Tous statuts" options={uniqueStatuses} selected={selectedStatuses} onChange={(next: any[]) => setFilterStatuses(next as any)} format={formatStatus} width={160} />
 
         {(search || filterMillesimes.length > 0 || filterCepages.length > 0 || filterLieux.length > 0 || filterContainers.length > 0 || filterStatuses.length > 0) && (
           <Btn variant="ghost" onClick={() => { setSearch(""); setFilterMillesimes([]); setFilterCepages([]); setFilterLieux([]); setFilterContainers([]); setFilterStatuses([]); }}>
@@ -4008,12 +4052,12 @@ function Lots({ onSelectLot }) {
           <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucun lot dans cette section.</div>
         )}
 
-        {filtered.map((l, i) => {
+        {filtered.map((l: any, i: number) => {
           const isDeadBulk = l._type === 'bulk' && (l.volume <= 0 || ["ASSEMBLE", "TIRE", "ARCHIVE"].includes(l.status));
-          const container = (l._type === 'bulk' && !isDeadBulk) ? (state.containers || []).find(c => c.id === l.containerId) : null;
+          const container = (l._type === 'bulk' && !isDeadBulk) ? (state.containers || []).find((c: any) => c.id === l.containerId) : null;
           
           return (
-            <div key={l.code} onClick={() => onSelectLot(l)} style={{ display:"grid", gridTemplateColumns:"2fr 60px 80px 90px 110px 1fr 130px", padding:"14px 16px", borderBottom: i < filtered.length-1 ? `1px solid ${T.border}` : "none", cursor:"pointer", alignItems:"center", opacity: tab === "historique" ? 0.6 : 1 }} onMouseEnter={e => e.currentTarget.style.background = T.surfaceHigh} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+            <div key={l.code} onClick={() => onSelectLot(l)} style={{ display:"grid", gridTemplateColumns:"2fr 60px 80px 90px 110px 1fr 130px", padding:"14px 16px", borderBottom: i < filtered.length-1 ? `1px solid ${T.border}` : "none", cursor:"pointer", alignItems:"center", opacity: tab === "historique" ? 0.6 : 1 }} onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = T.surfaceHigh} onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = "transparent"}>
               <div style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600 }}>{l.code}</div>
               <div style={{ fontSize:13, color:T.text }}>{l.millesime}</div>
               <div style={{ fontSize:12, color:T.accentLight, fontFamily:"monospace" }}>{l.cepage}</div>
@@ -4070,7 +4114,7 @@ function PlanificateurTirage() {
     alimDensiteVeille: 1005, alimDensiteMatin: 998, alimLiqueurG: 530, alimAlcVin: 11.0
   });
 
-  const updateConfig = (key, value) => { setConfig(prev => ({ ...prev, [key]: value })); };
+  const updateConfig = (key: any, value: any) => { setConfig(prev => ({ ...prev, [key]: value })); };
 
   // --- ÉTATS VOLATILES (Sélections actuelles de cuves) ---
   const [mixBaseTankId, setMixBaseTankId] = useState("");
@@ -4085,9 +4129,9 @@ function PlanificateurTirage() {
   // ===========================================================================
   // FILTRAGE DES CUVES
   // ===========================================================================
-  const getContainerLot = (c) => state.lots?.find(l => String(l.id) === String(c.lotId));
+  const getContainerLot = (c: any) => state.lots?.find((l: any) => String(l.id) === String(c.lotId));
 
-  const cuvesVinBase = (state.containers || []).filter(c => {
+  const cuvesVinBase = (state.containers || []).filter((c: any) => {
     if (parseFloat(c.currentVolume) <= 0) return false;
     const t = (c.type || "").toUpperCase();
     const n = (c.displayName || c.name || "").toUpperCase();
@@ -4099,7 +4143,7 @@ function PlanificateurTirage() {
     return true;
   });
 
-  const cuvesTirage = (state.containers || []).filter(c => {
+  const cuvesTirage = (state.containers || []).filter((c: any) => {
     if (parseFloat(c.currentVolume) > 0) return false; 
     if (c.zone !== "Cuverie") return false;
     const t = (c.type || "").toUpperCase();
@@ -4112,7 +4156,7 @@ function PlanificateurTirage() {
     return false;
   });
 
-  const cuvesLevain = (state.containers || []).filter(c => {
+  const cuvesLevain = (state.containers || []).filter((c: any) => {
     const t = (c.type || "").toUpperCase();
     const n = (c.displayName || c.name || "").toUpperCase();
     return t.includes("LEVAIN") || n.includes("LEVAIN");
@@ -4121,9 +4165,9 @@ function PlanificateurTirage() {
   // ===========================================================================
   // CALCULS : MIXTION (PRÉVISUALISATION FRONTEND)
   // ===========================================================================
-  const selectedBaseTank = cuvesVinBase.find(c => String(c.id) === String(mixBaseTankId));
+  const selectedBaseTank = cuvesVinBase.find((c: any) => String(c.id) === String(mixBaseTankId));
   const baseVol = mixVolVinSaisi !== "" ? parseFloat(mixVolVinSaisi) : (selectedBaseTank ? parseFloat(selectedBaseTank.currentVolume) : 0);
-  const getTargetSugar = (bars) => (bars * 4) * (25.4 / 24.0); 
+  const getTargetSugar = (bars: any) => (bars * 4) * (25.4 / 24.0); 
 
   const calcMixtionPreview = () => {
     if (!baseVol || baseVol <= 0) return null;
@@ -4169,15 +4213,15 @@ function PlanificateurTirage() {
     const baseSugar = 1.0; 
     const targetSugarGF = getTargetSugar(config.mixTargetPressure);
 
-    const cascadeResult = [];
+    const cascadeResult: any[] = [];
     let volNextDayLevain = 0; 
     
     let cBtls = config.tirageFormat === 0.75 ? tirageStocks.bouteilles : tirageStocks.magnums;
     let cF1 = config.tirageBouchage === "CAPSULE" ? tirageStocks.bidules : tirageStocks.bouchonsLiege;
     let cF2 = config.tirageBouchage === "CAPSULE" ? tirageStocks.capsules : tirageStocks.agrafes;
 
-    const levainNeeds = [...tirageDays].reverse().map((day, index) => {
-      const vVin = parseFloat(day.vinBaseVolume) || 0;
+    const levainNeeds = [...tirageDays].reverse().map((day: any, index: number) => {
+      const vVin = parseFloat(String(day.vinBaseVolume)) || 0;
       const besoinLevain = vVin * (config.mixLevainPct / 100);
       let volToFeed = index === 0 ? 0 : volNextDayLevain * taux; 
       let totalLevainCuveMatin = volToFeed + besoinLevain;
@@ -4186,8 +4230,8 @@ function PlanificateurTirage() {
       return { ...day, besoinLevain, totalLevainCuveMatin, resteCuve: volToFeed, alimentation };
     }).reverse(); 
 
-    levainNeeds.forEach(day => {
-      const vVin = parseFloat(day.vinBaseVolume) || 0;
+    levainNeeds.forEach((day: any) => {
+      const vVin = parseFloat(String(day.vinBaseVolume)) || 0;
       const vLevain = day.besoinLevain;
       const volVinLevain = vVin + vLevain;
       let volMixtion = 0;
@@ -4219,8 +4263,8 @@ function PlanificateurTirage() {
   // CALCULS : ALIMENTATION (Page 3)
   // ===========================================================================
   const calcAlimentation = () => {
-    const vLevain = parseFloat(config.alimVolLevain) || 0;
-    const vFinal = parseFloat(config.alimVolFinal) || 0;
+    const vLevain = parseFloat(String(config.alimVolLevain)) || 0;
+    const vFinal = parseFloat(String(config.alimVolFinal)) || 0;
     if (!vLevain || !vFinal || vFinal <= vLevain) return null;
     const sucreConsomme = (config.alimDensiteVeille - config.alimDensiteMatin) * 2.5;
     const vLiqueur = (vFinal * (20 + sucreConsomme) - (vLevain * 20)) / config.alimLiqueurG;
@@ -4242,7 +4286,7 @@ function PlanificateurTirage() {
       return;
     }
     
-    const sourceTank = state.containers.find(c => String(c.id) === String(createLevainSourceId));
+    const sourceTank = state.containers.find((c: any) => String(c.id) === String(createLevainSourceId));
     if (!sourceTank || parseFloat(sourceTank.currentVolume) < maxLevainVol) {
       dispatch({ type: "TOAST_ADD", payload: { msg: `Volume insuffisant dans la cuve source. Il vous faut au moins ${maxLevainVol.toFixed(1)} hL.`, color: T.red } });
       return;
@@ -4253,8 +4297,7 @@ function PlanificateurTirage() {
     try {
       const res = await fetch('/api/containers', { 
         method: 'POST', 
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify({ 
           name: "Cuve à Levain", displayName: "Cuve Levain (Actif)", 
           type: "CUVE_INOX", capacityValue: suggestedCap,
@@ -4268,7 +4311,7 @@ function PlanificateurTirage() {
       const newSourceVol = parseFloat(sourceTank.currentVolume) - maxLevainVol;
       dispatch({
         type: "SET_CONTAINERS",
-        payload: state.containers.map(c => c.id === sourceTank.id ? { ...c, currentVolume: newSourceVol } : c)
+        payload: state.containers.map((c: any) => c.id === sourceTank.id ? { ...c, currentVolume: newSourceVol } : c)
       });
 
       dispatch({ type: "ADD_CONTAINER", payload: data });
@@ -4297,8 +4340,8 @@ function PlanificateurTirage() {
       return;
     }
 
-    const sourceTank = state.containers.find(c => String(c.id) === String(alimSourceTankId));
-    const levainTank = state.containers.find(c => String(c.id) === String(alimLevainTankId));
+    const sourceTank = state.containers.find((c: any) => String(c.id) === String(alimSourceTankId));
+    const levainTank = state.containers.find((c: any) => String(c.id) === String(alimLevainTankId));
 
     const vVinNeeded = parseFloat(resAlim.vVin);
     if (parseFloat(sourceTank.currentVolume) < vVinNeeded) {
@@ -4308,11 +4351,11 @@ function PlanificateurTirage() {
 
     // Ici on applique la mise à jour optimiste frontend (en attendant ton API d'alimentation dédiée)
     const newSourceVol = Math.max(0, parseFloat(sourceTank.currentVolume) - vVinNeeded);
-    const newLevainVol = parseFloat(config.alimVolFinal);
+    const newLevainVol = parseFloat(String(config.alimVolFinal));
 
     dispatch({
       type: "SET_CONTAINERS",
-      payload: state.containers.map(c => {
+      payload: state.containers.map((c: any) => {
         if (c.id === sourceTank.id) return { ...c, currentVolume: newSourceVol };
         if (c.id === levainTank.id) return { ...c, currentVolume: newLevainVol };
         return c;
@@ -4340,20 +4383,19 @@ function PlanificateurTirage() {
         levainTankId: mixLevainTankId,
         destTankId: mixDestTankId,
         baseVolToDraw: parseFloat(mixVolVinSaisi) || parseFloat(selectedBaseTank.currentVolume),
-        targetPressure: parseFloat(config.mixTargetPressure),
-        levainPct: parseFloat(config.mixLevainPct),
-        levainSugar: parseFloat(config.mixLevainSugar),
+        targetPressure: parseFloat(String(config.mixTargetPressure)),
+        levainPct: parseFloat(String(config.mixLevainPct)),
+        levainSugar: parseFloat(String(config.mixLevainSugar)),
         sugarSource: config.mixSugarSource,
-        liqueurSugar: parseFloat(config.mixLiqueurSugar),
-        tirageFormat: parseFloat(config.tirageFormat),
+        liqueurSugar: parseFloat(String(config.mixLiqueurSugar)),
+        tirageFormat: parseFloat(String(config.tirageFormat)),
         tirageBouchage: config.tirageBouchage,
         idempotencyKey: idempotencyKey || crypto.randomUUID()
       };
 
       const res = await fetch('/api/mixtion/execute', {
         method: 'POST',
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify(payload)
       });
 
@@ -4400,15 +4442,15 @@ function PlanificateurTirage() {
               <div style={{ fontSize: 14, fontWeight: "bold", color: T.accentLight, marginBottom: 16 }}>1. Source & Levain</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
                 <FF label="Cuve d'assemblage (Vin clair)">
-                  <Select value={mixBaseTankId} disabled={isSubmitting} onChange={e => {
+                  <Select value={mixBaseTankId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                     setMixBaseTankId(e.target.value);
                     if (e.target.value) {
-                      const c = cuvesVinBase.find(x => String(x.id) === String(e.target.value));
+                      const c = cuvesVinBase.find((x: any) => String(x.id) === String(e.target.value));
                       if (c) setMixVolVinSaisi(c.currentVolume);
                     } else { setMixVolVinSaisi(""); }
                   }}>
                     <option value="">-- Mode Libre (Manuelle) --</option>
-                    {cuvesVinBase.map(c => {
+                    {cuvesVinBase.map((c: any) => {
                       const lot = getContainerLot(c);
                       const codeDisplay = lot ? `[${lot.code}]` : "";
                       return <option key={c.id} value={c.id}>{c.displayName || c.name} {codeDisplay} - {parseFloat(c.currentVolume).toFixed(2)} hL</option>
@@ -4416,14 +4458,14 @@ function PlanificateurTirage() {
                   </Select>
                 </FF>
                 <FF label="Volume de vin à tirer (hL)">
-                  <Input type="number" step="0.1" value={mixVolVinSaisi} disabled={isSubmitting} onChange={e => setMixVolVinSaisi(e.target.value)} />
+                  <Input type="number" step="0.1" value={mixVolVinSaisi} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setMixVolVinSaisi(e.target.value)} />
                 </FF>
               </div>
               <FF label="Cuve de Levain (Mère)">
-                <Select value={mixLevainTankId} disabled={isSubmitting} onChange={e => setMixLevainTankId(e.target.value)} style={{ borderColor: !mixLevainTankId ? T.accent : T.border }}>
+                <Select value={mixLevainTankId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMixLevainTankId(e.target.value)} style={{ borderColor: !mixLevainTankId ? T.accent : T.border }}>
                   <option value="">-- Sélectionner le levain actif --</option>
                   {cuvesLevain.length === 0 && <option disabled>Aucune cuve à levain détectée en cuverie.</option>}
-                  {cuvesLevain.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name} - {parseFloat(c.currentVolume).toFixed(2)} hL dispo</option>)}
+                  {cuvesLevain.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name} - {parseFloat(c.currentVolume).toFixed(2)} hL dispo</option>)}
                 </Select>
               </FF>
             </div>
@@ -4431,8 +4473,8 @@ function PlanificateurTirage() {
             <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
               <div style={{ fontSize: 14, fontWeight: "bold", color: T.textStrong, marginBottom: 16 }}>2. Objectifs & Sucrage</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-                <FF label="Pression visée (Bars)"><Input type="number" step="0.1" value={config.mixTargetPressure} disabled={isSubmitting} onChange={e => updateConfig('mixTargetPressure', e.target.value)} /></FF>
-                <FF label="% de Levain"><Input type="number" step="0.1" value={config.mixLevainPct} disabled={isSubmitting} onChange={e => updateConfig('mixLevainPct', e.target.value)} /></FF>
+                <FF label="Pression visée (Bars)"><Input type="number" step="0.1" value={config.mixTargetPressure} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateConfig('mixTargetPressure', e.target.value)} /></FF>
+                <FF label="% de Levain"><Input type="number" step="0.1" value={config.mixLevainPct} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateConfig('mixLevainPct', e.target.value)} /></FF>
               </div>
               <div style={{ display: "flex", gap: 16, marginBottom: 12 }}>
                 <label style={{ display: "flex", alignItems: "center", gap: 8, color: T.text, fontSize: 13, cursor: "pointer" }}>
@@ -4444,7 +4486,7 @@ function PlanificateurTirage() {
               </div>
               {config.mixSugarSource === "LIQUEUR" && (
                 <FF label="Concentration Liqueur (g/L)">
-                  <Input type="number" value={config.mixLiqueurSugar} disabled={isSubmitting} onChange={e => updateConfig('mixLiqueurSugar', e.target.value)} />
+                  <Input type="number" value={config.mixLiqueurSugar} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateConfig('mixLiqueurSugar', e.target.value)} />
                 </FF>
               )}
             </div>
@@ -4452,20 +4494,20 @@ function PlanificateurTirage() {
             <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.accent}55` }}>
               <div style={{ fontSize: 14, fontWeight: "bold", color: T.accentLight, marginBottom: 16 }}>3. Embouteillage</div>
               <FF label="Cuve de Destination (Mixtion & Tirage)" style={{ marginBottom: 16 }}>
-                <Select value={mixDestTankId} disabled={isSubmitting} onChange={e => setMixDestTankId(e.target.value)} style={{ borderColor: !mixDestTankId ? T.accent : T.border }}>
+                <Select value={mixDestTankId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMixDestTankId(e.target.value)} style={{ borderColor: !mixDestTankId ? T.accent : T.border }}>
                   <option value="">-- Sélectionner une cuve de tirage vide --</option>
-                  {cuvesTirage.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name}</option>)}
+                  {cuvesTirage.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name}</option>)}
                 </Select>
               </FF>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <FF label="Format Bouteille">
-                  <Select value={config.tirageFormat} disabled={isSubmitting} onChange={e => updateConfig('tirageFormat', parseFloat(e.target.value))}>
+                  <Select value={config.tirageFormat} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateConfig('tirageFormat', parseFloat(e.target.value))}>
                     <option value={0.75}>Champenoise (75 cl)</option>
                     <option value={1.5}>Magnum (1.5 L)</option>
                   </Select>
                 </FF>
                 <FF label="Type Bouchage">
-                  <Select value={config.tirageBouchage} disabled={isSubmitting} onChange={e => updateConfig('tirageBouchage', e.target.value)}>
+                  <Select value={config.tirageBouchage} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateConfig('tirageBouchage', e.target.value)}>
                     <option value="CAPSULE">Capsule + Bidule</option>
                     <option value="LIEGE">Liège + Agrafe</option>
                   </Select>
@@ -4513,7 +4555,7 @@ function PlanificateurTirage() {
                     <div style={{ fontSize: 12, textTransform: "uppercase", color: T.accentLight, fontWeight: "bold", marginBottom: 16 }}>📦 Tirage & Matières Sèches</div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                       <div style={{ fontSize: 14, color: T.textStrong, fontWeight: "bold" }}>Nombre de cols estimés :</div>
-                      <div style={{ fontSize: 22, color: T.textStrong, fontWeight: "bold", fontFamily: "monospace" }}>{resMix.nbCols.toLocaleString('fr-FR')}</div>
+                      <div style={{ fontSize: 22, color: T.textStrong, fontWeight: "bold", fontFamily: "monospace" }}>{(resMix.nbCols ?? 0).toLocaleString('fr-FR')}</div>
                     </div>
                   </div>
                   <Btn 
@@ -4549,9 +4591,9 @@ function PlanificateurTirage() {
             <div style={{ background: T.surfaceHigh, padding: "20px 24px", borderRadius: 8, border: `1px dashed ${T.border}` }}>
               <div style={{ fontSize: 12, fontWeight: "bold", color: T.textDim, textTransform: "uppercase", marginBottom: 12 }}>Inventaire Initial (Modifiable)</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize: 12 }}><span>Bouteilles:</span> <Input type="number" value={tirageStocks.bouteilles} onChange={e=>setTirageStocks({...tirageStocks, bouteilles: parseInt(e.target.value)||0})} style={{width: 70, height: 24, fontSize:11}} /></div>
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize: 12 }}><span>Bidules:</span> <Input type="number" value={tirageStocks.bidules} onChange={e=>setTirageStocks({...tirageStocks, bidules: parseInt(e.target.value)||0})} style={{width: 70, height: 24, fontSize:11}} /></div>
-                <div style={{ display:"flex", justifyContent:"space-between", fontSize: 12 }}><span>Capsules:</span> <Input type="number" value={tirageStocks.capsules} onChange={e=>setTirageStocks({...tirageStocks, capsules: parseInt(e.target.value)||0})} style={{width: 70, height: 24, fontSize:11}} /></div>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize: 12 }}><span>Bouteilles:</span> <Input type="number" value={tirageStocks.bouteilles} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setTirageStocks({...tirageStocks, bouteilles: parseInt(e.target.value)||0})} style={{width: 70, height: 24, fontSize:11}} /></div>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize: 12 }}><span>Bidules:</span> <Input type="number" value={tirageStocks.bidules} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setTirageStocks({...tirageStocks, bidules: parseInt(e.target.value)||0})} style={{width: 70, height: 24, fontSize:11}} /></div>
+                <div style={{ display:"flex", justifyContent:"space-between", fontSize: 12 }}><span>Capsules:</span> <Input type="number" value={tirageStocks.capsules} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setTirageStocks({...tirageStocks, capsules: parseInt(e.target.value)||0})} style={{width: 70, height: 24, fontSize:11}} /></div>
               </div>
             </div>
           </div>
@@ -4567,7 +4609,7 @@ function PlanificateurTirage() {
                     <Input 
                       type="number" step="0.5" 
                       value={day.vinBaseVolume} 
-                      onChange={e => setTirageDays(tirageDays.map(d => d.id === day.id ? { ...d, vinBaseVolume: e.target.value } : d))}
+                      onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageDays(tirageDays.map((d: any) => d.id === day.id ? { ...d, vinBaseVolume: e.target.value } : d))}
                       style={{ width: 70, textAlign: "center" }} 
                       title="Volume de vin en hL"
                     />
@@ -4590,7 +4632,7 @@ function PlanificateurTirage() {
                   <div style={{ textAlign: "center", color: T.green }} title="Vin + Eau + Sucre ajoutés pour nourrir les levures.">Alimentation</div>
                   <div style={{ textAlign: "right" }} title="Volume cible que la cuve atteindra le lendemain matin après multiplication.">Cible Demain</div>
                 </div>
-                {cascade.map((p, i) => (
+                {cascade.map((p: any, i: number) => (
                   <div key={p.id} style={{ display: "grid", gridTemplateColumns: "80px 100px 100px 100px 1fr 100px", padding: "16px 20px", alignItems: "center", borderBottom: i < cascade.length - 1 ? `1px solid ${T.border}` : "none", gap: 10 }}>
                     <div style={{ fontSize: 13, fontWeight: "bold", color: T.textStrong }}>{p.name}</div>
                     <div style={{ textAlign: "center", fontSize: 14, fontWeight: "bold", fontFamily: "monospace", color: p.totalLevainCuveMatin === maxLevainVol ? T.accent : T.textDim }}>{p.totalLevainCuveMatin.toFixed(1)} hL</div>
@@ -4609,9 +4651,9 @@ function PlanificateurTirage() {
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                    <Select value={createLevainSourceId} onChange={e => setCreateLevainSourceId(e.target.value)} style={{ width: 180, fontSize: 12 }}>
+                    <Select value={createLevainSourceId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCreateLevainSourceId(e.target.value)} style={{ width: 180, fontSize: 12 }}>
                       <option value="">-- Pomper le vin depuis --</option>
-                      {cuvesVinBase.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
+                      {cuvesVinBase.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
                     </Select>
                     <Btn onClick={handleAutoCreateLevain} style={{ fontSize: 12, padding: "8px 16px" }} disabled={isSubmitting || !createLevainSourceId}>{isSubmitting ? "Création..." : "+ Créer le Levain"}</Btn>
                   </div>
@@ -4630,7 +4672,7 @@ function PlanificateurTirage() {
                   <div style={{ textAlign: "right" }}>Stock {config.tirageBouchage === "CAPSULE" ? "Bidules" : "Liège"}</div>
                   <div style={{ textAlign: "right" }}>Stock {config.tirageBouchage === "CAPSULE" ? "Capsules" : "Agrafes"}</div>
                 </div>
-                {cascade.map((p, i) => {
+                {cascade.map((p: any, i: number) => {
                   const isBtlLow = p.stockBouteilles < 0;
                   const isF1Low = p.stockF1 < 0;
                   const isF2Low = p.stockF2 < 0;
@@ -4658,22 +4700,22 @@ function PlanificateurTirage() {
             <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
               <div style={{ fontSize: 14, fontWeight: "bold", color: T.accentLight, marginBottom: 16 }}>1. Volumes (du Planning)</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <FF label="Volume Restant (hL)"><Input type="number" step="0.1" value={config.alimVolLevain} onChange={e=>updateConfig('alimVolLevain', e.target.value)} /></FF>
-                <FF label="Volume Visé (hL)"><Input type="number" step="0.1" value={config.alimVolFinal} onChange={e=>updateConfig('alimVolFinal', e.target.value)} /></FF>
+                <FF label="Volume Restant (hL)"><Input type="number" step="0.1" value={config.alimVolLevain} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimVolLevain', e.target.value)} /></FF>
+                <FF label="Volume Visé (hL)"><Input type="number" step="0.1" value={config.alimVolFinal} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimVolFinal', e.target.value)} /></FF>
               </div>
             </div>
             <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
               <div style={{ fontSize: 14, fontWeight: "bold", color: T.textStrong, marginBottom: 16 }}>2. Activité des Levures</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <FF label="Densité VEILLE (ex: 1006)"><Input type="number" value={config.alimDensiteVeille} onChange={e=>updateConfig('alimDensiteVeille', e.target.value)} /></FF>
-                <FF label="Densité CE MATIN (ex: 998)"><Input type="number" value={config.alimDensiteMatin} onChange={e=>updateConfig('alimDensiteMatin', e.target.value)} /></FF>
+                <FF label="Densité VEILLE (ex: 1006)"><Input type="number" value={config.alimDensiteVeille} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimDensiteVeille', e.target.value)} /></FF>
+                <FF label="Densité CE MATIN (ex: 998)"><Input type="number" value={config.alimDensiteMatin} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimDensiteMatin', e.target.value)} /></FF>
               </div>
             </div>
             <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
               <div style={{ fontSize: 14, fontWeight: "bold", color: T.textStrong, marginBottom: 16 }}>3. Intrants</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <FF label="Liqueur (g/L)"><Input type="number" value={config.alimLiqueurG} onChange={e=>updateConfig('alimLiqueurG', e.target.value)} /></FF>
-                <FF label="TAV Vin Nourricier (%)"><Input type="number" step="0.1" value={config.alimAlcVin} onChange={e=>updateConfig('alimAlcVin', e.target.value)} /></FF>
+                <FF label="Liqueur (g/L)"><Input type="number" value={config.alimLiqueurG} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimLiqueurG', e.target.value)} /></FF>
+                <FF label="TAV Vin Nourricier (%)"><Input type="number" step="0.1" value={config.alimAlcVin} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimAlcVin', e.target.value)} /></FF>
               </div>
             </div>
           </div>
@@ -4710,17 +4752,17 @@ function PlanificateurTirage() {
                   <div style={{ background: T.accent+"11", border: `1px solid ${T.accent}44`, padding: 20, borderRadius: 6, marginTop: 16 }}>
                     <div style={{ fontSize: 12, textTransform: "uppercase", color: T.accentLight, fontWeight: "bold", marginBottom: 12 }}>🔄 Exécuter l'alimentation</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-                      <Select value={alimSourceTankId} onChange={e => setAlimSourceTankId(e.target.value)} style={{ fontSize: 12 }}>
+                      <Select value={alimSourceTankId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAlimSourceTankId(e.target.value)} style={{ fontSize: 12 }}>
                         <option value="">-- Vin nourricier --</option>
-                        {cuvesVinBase.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
+                        {cuvesVinBase.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
                       </Select>
-                      <Select value={alimLevainTankId} onChange={e => {
+                      <Select value={alimLevainTankId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                           setAlimLevainTankId(e.target.value);
-                          const t = cuvesLevain.find(c => String(c.id) === String(e.target.value));
+                          const t = cuvesLevain.find((c: any) => String(c.id) === String(e.target.value));
                           if (t) updateConfig('alimVolLevain', t.currentVolume);
                       }} style={{ fontSize: 12 }}>
                         <option value="">-- Cuve à Levain --</option>
-                        {cuvesLevain.map(c => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
+                        {cuvesLevain.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
                       </Select>
                     </div>
                     <Btn onClick={handleValiderAlimentation} disabled={!alimSourceTankId || !alimLevainTankId} style={{ width: "100%", fontSize: 13 }}>Valider l'Alimentation</Btn>
@@ -4743,8 +4785,8 @@ function Assemblages() {
   const { user } = useAuth(); 
   const { state, dispatch, refreshData } = useStore();
   
-  const [selected, setSelected] = useState([]); 
-  const [volumes, setVolumes] = useState({});
+  const [selected, setSelected] = useState<any[]>([]); 
+  const [volumes, setVolumes] = useState<any>({});
   const [sim, setSim] = useState(false); 
   const [targetCuveId, setTargetCuveId] = useState("");
   const [showAddCuve, setShowAddCuve] = useState(false);
@@ -4757,13 +4799,13 @@ function Assemblages() {
   const CEPAGES_NOIRS = ["PN", "PM", "MEUNIER"];
 
   const availBulk = (state.lots || [])
-    .filter(l => l.currentVolume > 0 && l.status !== "TIRE" && l.status !== "ARCHIVE")
-    .map(l => ({ ...l, _type: 'bulk', code: l.businessCode || l.code, volume: l.currentVolume || l.volume, cepage: l.mainGrapeCode || l.cepage, millesime: l.year || l.millesime }));
+    .filter((l: any) => l.currentVolume > 0 && l.status !== "TIRE" && l.status !== "ARCHIVE")
+    .map((l: any) => ({ ...l, _type: 'bulk', code: l.businessCode || l.code, volume: l.currentVolume || l.volume, cepage: l.mainGrapeCode || l.cepage, millesime: l.year || l.millesime }));
     
   const availBottles = (state.bottleLots || [])
-    .filter(b => (b.currentBottleCount || b.currentCount) > 0 && b.status === "RESERVE")
-    .map(b => {
-      const src = (state.lots || []).find(l => l.id == b.sourceLotId);
+    .filter((b: any) => (b.currentBottleCount || b.currentCount) > 0 && b.status === "RESERVE")
+    .map((b: any) => {
+      const src = (state.lots || []).find((l: any) => l.id == b.sourceLotId);
       return { 
         ...b, _type: 'bottle', 
         code: b.businessCode || b.code,
@@ -4774,48 +4816,48 @@ function Assemblages() {
       };
     });
 
-  const availLots = [...availBulk, ...availBottles].sort((a,b) => a.code.localeCompare(b.code));
+  const availLots = [...availBulk, ...availBottles].sort((a: any, b: any) => a.code.localeCompare(b.code));
   
   const excludedTypes = ["CUVE_BOURBES", "CUVE_LIES", "CUVE_DEBOURBAGE", "COMPARTIMENT"];
-  const availCuves = (state.containers || []).filter(c => c.status === "VIDE" && !excludedTypes.includes(c.type) && c.status !== "ARCHIVÉE");
+  const availCuves = (state.containers || []).filter((c: any) => c.status === "VIDE" && !excludedTypes.includes(c.type) && c.status !== "ARCHIVÉE");
   
-  const toggle = lot => { 
+  const toggle = (lot: any) => { 
     setSim(false); 
-    setSelected(selected.find(s => s.id === lot.id) ? selected.filter(s => s.id !== lot.id) : [...selected, lot]); 
+    setSelected(selected.find((s: any) => s.id === lot.id) ? selected.filter((s: any) => s.id !== lot.id) : [...selected, lot]); 
   };
   
-  const totalVol = selected.reduce((s, l) => {
+  const totalVol = selected.reduce((s: any, l: any) => {
     const rawVal = parseFloat(volumes[l.id]) || 0;
-    if (l._type === 'bottle') return s + (rawVal * (fmtHL[l.format] || 0.0075));
+    if (l._type === 'bottle') return s + (rawVal * (fmtHL[l.format as keyof typeof fmtHL] || 0.0075));
     return s + rawVal;
   }, 0);
 
-  const validCuves = availCuves.filter(c => (c.capacityValue || c.capacity) >= totalVol);
+  const validCuves = availCuves.filter((c: any) => (c.capacityValue || c.capacity) >= totalVol);
   
-  const cmap = {}; 
-  selected.forEach(l => { 
+  const cmap: any = {}; 
+  selected.forEach((l: any) => { 
     const rawVal = parseFloat(volumes[l.id]) || 0;
-    const volHl = l._type === 'bottle' ? rawVal * (fmtHL[l.format] || 0.0075) : rawVal;
+    const volHl = l._type === 'bottle' ? rawVal * (fmtHL[l.format as keyof typeof fmtHL] || 0.0075) : rawVal;
     if (totalVol > 0) cmap[l.cepage] = (cmap[l.cepage] || 0) + (volHl / totalVol * 100); 
   });
 
-  const isBdB = Object.keys(cmap).length > 0 && Object.keys(cmap).every(c => CEPAGES_BLANCS.includes(c.toUpperCase()));
-  const isBdN = Object.keys(cmap).length > 0 && Object.keys(cmap).every(c => CEPAGES_NOIRS.includes(c.toUpperCase()));
+  const isBdB = Object.keys(cmap).length > 0 && Object.keys(cmap).every((c: any) => CEPAGES_BLANCS.includes(c.toUpperCase()));
+  const isBdN = Object.keys(cmap).length > 0 && Object.keys(cmap).every((c: any) => CEPAGES_NOIRS.includes(c.toUpperCase()));
   
-  const uniqueYears = [...new Set(selected.map(l => l.millesime?.toString()))].filter(y => y && y !== "--" && y !== "SA" && y !== "NV");
-  const isMillesime = uniqueYears.length === 1 && selected.length > 0 && selected.every(l => l.millesime?.toString() === uniqueYears[0]);
+  const uniqueYears = [...new Set(selected.map((l: any) => l.millesime?.toString()))].filter((y: any) => y && y !== "--" && y !== "SA" && y !== "NV");
+  const isMillesime = uniqueYears.length === 1 && selected.length > 0 && selected.every((l: any) => l.millesime?.toString() === uniqueYears[0]);
   const anneeMillesime = isMillesime ? uniqueYears[0] : null;
 
   let warning80 = null;
   if (isMillesime && anneeMillesime) {
-    const kgYear = (state.pressings || []).filter(p => p.date?.startsWith(anneeMillesime)).reduce((s, p) => s + (parseFloat(p.weight)||0), 0);
+    const kgYear = (state.pressings || []).filter((p: any) => p.date?.startsWith(anneeMillesime)).reduce((s: any, p: any) => s + (parseFloat(p.weight)||0), 0);
     const volTotalYear = (kgYear / 4000) * 25.5;
 
     let volDejaTire = 0;
-    (state.bottleLots || []).forEach(b => {
-       const src = (state.lots || []).find(l => l.id == b.sourceLotId);
+    (state.bottleLots || []).forEach((b: any) => {
+       const src = (state.lots || []).find((l: any) => l.id == b.sourceLotId);
        if (src && String(src.year || src.millesime) === String(anneeMillesime)) {
-           volDejaTire += (b.initialBottleCount || b.initialCount || b.currentBottleCount) * (fmtHL[b.formatCode || b.format] || 0.0075); 
+           volDejaTire += (b.initialBottleCount || b.initialCount || b.currentBottleCount) * (fmtHL[(b.formatCode || b.format) as keyof typeof fmtHL] || 0.0075); 
        }
     });
 
@@ -4834,11 +4876,11 @@ function Assemblages() {
   if (isMillesime) suffix += `-M${anneeMillesime}`;
 
   const proposedCode = `${new Date().getFullYear()}-${baseCepage}-ASSEM-${String((state.lots || []).length+1).padStart(3,"0")}${suffix}`;
-  const compoDetails = Object.entries(cmap).map(([c,p]) => `${c} ${p.toFixed(1)}%`).join(" / ") + " | Sources: " + selected.map(l => l.code).join(", ");
+  const compoDetails = Object.entries(cmap).map(([c,p]: any) => `${c} ${p.toFixed(1)}%`).join(" / ") + " | Sources: " + selected.map((l: any) => l.code).join(", ");
 
   const submitAssemblage = async () => {
-    const sourceLotsData = selected.filter(l => l._type === 'bulk').map(l => ({ id: l.id, volumeUsed: parseFloat(volumes[l.id]) || 0 })).filter(s => s.volumeUsed > 0);
-    const sourceBottlesData = selected.filter(l => l._type === 'bottle').map(l => ({ id: l.id, countUsed: parseInt(volumes[l.id]) || 0, format: l.format })).filter(s => s.countUsed > 0);
+    const sourceLotsData = selected.filter((l: any) => l._type === 'bulk').map((l: any) => ({ id: l.id, volumeUsed: parseFloat(volumes[l.id]) || 0 })).filter((s: any) => s.volumeUsed > 0);
+    const sourceBottlesData = selected.filter((l: any) => l._type === 'bottle').map((l: any) => ({ id: l.id, countUsed: parseInt(volumes[l.id]) || 0, format: l.format })).filter((s: any) => s.countUsed > 0);
     
     const finalMillesime = isMillesime ? parseInt(anneeMillesime) : "SA";
     setIsSubmitting(true);
@@ -4846,7 +4888,6 @@ function Assemblages() {
     try {
       const res = await fetch('/api/lots/assemblage', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           code: proposedCode, millesime: finalMillesime, cepage: baseCepage, 
@@ -4862,7 +4903,7 @@ function Assemblages() {
       setSim(false); setVolumes({}); setSelected([]);
       setIdempotencyKey(crypto.randomUUID());
       if (refreshData) await refreshData();
-    } catch(e) {
+    } catch(e: any) {
       alert(e.message);
     } finally {
       setIsSubmitting(false);
@@ -4877,9 +4918,9 @@ function Assemblages() {
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 340px", gap:16 }}>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:4, padding:20 }}>
           <div style={{ fontSize:11, textTransform:"uppercase", color:T.textDim, marginBottom:16, letterSpacing:1 }}>Lots disponibles</div>
-          {availLots.map(l => {
+          {availLots.map((l: any) => {
             const isBot = l._type === 'bottle';
-            const isSel = selected.find(s=>s.id===l.id);
+            const isSel = selected.find((s: any)=>s.id===l.id);
             return (
               <div key={l.id} onClick={() => { if(!isSubmitting) toggle(l); }} style={{ padding:"12px 14px", marginBottom:8, borderRadius:3, cursor: isSubmitting ? "default" : "pointer", background: isSel ? T.accent+"22":T.surfaceHigh, border:`1px solid ${isSel ? T.accent : T.border}` }}>
                 <div style={{ display:"flex", justifyContent:"space-between" }}>
@@ -4898,11 +4939,11 @@ function Assemblages() {
           <div style={{ fontSize:11, textTransform:"uppercase", color:T.textDim, marginBottom:16, letterSpacing:1 }}>Volumes prélevés</div>
           {selected.length === 0 && <div style={{ color:T.textDim, fontSize:12, fontStyle:"italic" }}>Sélectionnez des lots à gauche.</div>}
           
-          {selected.map(l => {
+          {selected.map((l: any) => {
             const isBot = l._type === 'bottle';
             const maxVal = l.volume;
             const inputVal = volumes[l.id] || "";
-            const computedHl = isBot && inputVal ? (parseInt(inputVal) * (fmtHL[l.format] || 0)).toFixed(2) : null;
+            const computedHl = isBot && inputVal ? (parseInt(inputVal) * (fmtHL[l.format as keyof typeof fmtHL] || 0)) : 0;
 
             return (
               <div key={l.id} style={{ marginBottom:14 }}>
@@ -4912,14 +4953,14 @@ function Assemblages() {
                     type="number" step={isBot ? "1" : "0.1"} 
                     placeholder={isBot ? "Nbr de bouteilles" : "Volume hL"}
                     value={inputVal} disabled={isSubmitting}
-                    onChange={e => { setSim(false); setVolumes({...volumes,[l.id]:e.target.value}); }} 
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setSim(false); setVolumes({...volumes,[l.id]:e.target.value}); }} 
                     style={{ flex:1 }} 
                   />
                   <Btn variant="secondary" onClick={() => { setSim(false); setVolumes({...volumes, [l.id]: maxVal}) }} disabled={isSubmitting}>MAX</Btn>
                 </div>
                 {isBot && computedHl > 0 && (
                   <div style={{ fontSize:10, color:T.textDim, marginTop:4, textAlign:"right" }}>
-                    ↳ Équivaut à <span style={{color:T.textStrong, fontWeight:"bold"}}>{computedHl} hL</span>
+                    ↳ Équivaut à <span style={{color:T.textStrong, fontWeight:"bold"}}>{computedHl.toFixed(2)} hL</span>
                   </div>
                 )}
               </div>
@@ -4955,9 +4996,9 @@ function Assemblages() {
               {validCuves.length > 0 ? (
                 <FF label="Cuve de réception">
                   <div style={{ display: "flex", gap: 8 }}>
-                    <Select value={targetCuveId} onChange={e => setTargetCuveId(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }}>
+                    <Select value={targetCuveId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTargetCuveId(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }}>
                       <option value="">-- Choisir --</option>
-                      {validCuves.map(c => (<option key={c.id} value={c.id}>{c.displayName || c.name} (Capacité: {c.capacityValue || c.capacity} hL)</option>))}
+                      {validCuves.map((c: any) => (<option key={c.id} value={c.id}>{c.displayName || c.name} (Capacité: {c.capacityValue || c.capacity} hL)</option>))}
                     </Select>
                   </div>
                 </FF>
@@ -4967,7 +5008,7 @@ function Assemblages() {
                 </div>
               )}
               
-              <Btn onClick={submitAssemblage} disabled={isSubmitting || !targetCuveId || totalVol <= 0 || !validCuves.find(c => String(c.id) === String(targetCuveId))} style={{ width:"100%", marginTop:10 }}>
+              <Btn onClick={submitAssemblage} disabled={isSubmitting || !targetCuveId || totalVol <= 0 || !validCuves.find((c: any) => String(c.id) === String(targetCuveId))} style={{ width:"100%", marginTop:10 }}>
                 {isSubmitting ? "Enregistrement base..." : "Valider l'assemblage"}
               </Btn>
             </>
@@ -4981,7 +5022,7 @@ function Assemblages() {
 // =============================================================================
 // LOT DETAIL (Composant Principal pour Fiche Lot)
 // =============================================================================
-function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
+function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack: any; onSelectLot: any }) {
   const T = useTheme(); 
   const { user } = useAuth(); 
   const { state, dispatch, refreshData } = useStore();
@@ -4996,20 +5037,20 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   // Helper local :
-  const formatVolShort = (vol) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
-  const formatStatus = (s) => s ? s.replace(/_/g, ' ') : "INCONNU";
+  const formatVolShort = (vol: any) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
+  const formatStatus = (s: any) => s ? s.replace(/_/g, ' ') : "INCONNU";
 
   const isBottle = 'formatCode' in initialLot || 'format' in initialLot || 'initialCount' in initialLot || 'initialBottleCount' in initialLot;
   const lot = isBottle 
-    ? ((state.bottleLots || []).find(b => b.id === initialLot.id) || initialLot)
-    : ((state.lots || []).find(l => l.id === initialLot.id) || initialLot);
+    ? ((state.bottleLots || []).find((b: any) => b.id === initialLot.id) || initialLot)
+    : ((state.lots || []).find((l: any) => l.id === initialLot.id) || initialLot);
 
   const unifiedLots = [
-    ...(state.lots || []).map(l => ({ ...l, _type: 'bulk', code: l.businessCode || l.code })),
-    ...(state.bottleLots || []).map(b => ({ ...b, _type: 'bottle', code: b.businessCode || b.code }))
-  ].sort((a, b) => a.code.localeCompare(b.code));
+    ...(state.lots || []).map((l: any) => ({ ...l, _type: 'bulk', code: l.businessCode || l.code })),
+    ...(state.bottleLots || []).map((b: any) => ({ ...b, _type: 'bottle', code: b.businessCode || b.code }))
+  ].sort((a: any, b: any) => a.code.localeCompare(b.code));
 
-  const currentIndex = unifiedLots.findIndex(l => l.id === lot.id && l._type === (isBottle ? 'bottle' : 'bulk'));
+  const currentIndex = unifiedLots.findIndex((l: any) => l.id === lot.id && l._type === (isBottle ? 'bottle' : 'bulk'));
   const prevLot = currentIndex > 0 ? unifiedLots[currentIndex - 1] : null;
   const nextLot = currentIndex < unifiedLots.length - 1 ? unifiedLots[currentIndex + 1] : null;
 
@@ -5025,8 +5066,8 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
             onClick={() => prevLot && onSelectLot(prevLot)} 
             disabled={!prevLot}
             style={{ background:"none", border:`1px solid ${T.border}`, color: prevLot ? T.textStrong : T.textDim, padding:"6px 14px", borderRadius:3, cursor: prevLot ? "pointer" : "default", fontSize:11, fontFamily:"monospace", opacity: prevLot ? 1 : 0.3, transition: "all 0.2s" }}
-            onMouseEnter={e => prevLot && (e.currentTarget.style.background = T.surfaceHigh)}
-            onMouseLeave={e => prevLot && (e.currentTarget.style.background = "none")}
+            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => prevLot && (e.currentTarget.style.background = T.surfaceHigh)}
+            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => prevLot && (e.currentTarget.style.background = "none")}
           >
             {"< Précédent"}
           </button>
@@ -5034,8 +5075,8 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
             onClick={() => nextLot && onSelectLot(nextLot)} 
             disabled={!nextLot}
             style={{ background:"none", border:`1px solid ${T.border}`, color: nextLot ? T.textStrong : T.textDim, padding:"6px 14px", borderRadius:3, cursor: nextLot ? "pointer" : "default", fontSize:11, fontFamily:"monospace", opacity: nextLot ? 1 : 0.3, transition: "all 0.2s" }}
-            onMouseEnter={e => nextLot && (e.currentTarget.style.background = T.surfaceHigh)}
-            onMouseLeave={e => nextLot && (e.currentTarget.style.background = "none")}
+            onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => nextLot && (e.currentTarget.style.background = T.surfaceHigh)}
+            onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => nextLot && (e.currentTarget.style.background = "none")}
           >
             {"Suivant >"}
           </button>
@@ -5044,12 +5085,12 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
     </div>
   );
 
-  const sourceLot = isBottle ? (state.lots || []).find(l => l.id == lot.sourceLotId) : null;
-  const container = !isBottle ? (state.containers || []).find(c => c.id === (lot.currentContainerId || lot.containerId)) : null;
+  const sourceLot = isBottle ? (state.lots || []).find((l: any) => l.id == lot.sourceLotId) : null;
+  const container = !isBottle ? (state.containers || []).find((c: any) => c.id === (lot.currentContainerId || lot.containerId)) : null;
 
   const lotAnalyses = (isBottle && sourceLot)
-    ? (state.analyses || []).filter(a => a.lotId === sourceLot.id).sort((a,b) => new Date(b.analysisDate).getTime() - new Date(a.analysisDate).getTime())
-    : (state.analyses || []).filter(a => a.lotId === lot.id).sort((a,b) => new Date(b.analysisDate).getTime() - new Date(a.analysisDate).getTime());
+    ? (state.analyses || []).filter((a: any) => a.lotId === sourceLot.id).sort((a: any,b: any) => new Date(b.analysisDate).getTime() - new Date(a.analysisDate).getTime())
+    : (state.analyses || []).filter((a: any) => a.lotId === lot.id).sort((a: any,b: any) => new Date(b.analysisDate).getTime() - new Date(a.analysisDate).getTime());
 
   let displayRecette = "--";
   let sourceCodes = [];
@@ -5059,16 +5100,16 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
     if (notesToParse.includes("Sources:")) {
       const parts = notesToParse.split("Sources:");
       displayRecette = parts[0].replace("|", "").trim(); 
-      sourceCodes = parts[1].split(",").map(c => c.trim());
+      sourceCodes = parts[1].split(",").map((c: any) => c.trim());
     } else {
       displayRecette = notesToParse;
     }
   }
 
-  const getAgingMonths = (dateStr) => {
+  const getAgingMonths = (dateStr: any) => {
     if (!dateStr) return 0;
     const tirageDate = new Date(dateStr);
-    const diffTime = Math.abs(new Date() - tirageDate);
+    const diffTime = Math.abs(new Date().getTime() - tirageDate.getTime());
     return Math.floor(diffTime / (1000 * 60 * 60 * 24 * 30.44));
   };
 
@@ -5114,7 +5155,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
           <table>
             <thead><tr><th>Date</th><th>pH</th><th>AT (g/L)</th><th>SO2 Libre (mg/L)</th><th>Alcool (% vol)</th></tr></thead>
             <tbody>
-              ${lotAnalyses.length > 0 ? lotAnalyses.map(a => `<tr><td>${new Date(a.analysisDate).toLocaleDateString('fr-FR')}</td><td>${a.ph||'--'}</td><td>${a.at||'--'}</td><td>${a.so2Free||'--'}</td><td>${a.alcohol||'--'}</td></tr>`).join('') : `<tr><td colspan="5" style="text-align:center; font-style:italic;">Aucune analyse enregistrée</td></tr>`}
+              ${lotAnalyses.length > 0 ? lotAnalyses.map((a: any) => `<tr><td>${new Date(a.analysisDate).toLocaleDateString('fr-FR')}</td><td>${a.ph||'--'}</td><td>${a.at||'--'}</td><td>${a.so2Free||'--'}</td><td>${a.alcohol||'--'}</td></tr>`).join('') : `<tr><td colspan="5" style="text-align:center; font-style:italic;">Aucune analyse enregistrée</td></tr>`}
             </tbody>
           </table>
           
@@ -5123,6 +5164,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
       </html>
     `;
     const printWindow = window.open('', '_blank', 'width=900,height=800');
+    if (!printWindow) return;
     printWindow.document.write(html);
     printWindow.document.close();
   };
@@ -5158,10 +5200,10 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
               {!isDeadBottle && (
                 <>
                   {["DEGORGE", "EN_CAVE"].includes(lot.status) && (
-                    <Btn variant="primary" onClick={() => setModal("habiller")} style={{ background: "#9960aa", borderColor: "#9960aa", color: "#fff" }}>👗 Habiller</Btn>
+                    <Btn variant="primary" onClick={() => setModal("habiller" as any)} style={{ background: "#9960aa", borderColor: "#9960aa", color: "#fff" }}>👗 Habiller</Btn>
                   )}
                   {lot.status === "PRET_EXPEDITION" && (
-                     <Btn variant="primary" onClick={() => setModal("expedier")}>📦 Expédier</Btn>
+                     <Btn variant="primary" onClick={() => setModal("expedier" as any)}>📦 Expédier</Btn>
                   )}
                 </>
               )}
@@ -5175,7 +5217,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
               ["Date Tirage", lot.tirageDate ? new Date(lot.tirageDate).toLocaleDateString('fr-FR') : "--"],
               ["Sur Lattes", lot.tirageDate ? `${ageMois} mois` : "--"], 
               ["Recette Base", displayRecette]
-            ].map(([k,v]) => (
+            ].map(([k,v]: any) => (
               <div key={k} style={{gridColumn: k==="Recette Base"?"span 2":"span 1"}}>
                 <div style={{ fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>{k}</div>
                 <div style={{ fontSize:14, color: isDeadBottle ? T.textDim : T.textStrong, fontFamily:"monospace", fontWeight: k==="Sur Lattes" && ageMois>=15 ? "bold" : "normal" }}>
@@ -5200,8 +5242,8 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
                    <div 
                       onClick={() => onSelectLot(sourceLot)}
                       style={{ background: T.surfaceHigh, border:`1px solid ${T.border}`, borderRadius:4, padding:"12px 16px", cursor:"pointer", display:"inline-flex", flexDirection:"column", gap:4, minWidth:200 }}
-                      onMouseEnter={e => (e.currentTarget.style.transform = "translateY(-2px)", e.currentTarget.style.borderColor = T.accent)}
-                      onMouseLeave={e => (e.currentTarget.style.transform = "none", e.currentTarget.style.borderColor = T.border)}
+                      onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => (e.currentTarget.style.transform = "translateY(-2px)", e.currentTarget.style.borderColor = T.accent)}
+                      onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => (e.currentTarget.style.transform = "none", e.currentTarget.style.borderColor = T.border)}
                     >
                       <div style={{ fontSize:10, color:T.textDim }}>Tiré à partir du lot :</div>
                       <div style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, textDecoration: "underline" }}>{sourceLot.businessCode || sourceLot.code}</div>
@@ -5223,8 +5265,8 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
   // =========================================================
   // RENDU POUR LE VRAC (CUVES / ASSEMBLAGES)
   // =========================================================
-  const lotEvents  = (state.events || []).filter(e => e.lotId === lot.id).sort((a,b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
-  const lotFas     = (state.faReadings || []).filter(f => f.lotId === parseInt(lot.id));
+  const lotEvents  = (state.events || []).filter((e: any) => e.lotId === lot.id).sort((a: any,b: any) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime());
+  const lotFas     = (state.faReadings || []).filter((f: any) => f.lotId === parseInt(lot.id));
   const bulkVol    = lot.currentVolume || lot.volume || 0;
   const isDeadBulk = bulkVol <= 0 || ["ASSEMBLE", "TIRE", "ARCHIVE"].includes(lot.status);
 
@@ -5234,7 +5276,6 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
     try {
       const res = await fetch('/api/lots/statuts', { 
         method: 'POST', 
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         // 👈 INJECTION DE LA CLÉ ICI :
         body: JSON.stringify({ lotId: lot.id, newStatus: statusForm.status, operator: user.name, note: statusForm.note, idempotencyKey }) 
@@ -5246,7 +5287,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }) {
       setModal(null); 
       if (refreshData) await refreshData(); 
       
-    } catch(e) {
+    } catch(e: any) {
       alert("Erreur : " + e.message);
       setIdempotencyKey(crypto.randomUUID()); // 👈 NOUVELLE CLÉ GÉNÉRÉE EN CAS D'ERREUR
     } finally { 
@@ -5291,7 +5332,6 @@ const submitTirage = async () => {
     // 4. Appel à l'API blindée
     const res = await fetch('/api/tirage', { 
       method: 'POST', 
-      headers: buildApiHeaders(user), 
       headers: buildApiHeaders(user), 
       body: JSON.stringify(payload) 
     });
@@ -5350,8 +5390,8 @@ const submitTirage = async () => {
             
             {!isDeadBulk && (
               <>
-                <Btn variant="secondary" onClick={() => { setStatusForm({ status: lot.status, note: "" }); setModal("status"); }}>Modifier Statut</Btn>
-                <Btn variant="ghost" onClick={() => setModal("tirage")} disabled={!["VIN_DE_BASE", "ASSEMBLAGE", "RESERVE", "VIN_ROUGE"].includes(lot.status)}>
+                <Btn variant="secondary" onClick={() => { setStatusForm({ status: lot.status, note: "" }); setModal("status" as any); }}>Modifier Statut</Btn>
+                <Btn variant="ghost" onClick={() => setModal("tirage" as any)} disabled={!["VIN_DE_BASE", "ASSEMBLAGE", "RESERVE", "VIN_ROUGE"].includes(lot.status)}>
                   Tirer / Mettre en bouteille
                 </Btn>
               </>
@@ -5365,7 +5405,7 @@ const submitTirage = async () => {
             ["Contenant", container ? (container.displayName || container.name) : "--"], 
             ["Statut", formatStatus(lot.status)], 
             ["Recette", displayRecette]
-          ].map(([k,v]) => (
+          ].map(([k,v]: any) => (
             <div key={k} style={{gridColumn: k==="Recette"?"span 2":"span 1"}}>
               <div style={{ fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1, marginBottom:4 }}>{k}</div>
               <div style={{ fontSize:14, color: isDeadBulk ? T.textDim : T.textStrong, fontFamily:"monospace" }}>{v}</div>
@@ -5378,14 +5418,14 @@ const submitTirage = async () => {
         <div style={{ fontSize:11, textTransform:"uppercase", letterSpacing:2, color:T.textDim, marginBottom:14 }}>Généalogie & Origines 🧬</div>
         {sourceCodes.length > 0 ? (
           <div style={{ display:"flex", gap:10, flexWrap:"wrap" }}>
-            {sourceCodes.map(code => {
-              const sLot = (state.lots || []).find(l => (l.businessCode || l.code) === code);
+            {sourceCodes.map((code: any) => {
+              const sLot = (state.lots || []).find((l: any) => (l.businessCode || l.code) === code);
               return (
                 <div 
                   key={code} onClick={() => sLot && onSelectLot && onSelectLot(sLot)}
                   style={{ background: T.surfaceHigh, border:`1px solid ${T.border}`, borderRadius:4, padding:"12px 16px", cursor: sLot ? "pointer" : "default", transition:"all 0.15s", display:"flex", flexDirection:"column", gap:4, minWidth:200 }}
-                  onMouseEnter={e => sLot && (e.currentTarget.style.transform = "translateY(-2px)", e.currentTarget.style.borderColor = T.accent)}
-                  onMouseLeave={e => sLot && (e.currentTarget.style.transform = "none", e.currentTarget.style.borderColor = T.border)}
+                  onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => sLot && (e.currentTarget.style.transform = "translateY(-2px)", e.currentTarget.style.borderColor = T.accent)}
+                  onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => sLot && (e.currentTarget.style.transform = "none", e.currentTarget.style.borderColor = T.border)}
                 >
                   <div style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, textDecoration: sLot ? "underline" : "none" }}>{code}</div>
                   <div style={{ fontSize:11, color:T.textDim }}>{sLot ? `Vol actuel: ${formatVolShort(sLot.currentVolume || sLot.volume)}` : "Lot non disponible"}</div>
@@ -5403,7 +5443,7 @@ const submitTirage = async () => {
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:4, padding:20 }}>
           <div style={{ fontSize:11, textTransform:"uppercase", letterSpacing:2, color:T.textDim, marginBottom:14 }}>Timeline</div>
-          {lotEvents.map((e, i) => (
+          {lotEvents.map((e: any, i: any) => (
             <div key={e.id} style={{ display:"flex", gap:12, padding:"12px 0", borderBottom: i < lotEvents.length-1 ? `1px solid ${T.border}` : "none" }}>
               <div>
                 <div style={{ width:8, height:8, borderRadius:"50%", background:T.accent, marginTop:4 }} />
@@ -5429,13 +5469,13 @@ const submitTirage = async () => {
             
             {rightTab === "analyses" && (
               <div style={{ padding: 20 }}>
-                {lotAnalyses.length === 0 ? <div style={{ color:T.textDim, fontSize:12, fontStyle:"italic" }}>Aucune analyse</div> : lotAnalyses.map(a => <div key={a.id} style={{paddingBottom:8, marginBottom:8, borderBottom:`1px solid ${T.border}`}}><span style={{fontFamily:"monospace", color:T.textDim, fontSize:11}}>{new Date(a.analysisDate || a.date).toLocaleDateString('fr-FR')}</span> - <span style={{color:T.textStrong}}>pH {a.ph}</span></div>)}
+                {lotAnalyses.length === 0 ? <div style={{ color:T.textDim, fontSize:12, fontStyle:"italic" }}>Aucune analyse</div> : lotAnalyses.map((a: any) => <div key={a.id} style={{paddingBottom:8, marginBottom:8, borderBottom:`1px solid ${T.border}`}}><span style={{fontFamily:"monospace", color:T.textDim, fontSize:11}}>{new Date(a.analysisDate || a.date).toLocaleDateString('fr-FR')}</span> - <span style={{color:T.textStrong}}>pH {a.ph}</span></div>)}
               </div>
             )}
             
             {rightTab === "fa" && (
               <div style={{ padding: 20 }}>
-                <FaChartContainer data={lotFas} />
+                <div style={{ color:T.textDim, fontSize:12, fontStyle:"italic" }}>Graphique FA indisponible ({lotFas.length} relevés).</div>
               </div>
             )}
           </div>
@@ -5445,8 +5485,8 @@ const submitTirage = async () => {
       {modal === "status" && (
         <Modal title="Changer statut" onClose={() => setModal(null)}>
           <FF label="Nouveau statut">
-            <Select value={statusForm.status} onChange={e => setStatusForm({ ...statusForm, status: e.target.value })} disabled={isSubmitting}>
-              {LOT_STATUSES.map(s => <option key={s} value={s}>{formatStatus(s)}</option>)}
+            <Select value={statusForm.status} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStatusForm({ ...statusForm, status: e.target.value })} disabled={isSubmitting}>
+              {LOT_STATUSES.map((s: any) => <option key={s} value={s}>{formatStatus(s)}</option>)}
             </Select>
           </FF>
           <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
@@ -5469,7 +5509,7 @@ const submitTirage = async () => {
             
             <div style={{ marginBottom: 20, borderBottom:`1px solid ${T.border}`, paddingBottom: 16 }}>
               <FF label="Type de mise en bouteille">
-                <Select value={tirageForm.typeMise} onChange={e=>setTirageForm({...tirageForm, typeMise:e.target.value})} disabled={isSubmitting} style={{ fontWeight:"bold", color: isTranquille ? "#8b1c31" : T.accent }}>
+                <Select value={tirageForm.typeMise} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setTirageForm({...tirageForm, typeMise:e.target.value})} disabled={isSubmitting} style={{ fontWeight:"bold", color: isTranquille ? "#8b1c31" : T.accent }}>
                   <option value="EFFERVESCENT">Prise de mousse (Champagne)</option>
                   <option value="TRANQUILLE">Vin Tranquille (Coteaux / Rouge)</option>
                 </Select>
@@ -5492,29 +5532,29 @@ const submitTirage = async () => {
 
             <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
               <FF label="Format">
-                <Select value={tirageForm.format} onChange={e => setTirageForm({...tirageForm, format:e.target.value})} disabled={isSubmitting}>
-                  {["37.5cl","75cl","150cl"].map(f => <option key={f}>{f}</option>)}
+                <Select value={tirageForm.format} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTirageForm({...tirageForm, format:e.target.value})} disabled={isSubmitting}>
+                  {["37.5cl","75cl","150cl"].map((f: any) => <option key={f}>{f}</option>)}
                 </Select>
               </FF>
               <FF label={`Volume hL (Max ${bulkVol})`}>
-                <Input type="number" step="0.1" value={tirageForm.volume} onChange={e => setTirageForm({...tirageForm, volume:e.target.value})} disabled={isSubmitting} />
+                <Input type="number" step="0.1" value={tirageForm.volume} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageForm({...tirageForm, volume:e.target.value})} disabled={isSubmitting} />
               </FF>
             </div>
 
             <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12, marginTop: 8 }}>
               <FF label="Type de bouchage">
-                <Select value={tirageForm.bouchage} onChange={e => setTirageForm({...tirageForm, bouchage:e.target.value})} disabled={isSubmitting}>
+                <Select value={tirageForm.bouchage} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTirageForm({...tirageForm, bouchage:e.target.value})} disabled={isSubmitting}>
                   {!isTranquille && <option value="Capsule">Capsule</option>}
                   <option value="Liège">Liège</option>
                 </Select>
               </FF>
               <FF label="Modèle (Marque - Réf)">
-                <Input value={tirageForm.modeleBouchage} onChange={e => setTirageForm({...tirageForm, modeleBouchage:e.target.value})} disabled={isSubmitting} placeholder="Ex: Trescases - 29x29" />
+                <Input value={tirageForm.modeleBouchage} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageForm({...tirageForm, modeleBouchage:e.target.value})} disabled={isSubmitting} placeholder="Ex: Trescases - 29x29" />
               </FF>
             </div>
 
             <FF label="Notes (Optionnel)">
-              <Input value={tirageForm.note} onChange={e => setTirageForm({...tirageForm, note:e.target.value})} disabled={isSubmitting} placeholder="Ex: Ajout de levures spécifiques..." />
+              <Input value={tirageForm.note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageForm({...tirageForm, note:e.target.value})} disabled={isSubmitting} placeholder="Ex: Ajout de levures spécifiques..." />
             </FF>
 
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
@@ -5533,7 +5573,7 @@ const submitTirage = async () => {
 // =============================================================================
 // EXPÉDITIONS & DISTILLERIE (100% BACKEND AUTHORITY)
 // =============================================================================
-function Expeditions({ onSelectLot }) {
+function Expeditions({ onSelectLot }: { onSelectLot: any }) {
   const T = useTheme(); 
   const { user } = useAuth();
   const { state, dispatch, refreshData } = useStore();
@@ -5549,15 +5589,15 @@ function Expeditions({ onSelectLot }) {
   // --- LOGIQUE MÉTIER ---
   // On filtre les expéditions depuis les événements du store (chargés via fetchAll)
   const expeditionsBouteilles = (state.events || [])
-    .filter(e => e.type === "EXPEDITION")
-    .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .filter((e: any) => e.type === "EXPEDITION")
+    .sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
   const expeditionsDistillerie = (state.events || [])
-    .filter(e => e.type === "DISTILLERIE" || (e.type === "PERTE" && e.note?.includes("[DISTILLERIE]")))
-    .sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    .filter((e: any) => e.type === "DISTILLERIE" || (e.type === "PERTE" && e.note?.includes("[DISTILLERIE]")))
+    .sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const citernesEtComps = (state.containers || []).filter(c => c.type === "CITERNE" || c.type === "COMPARTIMENT");
-  const vracLots = (state.lots || []).filter(l => citernesEtComps.some(c => String(c.id) === String(l.currentContainerId)));
+  const citernesEtComps = (state.containers || []).filter((c: any) => c.type === "CITERNE" || c.type === "COMPARTIMENT");
+  const vracLots = (state.lots || []).filter((l: any) => citernesEtComps.some((c: any) => String(c.id) === String(l.currentContainerId)));
 
   // --- ACTION SÉCURISÉE ---
   const executeDelivery = async () => {
@@ -5568,7 +5608,6 @@ function Expeditions({ onSelectLot }) {
       // On met à jour le statut DIRECTEMENT en base de données
       const res = await fetch('/api/containers', { 
         method: 'PUT',
-        headers: buildApiHeaders(user), 
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           id: parseInt(confirmDeliveryId), 
@@ -5586,15 +5625,15 @@ function Expeditions({ onSelectLot }) {
       // On rafraîchit les données pour que tous les utilisateurs voient le changement
       if (refreshData) await refreshData();
 
-    } catch(e) { 
-      dispatch({ type: "TOAST_ADD", payload: { msg: e.message, color: T.red } });
+    } catch(e: any) { 
+      dispatch({ type: "TOAST_ADD", payload: { msg: e?.message || "Erreur serveur", color: T.red } });
     } finally {
       setIsValidatingDelivery(false);
       setConfirmDeliveryId(null);
     }
   };
 
-  const parseBottleNote = (note) => {
+  const parseBottleNote = (note: any) => {
     const match = note?.match(/(\d+)\s*btl/);
     const qty = match ? match[0] : "--";
     let details = note || "";
@@ -5623,10 +5662,10 @@ function Expeditions({ onSelectLot }) {
     const [search, setSearch] = useState("");
     const [filterStatus, setFilterStatus] = useState("TOUS");
 
-    const availLots = (state.lots || []).filter(l => l.currentVolume > 0 && l.status !== "TIRE" && l.status !== "ARCHIVE");
-    const selectedLot = availLots.find(l => String(l.id) === String(lotId));
+    const availLots = (state.lots || []).filter((l: any) => l.currentVolume > 0 && l.status !== "TIRE" && l.status !== "ARCHIVE");
+    const selectedLot = availLots.find((l: any) => String(l.id) === String(lotId));
 
-    const filteredLots = availLots.filter(l => {
+    const filteredLots = availLots.filter((l: any) => {
       if (search && !l.code.toLowerCase().includes(search.toLowerCase())) return false;
       if (filterStatus !== "TOUS") {
         if (filterStatus === "LIES" && l.status !== "LIES") return false;
@@ -5657,7 +5696,6 @@ function Expeditions({ onSelectLot }) {
         const res = await fetch('/api/pertes', {
           method: 'POST',
           headers: buildApiHeaders(user),
-          headers: buildApiHeaders(user),
           body: JSON.stringify(payload)
         });
 
@@ -5667,20 +5705,19 @@ function Expeditions({ onSelectLot }) {
 
         // Si on vide la cuve, on la passe en nettoyage (API Cuverie existante)
         if (volNum >= selectedLot.currentVolume && selectedLot.currentContainerId) {
-             await fetch('/api/containers', { 
-               method: 'PUT', 
-               headers: buildApiHeaders(user), 
-               headers: buildApiHeaders(user), 
-               body: JSON.stringify({ id: selectedLot.currentContainerId, status: 'NETTOYAGE' }) 
-             }).catch(()=>{});
+	             await fetch('/api/containers', { 
+	               method: 'PUT', 
+	               headers: buildApiHeaders(user), 
+	               body: JSON.stringify({ id: selectedLot.currentContainerId, status: 'NETTOYAGE' }) 
+	             }).catch(()=>{});
         }
 
         dispatch({ type: "TOAST_ADD", payload: { msg: "Envoi en distillerie enregistré et certifié !", color: T.accent } });
         if (refreshData) await refreshData();
         setModalDistillerie(false);
 
-      } catch(e) { 
-        alert(e.message); 
+      } catch(e: any) { 
+        alert(e?.message || "Erreur de sauvegarde."); 
         setIsSubmitting(false);
       }
     };
@@ -5696,8 +5733,8 @@ function Expeditions({ onSelectLot }) {
             <div style={{ fontSize: 11, color: T.textDim, textTransform: "uppercase", letterSpacing: 1 }}>Sélectionner le lot à expédier</div>
             
             <div style={{ display: "flex", gap: 8 }}>
-              <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher code..." style={{ flex: 1 }} autoFocus disabled={isSubmitting} />
-              <Select value={filterStatus} onChange={e => setFilterStatus(e.target.value)} style={{ width: 140 }} disabled={isSubmitting}>
+              <Input value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} placeholder="Rechercher code..." style={{ flex: 1 }} autoFocus disabled={isSubmitting} />
+              <Select value={filterStatus} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterStatus(e.target.value)} style={{ width: 140 }} disabled={isSubmitting}>
                 <option value="TOUS">Tous types</option>
                 <option value="LIES">Lies</option>
                 <option value="BOURBES">Bourbes</option>
@@ -5709,11 +5746,11 @@ function Expeditions({ onSelectLot }) {
             <div style={{ border: `1px solid ${T.border}`, borderRadius: 4, maxHeight: 220, overflowY: "auto", background: T.surfaceHigh }}>
               {filteredLots.length === 0 ? (
                 <div style={{ padding: 16, textAlign: "center", color: T.textDim, fontSize: 12 }}>Aucun lot trouvé.</div>
-              ) : filteredLots.map(l => (
+              ) : filteredLots.map((l: any) => (
                 <div 
                   key={l.id} onClick={() => { if(!isSubmitting){ setLotId(l.id); setVolume(l.currentVolume.toString()); } }} 
                   style={{ padding: "10px 14px", borderBottom: `1px solid ${T.border}`, cursor: isSubmitting ? "default" : "pointer", display: "flex", justifyContent: "space-between", alignItems: "center", transition: "background 0.2s" }} 
-                  onMouseEnter={e => { if(!isSubmitting) e.currentTarget.style.background = T.accent+"15" }} onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+                  onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => { if(!isSubmitting) e.currentTarget.style.background = T.accent+"15" }} onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = "transparent"}
                 >
                   <div>
                     <div style={{ fontSize: 13, color: T.accent, fontWeight: "bold", fontFamily: "monospace" }}>{l.code}</div>
@@ -5738,12 +5775,12 @@ function Expeditions({ onSelectLot }) {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <FF label={`Volume expédié (Max ${selectedLot.currentVolume} hL)`}>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <Input type="number" step="0.1" value={volume} onChange={e => setVolume(e.target.value)} disabled={isSubmitting} placeholder="0.0" style={{ flex: 1, fontWeight: "bold", color: parseFloat(volume) > selectedLot.currentVolume ? T.red : T.text }} />
+	                  <Input type="number" step="0.1" value={volume} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVolume(e.target.value)} disabled={isSubmitting} placeholder="0.0" style={{ flex: 1, fontWeight: "bold", color: parseFloat(volume) > selectedLot.currentVolume ? T.red : T.text }} />
                   <Btn variant="secondary" onClick={() => setVolume(selectedLot.currentVolume.toString())} disabled={isSubmitting}>MAX</Btn>
                 </div>
               </FF>
               <FF label="Motif légal">
-                <Select value={motif} onChange={e => setMotif(e.target.value)} disabled={isSubmitting}>
+	                <Select value={motif} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMotif(e.target.value)} disabled={isSubmitting}>
                   <option value="Lies">Lies</option>
                   <option value="Bourbes">Bourbes</option>
                   <option value="Rebêches">Rebêches</option>
@@ -5758,7 +5795,7 @@ function Expeditions({ onSelectLot }) {
         {selectedLot && (
            <div style={{ marginTop: 12 }}>
              <FF label="Détails (Transporteur, n° de bon...)">
-               <Input value={notes} onChange={e => setNotes(e.target.value)} disabled={isSubmitting} placeholder="Ex: Enlèvement par Distillerie X..." />
+	               <Input value={notes} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNotes(e.target.value)} disabled={isSubmitting} placeholder="Ex: Enlèvement par Distillerie X..." />
              </FF>
            </div>
         )}
@@ -5810,10 +5847,10 @@ function Expeditions({ onSelectLot }) {
           <>
             {expeditionsBouteilles.length === 0 ? (
               <div style={{ padding:"40px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucune expédition de bouteilles enregistrée.</div>
-            ) : expeditionsBouteilles.map((e, i) => {
-              const { qty, details } = parseBottleNote(e.comment || e.note);
-              const isDelivered = deliveredIds.includes(e.id);
-              const lotObj = (state.bottleLots || []).find(l => String(l.id) === String(e.lotId || e.bottleLotId));
+	            ) : expeditionsBouteilles.map((e: any, i: any) => {
+	              const { qty, details } = parseBottleNote(e.comment || e.note);
+	              const isDelivered = e.status === "LIVRE";
+	              const lotObj = (state.bottleLots || []).find((l: any) => String(l.id) === String(e.lotId || e.bottleLotId));
               
               return (
                 <div key={e.id} style={{ display:"grid", gridTemplateColumns:gridCols, gap:16, padding:"16px 16px", alignItems:"center", borderBottom: i<expeditionsBouteilles.length-1 ? `1px solid ${T.border}` : "none", textAlign: "center" }}>
@@ -5824,7 +5861,7 @@ function Expeditions({ onSelectLot }) {
                   <div style={{ fontSize:13, color:T.textStrong }}>{qty}</div>
                   <div style={{ fontSize:13, color:T.text }}>📦 {details}</div>
                   <div style={{ fontSize:12, color:T.textDim }}>{e.operator}</div>
-                  <div onClick={() => toggleDelivery(e.id)} style={{cursor:"pointer", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
+	                  <div onClick={() => setConfirmDeliveryId(e.id)} style={{cursor:"pointer", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
                     <Badge label={isDelivered ? "Livré ✅" : "En livraison 🚚"} color={isDelivered ? T.textDim : T.accent} />
                   </div>
                 </div>
@@ -5838,13 +5875,13 @@ function Expeditions({ onSelectLot }) {
           <>
             {expeditionsDistillerie.length === 0 ? (
               <div style={{ padding:"40px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucun envoi en distillerie enregistré.</div>
-            ) : expeditionsDistillerie.map((e, i) => {
-              const lotObj = (state.lots || []).find(l => String(l.id) === String(e.lotId));
+	            ) : expeditionsDistillerie.map((e: any, i: any) => {
+	              const lotObj = (state.lots || []).find((l: any) => String(l.id) === String(e.lotId));
               const noteText = e.comment || e.note || "";
               let cleanNote = noteText.replace(/\[DISTILLERIE\](\s*Motif:\s*)?/i, "");
               cleanNote = cleanNote.replace(/Perte\/Manquant de [\d.,]+\s*hL\.?\s*/i, "").trim();
               
-              const isDelivered = deliveredIds.includes(e.id);
+	              const isDelivered = e.status === "LIVRE";
               const fallbackVol = noteText.match(/(\d+(?:[.,]\d+)?)\s*(?:hL|btl)/i)?.[1] || 0;
               const displayVol = e.volumeChange ? Math.abs(e.volumeChange) : (e.volumeOut > 0 ? e.volumeOut : fallbackVol);
               
@@ -5857,7 +5894,7 @@ function Expeditions({ onSelectLot }) {
                   <div style={{ fontSize:14, color:T.red, fontWeight: "bold", fontFamily: "monospace" }}>{displayVol} hL</div>
                   <div style={{ fontSize:13, color:T.textStrong }}>🏭 {cleanNote}</div>
                   <div style={{ fontSize:12, color:T.textDim }}>{e.operator}</div>
-                  <div onClick={() => toggleDelivery(e.id)} style={{cursor:"pointer", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
+	                  <div onClick={() => setConfirmDeliveryId(e.id)} style={{cursor:"pointer", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
                     <Badge label={isDelivered ? "Livré ✅" : "En livraison 🚚"} color={isDelivered ? T.textDim : T.accent} />
                   </div>
                 </div>
@@ -5890,7 +5927,7 @@ function Expeditions({ onSelectLot }) {
 // =============================================================================
 // MODALE : AJOUTER UN NOUVEAU PRODUIT AU CATALOGUE (SÉCURISÉ)
 // =============================================================================
-function AddProductModal({ onClose }) {
+function AddProductModal({ onClose }: { onClose: any }) {
   const T = useTheme();
   const { dispatch, refreshData } = useStore();
   
@@ -5912,9 +5949,9 @@ function AddProductModal({ onClose }) {
     "Habillage": ["Coiffes", "Étiquettes", "Collerettes", "Autre"]
   };
 
-  const handleCategoryChange = (e) => {
+  const handleCategoryChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newCat = e.target.value;
-    setForm({ ...form, category: newCat, subCategory: CATEGORIES[newCat][0] });
+    setForm({ ...form, category: newCat, subCategory: CATEGORIES[newCat as keyof typeof CATEGORIES][0] });
   };
 
   const submit = async () => {
@@ -5931,8 +5968,7 @@ function AddProductModal({ onClose }) {
 
       const res = await fetch('/api/inventory/products', {
         method: 'POST',
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify(payload)
       });
 
@@ -5942,8 +5978,8 @@ function AddProductModal({ onClose }) {
       dispatch({ type: "TOAST_ADD", payload: { msg: `${form.name} ajouté au catalogue`, color: T.green } });
       if (refreshData) await refreshData();
       onClose();
-    } catch(e) {
-      alert(e.message);
+    } catch(e: any) {
+      alert(e?.message || "Erreur de création.");
       setIsSubmitting(false);
     }
   };
@@ -5951,25 +5987,25 @@ function AddProductModal({ onClose }) {
   return (
     <Modal title="Nouveau produit" onClose={onClose}>
       <FF label="Désignation du produit">
-        <Input value={form.name} onChange={e => setForm({...form, name: e.target.value})} disabled={isSubmitting} placeholder="Ex: Bouchon Liège Extra, Nutrition Azotée..." />
+        <Input value={form.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, name: e.target.value})} disabled={isSubmitting} placeholder="Ex: Bouchon Liège Extra, Nutrition Azotée..." />
       </FF>
       
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
         <FF label="Catégorie principale">
           <Select value={form.category} onChange={handleCategoryChange} disabled={isSubmitting}>
-            {Object.keys(CATEGORIES).map(c => <option key={c} value={c}>{c}</option>)}
+            {Object.keys(CATEGORIES).map((c: any) => <option key={c} value={c}>{c}</option>)}
           </Select>
         </FF>
         <FF label="Sous-catégorie">
-          <Select value={form.subCategory} onChange={e => setForm({...form, subCategory: e.target.value})} disabled={isSubmitting}>
-            {CATEGORIES[form.category].map(sc => <option key={sc} value={sc}>{sc}</option>)}
+          <Select value={form.subCategory} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, subCategory: e.target.value})} disabled={isSubmitting}>
+            {CATEGORIES[form.category as keyof typeof CATEGORIES].map((sc: any) => <option key={sc} value={sc}>{sc}</option>)}
           </Select>
         </FF>
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginTop: 8 }}>
         <FF label="Unité de mesure">
-          <Select value={form.unit} onChange={e => setForm({...form, unit: e.target.value})} disabled={isSubmitting}>
+          <Select value={form.unit} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, unit: e.target.value})} disabled={isSubmitting}>
             <option value="btl">Bouteilles (btl)</option>
             <option value="unités">Unités</option>
             <option value="kg">Kilogrammes (kg)</option>
@@ -5979,10 +6015,10 @@ function AddProductModal({ onClose }) {
           </Select>
         </FF>
         <FF label="Stock Actuel">
-          <Input type="number" step="1" value={form.currentStock} onChange={e => setForm({...form, currentStock: e.target.value})} disabled={isSubmitting} />
+          <Input type="number" step="1" value={form.currentStock} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, currentStock: e.target.value})} disabled={isSubmitting} />
         </FF>
         <FF label="Seuil d'alerte">
-          <Input type="number" step="1" value={form.minStock} onChange={e => setForm({...form, minStock: e.target.value})} disabled={isSubmitting} />
+          <Input type="number" step="1" value={form.minStock} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, minStock: e.target.value})} disabled={isSubmitting} />
         </FF>
       </div>
 
@@ -5999,7 +6035,7 @@ function AddProductModal({ onClose }) {
 // =============================================================================
 // MODALE : MOUVEMENT DE STOCK (SÉCURISÉ)
 // =============================================================================
-function StockMovementModal({ product, productsList, onSelectProduct, onClose }) {
+function StockMovementModal({ product, productsList, onSelectProduct, onClose }: { product: any; productsList: any; onSelectProduct: any; onClose: any }) {
   const T = useTheme();
   const { state, dispatch, refreshData } = useStore();
   
@@ -6009,11 +6045,11 @@ function StockMovementModal({ product, productsList, onSelectProduct, onClose })
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
-  const currentIndex = productsList.findIndex(p => p.id === product.id);
+  const currentIndex = productsList.findIndex((p: any) => p.id === product.id);
   const prevProduct = currentIndex > 0 ? productsList[currentIndex - 1] : null;
   const nextProduct = currentIndex < productsList.length - 1 ? productsList[currentIndex + 1] : null;
 
-  const handleNav = (targetProduct) => {
+  const handleNav = (targetProduct: any) => {
     setQuantity("");
     setNote("");
     setIdempotencyKey(crypto.randomUUID());
@@ -6038,8 +6074,7 @@ function StockMovementModal({ product, productsList, onSelectProduct, onClose })
 
       const res = await fetch('/api/inventory/movements', {
         method: 'POST',
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify(payload)
       });
 
@@ -6057,8 +6092,8 @@ function StockMovementModal({ product, productsList, onSelectProduct, onClose })
       } else {
         onClose();
       }
-    } catch(e) {
-      alert(e.message);
+    } catch(e: any) {
+      alert(e?.message || "Erreur de mouvement.");
       setIsSubmitting(false);
     }
   };
@@ -6094,19 +6129,19 @@ function StockMovementModal({ product, productsList, onSelectProduct, onClose })
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12 }}>
         <FF label="Type d'opération">
-          <Select value={type} onChange={e => setType(e.target.value)} disabled={isSubmitting}>
+          <Select value={type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setType(e.target.value)} disabled={isSubmitting}>
             <option value="IN">Livraison (Entrée +)</option>
             <option value="OUT">Consommation/Perte (Sortie -)</option>
           </Select>
         </FF>
         <FF label={`Quantité (${product.unit})`}>
-          <Input type="number" step="0.1" min="0.1" value={quantity} onChange={e => setQuantity(e.target.value)} disabled={isSubmitting} placeholder="Ex: 5000" />
+          <Input type="number" step="0.1" min="0.1" value={quantity} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQuantity(e.target.value)} disabled={isSubmitting} placeholder="Ex: 5000" />
         </FF>
       </div>
 
       <div style={{ marginTop: 12 }}>
         <FF label="Raison / Bon de livraison (Optionnel)">
-          <Input value={note} onChange={e => setNote(e.target.value)} disabled={isSubmitting} placeholder={type === "IN" ? "BL Fournisseur n°..." : "Tirage imprévu, casse, inventaire..."} />
+          <Input value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} disabled={isSubmitting} placeholder={type === "IN" ? "BL Fournisseur n°..." : "Tirage imprévu, casse, inventaire..."} />
         </FF>
       </div>
 
@@ -6146,17 +6181,17 @@ function Stocks() {
   };
 
   const categoriesKeys = ["TOUTES", ...Object.keys(CATEGORIES)];
-  const alertsCount = products.filter(p => p.currentStock <= p.minStock).length;
+  const alertsCount = products.filter((p: any) => p.currentStock <= p.minStock).length;
 
-  const filteredProducts = products.filter(p => {
+  const filteredProducts = products.filter((p: any) => {
     const matchCat = filterCat === "TOUTES" || p.category === filterCat;
     const matchSubCat = !filterSubCat || p.subCategory === filterSubCat;
     const matchSearch = !search || p.name.toLowerCase().includes(search.toLowerCase());
     return matchCat && matchSubCat && matchSearch;
-  }).sort((a,b) => a.category.localeCompare(b.category) || a.subCategory.localeCompare(b.subCategory) || a.name.localeCompare(b.name));
+  }).sort((a: any,b: any) => a.category.localeCompare(b.category) || a.subCategory.localeCompare(b.subCategory) || a.name.localeCompare(b.name));
 
-  const subtotals = {};
-  filteredProducts.forEach(p => {
+  const subtotals: any = {};
+  filteredProducts.forEach((p: any) => {
     if (!subtotals[p.subCategory]) subtotals[p.subCategory] = { sum: 0, unit: p.unit };
     subtotals[p.subCategory].sum += p.currentStock;
   });
@@ -6190,10 +6225,10 @@ function Stocks() {
       {tab === "inventaire" && (
         <>
           <div style={{ display:"flex", gap:10, marginBottom: filterCat !== "TOUTES" ? 10 : 20, flexWrap:"wrap" }}>
-            <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Rechercher article..." style={{ minWidth:200 }} />
+            <Input value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} placeholder="Rechercher article..." style={{ minWidth:200 }} />
             
             <div style={{ display:"flex", gap:6, background:T.surfaceHigh, padding:4, borderRadius:6, border:`1px solid ${T.border}` }}>
-              {categoriesKeys.map(c => (
+              {categoriesKeys.map((c: any) => (
                 <button key={c} onClick={() => { setFilterCat(c); setFilterSubCat(""); }} style={{ background: filterCat===c ? T.accent : "transparent", color: filterCat===c ? T.bg : T.textDim, border:"none", padding:"6px 12px", borderRadius:4, cursor:"pointer", fontSize:11, fontFamily:"monospace", transition:"all .2s", fontWeight: filterCat===c ? "bold" : "normal" }}>
                   {c}
                 </button>
@@ -6201,10 +6236,10 @@ function Stocks() {
             </div>
           </div>
 
-          {filterCat !== "TOUTES" && CATEGORIES[filterCat] && (
+          {filterCat !== "TOUTES" && CATEGORIES[filterCat as keyof typeof CATEGORIES] && (
             <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap", background:T.surfaceHigh, padding:10, borderRadius:6, border:`1px solid ${T.border}` }}>
               <span style={{fontSize:10, color:T.textDim, textTransform:"uppercase", alignSelf:"center", marginRight:10, fontWeight: "bold"}}>Sous-catégories :</span>
-              {CATEGORIES[filterCat].map(sc => (
+	              {CATEGORIES[filterCat as keyof typeof CATEGORIES].map((sc: any) => (
                 <button key={sc} onClick={() => setFilterSubCat(filterSubCat === sc ? "" : sc)} style={{ background: filterSubCat===sc ? T.accent : "transparent", color: filterSubCat===sc ? T.bg : T.textDim, border:`1px solid ${filterSubCat===sc ? T.accent : T.border}`, padding:"5px 12px", borderRadius:4, cursor:"pointer", fontSize:10, fontFamily:"monospace", transition:"all 0.2s" }}>
                   {sc}
                 </button>
@@ -6214,7 +6249,7 @@ function Stocks() {
 
           {Object.keys(subtotals).length > 0 && (
             <div style={{ display:"flex", gap:12, marginBottom:16, flexWrap:"wrap" }}>
-              {Object.entries(subtotals).map(([sub, data]) => (
+	              {Object.entries(subtotals).map(([sub, data]: any) => (
                 <div key={sub} style={{ background:T.surfaceHigh, padding:"10px 14px", borderRadius:6, border:`1px solid ${T.border}`, display:"flex", alignItems:"center", gap:10 }}>
                   <span style={{ color:T.textDim, fontSize:11, textTransform:"uppercase", letterSpacing:1 }}>Total {sub}</span>
                   <span style={{ color:T.textStrong, fontSize:15, fontWeight:"bold", fontFamily:"monospace" }}>{data.sum.toLocaleString('fr-FR')} <span style={{fontSize:12, color:T.textDim}}>{data.unit}</span></span>
@@ -6228,7 +6263,7 @@ function Stocks() {
               <div>Catégorie</div><div>Désignation</div><div>Seuil Alerte</div><div>Stock Actuel</div><div>État</div><div>Action</div>
             </div>
             
-            {filteredProducts.map((p, i) => {
+	            {filteredProducts.map((p: any, i: any) => {
               const isAlert = p.currentStock <= p.minStock;
               const isCritical = p.currentStock === 0;
 
@@ -6264,8 +6299,8 @@ function Stocks() {
           </div>
           {movements.length === 0 ? (
              <div style={{ padding:"60px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucun mouvement enregistré.</div>
-          ) : [...movements].sort((a,b) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()).map((m, i) => {
-            const product = products.find(p => p.id === m.productId);
+	          ) : [...movements].sort((a: any,b: any) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()).map((m: any, i: any) => {
+	            const product = products.find((p: any) => p.id === m.productId);
             return (
               <div key={m.id} style={{ display:"grid", gridTemplateColumns:"120px 80px 2fr 120px 2fr 120px", padding:"14px 16px", alignItems:"center", borderBottom:i<movements.length-1?`1px solid ${T.border}`:"none" }}>
                 <div style={{ fontSize:11, color:T.textDim, fontFamily:"monospace" }}>{new Date(m.createdAt || m.date).toLocaleDateString('fr-FR')}</div>
@@ -6298,7 +6333,7 @@ function Stocks() {
 // =============================================================================
 // TRACABILITÉ (Moteur Cartographique / API-Driven)
 // =============================================================================
-function Tracabilite({ onSelectLot }) {
+function Tracabilite({ onSelectLot }: { onSelectLot: any }) {
   const T = useTheme(); 
   const { state } = useStore();
   
@@ -6311,16 +6346,16 @@ function Tracabilite({ onSelectLot }) {
 
   // 1. MOTEUR DE RECHERCHE INITIAL (Sur le store local pour la rapidité de la barre de recherche)
   const allLots = [
-    ...(state.lots || []).map(l => ({ ...l, _type: 'bulk' })),
-    ...(state.bottleLots || []).map(b => ({ ...b, _type: 'bottle' }))
+    ...(state.lots || []).map((l: any) => ({ ...l, _type: 'bulk' })),
+    ...(state.bottleLots || []).map((b: any) => ({ ...b, _type: 'bottle' }))
   ];
 
   const filteredSearch = allLots
-    .filter(l => l.code.toLowerCase().includes(search.toLowerCase()) || (l.lieu && l.lieu.toLowerCase().includes(search.toLowerCase())))
+    .filter((l: any) => l.code.toLowerCase().includes(search.toLowerCase()) || (l.lieu && l.lieu.toLowerCase().includes(search.toLowerCase())))
     .slice(0, 12); 
 
   // 2. FETCH DE L'ARBRE GÉNÉALOGIQUE DEPUIS LE SERVEUR
-  const handleFocusLot = async (lotCode, type) => {
+  const handleFocusLot = async (lotCode: any, type: any) => {
     if (!lotCode) return setLineage(null);
     
     setIsLoadingLineage(true);
@@ -6329,8 +6364,7 @@ function Tracabilite({ onSelectLot }) {
     try {
       const res = await fetch('/api/tracabilite', {
         method: 'POST',
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify({ lotCode, type })
       });
 
@@ -6342,17 +6376,17 @@ function Tracabilite({ onSelectLot }) {
       const data = await res.json();
       
       // On remappe `businessCode` vers `code` pour l'affichage UI
-      const normalizeNode = (node) => ({ ...node, code: node.businessCode || node.code });
+      const normalizeNode = (node: any) => ({ ...node, code: node.businessCode || node.code });
       
       setLineage({
         focusedLot: normalizeNode(data.focusedLot),
         parents: data.parents.map(normalizeNode),
         children: data.children.map(normalizeNode),
         expeditions: data.expeditions
-      });
+      } as any);
 
-    } catch (e) {
-      alert(e.message);
+    } catch (e: any) {
+      alert(e?.message || "Erreur de chargement de la traçabilité.");
       setLineage(null);
     } finally {
       setIsLoadingLineage(false);
@@ -6360,7 +6394,7 @@ function Tracabilite({ onSelectLot }) {
   };
 
   // --- HELPERS UI ---
-  const formatStatus = (status) => {
+  const formatStatus = (status: any) => {
     if (!status) return "INCONNU";
     if (status === "FERMENTATION_ALCOOLIQUE") return "FA";
     if (status === "MOUT_NON_DEBOURBE") return "MOÛT BRUT";
@@ -6369,10 +6403,10 @@ function Tracabilite({ onSelectLot }) {
     return status.replace(/_/g, ' ');
   };
 
-  const formatVolShort = (vol) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
+  const formatVolShort = (vol: any) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
 
   // --- COMPOSANT VISUEL D'UN NOEUD (Carte Lot) ---
-  const LotNode = ({ lot, isCenter }) => {
+  const LotNode = ({ lot, isCenter }: { lot: any; isCenter: any }) => {
     const isBottle = lot._type === 'bottle';
     const volStr = isBottle ? `${lot.currentBottleCount || lot.currentCount || 0} btl` : formatVolShort(lot.currentVolume || lot.volume || 0);
     const badgeColor = isBottle ? T.accentLight : LOT_STATUS_COLORS[lot.status] || T.textDim;
@@ -6390,8 +6424,8 @@ function Tracabilite({ onSelectLot }) {
           opacity: isLoadingLineage ? 0.5 : 1
         }}
         onClick={() => !isCenter && !isLoadingLineage && handleFocusLot(lot.code, lot._type)}
-        onMouseEnter={e => { if(!isLoadingLineage) { e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.borderColor = T.accent; } }}
-        onMouseLeave={e => { e.currentTarget.style.transform = "none"; e.currentTarget.style.borderColor = isCenter ? T.accent : T.border; }}
+        onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => { if(!isLoadingLineage) { e.currentTarget.style.transform = "translateY(-3px)"; e.currentTarget.style.borderColor = T.accent; } }}
+        onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.borderColor = isCenter ? T.accent : T.border; }}
       >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
           <div style={{ fontSize: 13, fontWeight: "bold", color: isCenter ? T.accent : T.textStrong, fontFamily: "monospace", wordBreak: "break-all", flex: 1 }}>{lot.code}</div>
@@ -6406,23 +6440,24 @@ function Tracabilite({ onSelectLot }) {
             {!isCenter && (
               <Btn variant="secondary" style={{ fontSize: 9, padding: "4px 8px" }} disabled={isLoadingLineage}>📍 Centrer</Btn>
             )}
-            <Btn style={{ fontSize: 9, padding: "4px 8px" }} onClick={(e) => { e.stopPropagation(); onSelectLot(lot); }}>Fiche</Btn>
+            <Btn style={{ fontSize: 9, padding: "4px 8px" }} onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); onSelectLot(lot); }}>Fiche</Btn>
           </div>
         </div>
       </div>
     );
   };
+  const lineageData: any = lineage;
 
   return (
     <div>
       <div style={{ marginBottom: 20, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 32, color: T.textStrong, margin: 0 }}>Graphe de Traçabilité</h1>
-        {lineage && (
+        {lineageData && (
           <Btn variant="secondary" onClick={() => setLineage(null)}>🔄 Nouvelle recherche</Btn>
         )}
       </div>
 
-      {!lineage ? (
+      {!lineageData ? (
         // ÉCRAN DE RECHERCHE INITIAL
         <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 6, padding: "40px", textAlign: "center" }}>
           <div style={{ fontSize: 24, marginBottom: 16 }}>🎯</div>
@@ -6431,14 +6466,14 @@ function Tracabilite({ onSelectLot }) {
           
           <Input 
             value={search} 
-            onChange={e => setSearch(e.target.value)} 
+            onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} 
             placeholder="Rechercher par code lot ou provenance (Ex: 2025-CH)..." 
             style={{ maxWidth: 400, margin: "0 auto 30px", textAlign: "center", fontSize: 16, padding: "12px" }} 
             autoFocus
           />
           
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(250px,1fr))", gap: 16, textAlign: "left" }}>
-            {filteredSearch.map(l => (
+            {filteredSearch.map((l: any) => (
               <LotNode key={l.id} lot={l} isCenter={false} />
             ))}
           </div>
@@ -6456,21 +6491,21 @@ function Tracabilite({ onSelectLot }) {
               ⬅️ Origines (Parents)
             </div>
             
-            {lineage.parents.length > 0 ? (
-              lineage.parents.map(p => (
+            {lineageData.parents.length > 0 ? (
+              lineageData.parents.map((p: any) => (
                 <LotNode key={p.id} lot={p} isCenter={false} />
               ))
-            ) : lineage.focusedLot.lieu ? (
+            ) : lineageData.focusedLot.lieu ? (
               <div style={{ border: `1px dashed ${T.accent}55`, borderRadius: 6, padding: 16, background: T.bg, textAlign: "center" }}>
                 <div style={{ fontSize: 10, color: T.textDim, marginBottom: 12, textTransform: "uppercase", letterSpacing: 1 }}>🌱 Origine Raisins (Vendanges)</div>
-                {lineage.focusedLot.lieu.split('+').map(p => p.trim()).map((p, i) => {
+                {lineageData.focusedLot.lieu.split('+').map((p: any) => p.trim()).map((p: any, i: any) => {
                   const rawName = p.replace(/\s*\([^)]*\)/g, '').trim(); 
                   return (
                     <Btn 
                       key={i} 
                       variant="secondary" 
                       onClick={() => setMaturationModal(rawName)} 
-                      style={{ width: "100%", marginBottom: i === lineage.focusedLot.lieu.split('+').length - 1 ? 0 : 8, fontSize: 11, borderColor: T.accent+"33", color: T.accentLight, padding: "8px" }}
+                      style={{ width: "100%", marginBottom: i === lineageData.focusedLot.lieu.split('+').length - 1 ? 0 : 8, fontSize: 11, borderColor: T.accent+"33", color: T.accentLight, padding: "8px" }}
                     >
                       🍇 {p}
                     </Btn>
@@ -6493,10 +6528,10 @@ function Tracabilite({ onSelectLot }) {
             <div style={{ position: "absolute", right: -30, top: "50%", width: 30, borderTop: `2px dashed ${T.border}`, zIndex: 0 }} />
             
             <div style={{ position: "relative", zIndex: 1 }}>
-              <LotNode lot={lineage.focusedLot} isCenter={true} />
+              <LotNode lot={lineageData.focusedLot} isCenter={true} />
             </div>
             <div style={{ textAlign: "center", color: T.textDim, fontSize: 11, fontStyle: "italic", padding: "0 10px" }}>
-              {lineage.focusedLot.notes || "Aucune note spécifique."}
+              {lineageData.focusedLot.notes || "Aucune note spécifique."}
             </div>
           </div>
 
@@ -6506,20 +6541,20 @@ function Tracabilite({ onSelectLot }) {
               Destinations (Enfants) ➡️
             </div>
             
-            {lineage.children.length === 0 && lineage.expeditions.length === 0 ? (
+            {lineageData.children.length === 0 && lineageData.expeditions.length === 0 ? (
               <div style={{ padding: "30px 20px", textAlign: "center", border: `1px dashed ${T.border}`, borderRadius: 6, color: T.textDim, fontSize: 12 }}>
                 Aucune descendance ou expédition enregistrée.
               </div>
             ) : (
               <>
-                {lineage.children.map(c => (
+                {lineageData.children.map((c: any) => (
                   <LotNode key={c.id} lot={c} isCenter={false} />
                 ))}
                 
-                {lineage.expeditions.length > 0 && (
+                {lineageData.expeditions.length > 0 && (
                   <div style={{ marginTop: 10, borderTop: `1px dashed ${T.green}44`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
                     <div style={{ fontSize: 10, color: T.green, textTransform: "uppercase", letterSpacing: 1, textAlign: "center" }}>Expéditions liées</div>
-                    {lineage.expeditions.map(e => (
+                    {lineageData.expeditions.map((e: any) => (
                       <div key={e.id} style={{ background: T.green + "11", border: `1px solid ${T.green}55`, borderRadius: 4, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                         <div>
                           <div style={{ fontSize: 12, fontWeight: "bold", color: T.green }}>📦 {e.comment || "Expédition"}</div>
@@ -6538,7 +6573,7 @@ function Tracabilite({ onSelectLot }) {
       {/* --- MODALE : SUIVI MATURATION --- */}
       {maturationModal && (() => {
         const rawName = maturationModal;
-        const matData = (state.maturations || []).filter(m => m.parcelle === rawName).sort((a,b) => new Date(a.date) - new Date(b.date));
+        const matData = (state.maturations || []).filter((m: any) => m.parcelle === rawName).sort((a: any,b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
         return (
           <Modal title={`📊 Suivi Maturation : ${rawName}`} onClose={() => setMaturationModal(null)} wide>
@@ -6560,7 +6595,7 @@ function Tracabilite({ onSelectLot }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {matData.map((m, i) => (
+                    {matData.map((m: any, i: any) => (
                       <tr key={i} style={{ borderBottom: `1px solid ${T.border}55` }}>
                         <td style={{ padding: "12px 8px", color: T.textStrong }}>{new Date(m.date).toLocaleDateString('fr-FR')}</td>
                         <td style={{ padding: "12px 8px" }}>{m.cepage || '-'}</td>
@@ -6594,7 +6629,7 @@ const ANALYSIS_FIELDS = [
 ];
 const EMPTY_A = { analysisDate:"", lotId:"", ph:"", at:"", so2Free:"", alcohol:"", notes:"" };
 
-function AnalyseModal({ initial, onClose, onSuccess, title }) {
+function AnalyseModal({ initial, onClose, onSuccess, title }: { initial: any; onClose: any; onSuccess: any; title: any }) {
   const T = useTheme(); 
   const { state, dispatch } = useStore();
   const [form, setForm] = useState(initial ? { ...initial } : { ...EMPTY_A, analysisDate: new Date().toISOString().slice(0, 10), notes: "Saisie manuelle" });
@@ -6602,7 +6637,7 @@ function AnalyseModal({ initial, onClose, onSuccess, title }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
-  const set = (k,v) => setForm(f => ({ ...f, [k]:v }));
+  const set = (k: any,v: any) => setForm((f: any) => ({ ...f, [k]:v }));
 
   const handleSave = async () => {
     if (!form.analysisDate || !form.lotId) return alert("La date et le lot sont obligatoires.");
@@ -6616,8 +6651,7 @@ function AnalyseModal({ initial, onClose, onSuccess, title }) {
 
       const res = await fetch('/api/analyses', {
         method: 'POST',
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify(payload)
       });
 
@@ -6627,8 +6661,8 @@ function AnalyseModal({ initial, onClose, onSuccess, title }) {
       dispatch({ type: "TOAST_ADD", payload: { msg: "Analyse enregistrée avec succès.", color: T.green } });
       onSuccess(); // Déclenche le rafraîchissement global
 
-    } catch (e) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: e.message, color: T.red } });
+    } catch (e: any) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: e?.message || "Erreur lors de la sauvegarde.", color: T.red } });
       setIsSubmitting(false);
     }
   };
@@ -6637,12 +6671,12 @@ function AnalyseModal({ initial, onClose, onSuccess, title }) {
     <Modal title={title || "Saisir une analyse manuellement"} onClose={onClose}>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom: 16 }}>
         <FF label="Date">
-          <Input type="date" value={form.analysisDate} onChange={e => set("analysisDate", e.target.value)} disabled={isSubmitting} />
+          <Input type="date" value={form.analysisDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("analysisDate", e.target.value)} disabled={isSubmitting} />
         </FF>
         <FF label="Lot analysé">
-          <Select value={form.lotId} onChange={e => set("lotId", e.target.value)} disabled={isSubmitting}>
+          <Select value={form.lotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => set("lotId", e.target.value)} disabled={isSubmitting}>
             <option value="">-- Choisir le lot --</option>
-            {(state.lots || []).map(l => <option key={l.id} value={l.id}>{l.code}</option>)}
+            {(state.lots || []).map((l: any) => <option key={l.id} value={l.id}>{l.code}</option>)}
           </Select>
         </FF>
       </div>
@@ -6650,9 +6684,9 @@ function AnalyseModal({ initial, onClose, onSuccess, title }) {
       <div style={{ background: T.surfaceHigh, padding: 16, borderRadius: 6, border: `1px solid ${T.border}` }}>
         <div style={{ fontSize: 12, textTransform: "uppercase", color: T.textDim, marginBottom: 12, fontWeight: "bold" }}>Paramètres Œnologiques</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
-          {ANALYSIS_FIELDS.map(f => (
+          {ANALYSIS_FIELDS.map((f: any) => (
             <FF key={f.key} label={f.label}>
-              <Input type="text" inputMode="decimal" value={form[f.key] || ""} onChange={e => set(f.key, e.target.value)} disabled={isSubmitting} placeholder={f.hint} />
+              <Input type="text" inputMode="decimal" value={form[f.key] || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set(f.key, e.target.value)} disabled={isSubmitting} placeholder={f.hint} />
             </FF>
           ))}
         </div>
@@ -6668,12 +6702,12 @@ function AnalyseModal({ initial, onClose, onSuccess, title }) {
   );
 }
 
-function AIImportModal({ initialFile, onClose, onSuccess }) {
+function AIImportModal({ initialFile, onClose, onSuccess }: { initialFile: any; onClose: any; onSuccess: any }) {
   const T = useTheme(); 
   const { state, dispatch } = useStore();
   
   const [phase, setPhase] = useState("loading"); 
-  const [results, setRes] = useState([]);
+  const [results, setRes] = useState<any[]>([]);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
@@ -6693,20 +6727,20 @@ function AIImportModal({ initialFile, onClose, onSuccess }) {
     }
   }, [initialFile, state.lots]);
 
-  const upd = (idx, k, v) => setRes(rs => rs.map((x,i) => i===idx ? {...x,[k]:v} : x));
-  const tog = idx => setRes(rs => rs.map((x,i) => i===idx ? {...x,_ok:!x._ok} : x));
-  const confirmedRows = results.filter(r => r._ok);
+  const upd = (idx: any, k: any, v: any) => setRes((rs: any[]) => rs.map((x: any,i: any) => i===idx ? {...x,[k]:v} : x));
+  const tog = (idx: any) => setRes((rs: any[]) => rs.map((x: any,i: any) => i===idx ? {...x,_ok:!x._ok} : x));
+  const confirmedRows = results.filter((r: any) => r._ok);
 
   const handleImport = async () => {
     if (confirmedRows.length === 0) return alert("Sélectionnez au moins une ligne à importer.");
     
-    const invalidRows = confirmedRows.filter(r => !r.lotId);
+    const invalidRows = confirmedRows.filter((r: any) => !r.lotId);
     if (invalidRows.length > 0) return alert("Veuillez lier manuellement un Lot à chaque ligne avant l'import.");
 
     setIsSubmitting(true);
     try {
       const payload = {
-        analyses: confirmedRows.map(r => {
+        analyses: confirmedRows.map((r: any) => {
           const { _id, _ok, ...cleanRow } = r; // On retire les clés de l'UI
           return cleanRow;
         }),
@@ -6715,8 +6749,7 @@ function AIImportModal({ initialFile, onClose, onSuccess }) {
 
       const res = await fetch('/api/analyses', {
         method: 'POST',
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify(payload)
       });
 
@@ -6726,8 +6759,8 @@ function AIImportModal({ initialFile, onClose, onSuccess }) {
       dispatch({ type: "TOAST_ADD", payload: { msg: `${data.count} analyses importées avec succès !`, color: T.green } });
       onSuccess(); // Rafraîchissement global
 
-    } catch (e) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: e.message, color: T.red } });
+    } catch (e: any) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: e?.message || "Erreur lors de l'importation.", color: T.red } });
       setIsSubmitting(false);
     }
   };
@@ -6755,20 +6788,20 @@ function AIImportModal({ initialFile, onClose, onSuccess }) {
             <div style={{ fontSize:10, color:T.textDim, textTransform:"uppercase" }}>Alc</div>
           </div>
           
-          {results.map((r, idx) => (
+          {results.map((r: any, idx: any) => (
             <div key={idx} style={{ display:"grid", gridTemplateColumns:"30px 140px 1fr 80px 80px 80px 80px", gap:10, alignItems:"center", padding:"12px 0", borderBottom:`1px solid ${T.border}` }}>
               <div><input type="checkbox" checked={r._ok} onChange={() => tog(idx)} disabled={isSubmitting} style={{cursor:"pointer", accentColor:T.accent}} /></div>
-              <div><Input type="date" value={r.analysisDate} onChange={e=>upd(idx,"analysisDate",e.target.value)} disabled={!r._ok || isSubmitting} /></div>
+              <div><Input type="date" value={r.analysisDate} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>upd(idx,"analysisDate",e.target.value)} disabled={!r._ok || isSubmitting} /></div>
               <div>
-                <Select value={r.lotId} onChange={e=>upd(idx,"lotId",e.target.value)} disabled={!r._ok || isSubmitting} style={{ borderColor: !r.lotId ? T.red : T.border }}>
+                <Select value={r.lotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>upd(idx,"lotId",e.target.value)} disabled={!r._ok || isSubmitting} style={{ borderColor: !r.lotId ? T.red : T.border }}>
                   <option value="">-- Non trouvé --</option>
-                  {(state.lots || []).map(l => <option key={l.id} value={l.id}>{l.code}</option>)}
+                  {(state.lots || []).map((l: any) => <option key={l.id} value={l.id}>{l.code}</option>)}
                 </Select>
               </div>
-              <div><Input value={r.ph} onChange={e=>upd(idx,"ph",e.target.value)} disabled={!r._ok || isSubmitting} /></div>
-              <div><Input value={r.at} onChange={e=>upd(idx,"at",e.target.value)} disabled={!r._ok || isSubmitting} /></div>
-              <div><Input value={r.so2Free} onChange={e=>upd(idx,"so2Free",e.target.value)} disabled={!r._ok || isSubmitting} /></div>
-              <div><Input value={r.alcohol} onChange={e=>upd(idx,"alcohol",e.target.value)} disabled={!r._ok || isSubmitting} /></div>
+              <div><Input value={r.ph} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>upd(idx,"ph",e.target.value)} disabled={!r._ok || isSubmitting} /></div>
+              <div><Input value={r.at} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>upd(idx,"at",e.target.value)} disabled={!r._ok || isSubmitting} /></div>
+              <div><Input value={r.so2Free} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>upd(idx,"so2Free",e.target.value)} disabled={!r._ok || isSubmitting} /></div>
+              <div><Input value={r.alcohol} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>upd(idx,"alcohol",e.target.value)} disabled={!r._ok || isSubmitting} /></div>
             </div>
           ))}
           <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:24 }}>
@@ -6790,23 +6823,24 @@ function Analyses() {
   const [modal, setModal] = useState(null);
   const [dragOver, setDragOver] = useState(false);
 
-  const getLotCode = id => (state.lots || []).find(l => String(l.id) === String(id))?.code || "--";
+  const getLotCode = (id: any) => (state.lots || []).find((l: any) => String(l.id) === String(id))?.code || "--";
 
   const handleSuccess = async () => {
     if (refreshData) await refreshData();
     setModal(null);
   };
 
-  const handleDrop = (e) => {
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     setDragOver(false);
     const file = e.dataTransfer.files[0];
     if (file) {
-      setModal({ type: "ai", file });
+      setModal({ type: "ai", file } as any);
     }
   };
 
   const analysesList = state.analyses || [];
+  const modalData: any = modal;
 
   return (
     <div>
@@ -6819,10 +6853,10 @@ function Analyses() {
         
         {/* DRAG & DROP ZONE */}
         <div
-          onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+          onDragOver={(e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
-          onClick={() => document.getElementById('ai-file-upload').click()}
+          onClick={() => document.getElementById('ai-file-upload')?.click()}
           style={{
             background: dragOver ? T.accent+"11" : T.surfaceHigh,
             border: `2px dashed ${dragOver ? T.accent : T.border}`,
@@ -6839,14 +6873,14 @@ function Analyses() {
           <div style={{ fontSize: 32, marginBottom: 12 }}>✨</div>
           <div style={{ fontSize: 16, color: T.accentLight, fontFamily: "monospace", fontWeight: "bold", marginBottom: 6 }}>Assistant IA : Glissez votre rapport PDF ici</div>
           <div style={{ fontSize: 12, color: T.textDim }}>Ou cliquez pour parcourir. L'IA extraira automatiquement les lots et les valeurs.</div>
-          <input id="ai-file-upload" type="file" accept=".pdf,.csv,.jpg,.png" style={{ display: "none" }} onChange={e => e.target.files[0] && setModal({ type: "ai", file: e.target.files[0] })} />
+          <input id="ai-file-upload" type="file" accept=".pdf,.csv,.jpg,.png" style={{ display: "none" }} onChange={(e: React.ChangeEvent<HTMLInputElement>) => e.target.files?.[0] && setModal({ type: "ai", file: e.target.files[0] } as any)} />
         </div>
 
         {/* MANUAL ENTRY */}
         <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "36px 20px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
           <div style={{ fontSize: 28, marginBottom: 12 }}>✍️</div>
           <div style={{ fontSize: 14, color: T.textStrong, fontWeight: "bold", marginBottom: 16, textTransform: "uppercase" }}>Saisie Classique</div>
-          <Btn onClick={() => setModal({ type: "manual" })}>+ Nouvelle Analyse</Btn>
+          <Btn onClick={() => setModal({ type: "manual" } as any)}>+ Nouvelle Analyse</Btn>
         </div>
       </div>
 
@@ -6857,7 +6891,7 @@ function Analyses() {
         </div>
         {analysesList.length === 0 ? (
           <div style={{ padding:"60px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucune analyse enregistrée.</div>
-        ) : analysesList.sort((a,b) => new Date(b.analysisDate).getTime() - new Date(a.analysisDate).getTime()).map((a) => (
+        ) : analysesList.sort((a: any,b: any) => new Date(b.analysisDate).getTime() - new Date(a.analysisDate).getTime()).map((a: any) => (
           <div key={a.id} style={{ display:"grid", gridTemplateColumns:"120px 1fr 80px 80px 80px 80px 1fr", padding:"14px 16px", alignItems:"center", borderBottom: `1px solid ${T.border}` }}>
             <div style={{ fontSize:12, color:T.textDim, fontFamily:"monospace" }}>{new Date(a.analysisDate).toLocaleDateString('fr-FR')}</div>
             <div style={{ fontSize:13, color:T.accentLight, fontFamily:"monospace", fontWeight:600 }}>{getLotCode(a.lotId)}</div>
@@ -6870,8 +6904,8 @@ function Analyses() {
         ))}
       </div>
 
-      {modal?.type === "manual" && <AnalyseModal onClose={() => setModal(null)} onSuccess={handleSuccess} />}
-      {modal?.type === "ai"     && <AIImportModal initialFile={modal.file} onClose={() => setModal(null)} onSuccess={handleSuccess} />}
+      {modalData?.type === "manual" && <AnalyseModal initial={null as any} title={""} onClose={() => setModal(null)} onSuccess={handleSuccess} />}
+      {modalData?.type === "ai"     && <AIImportModal initialFile={modalData.file} onClose={() => setModal(null)} onSuccess={handleSuccess} />}
     </div>
   );
 }
@@ -6879,7 +6913,7 @@ function Analyses() {
 // =============================================================================
 // ADMIN & ORDRES DE TRAVAIL (PRODUCTION READY)
 // =============================================================================
-function WorkOrdersAdmin({ workOrders, setWorkOrders }) {
+function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any; setWorkOrders: any }) {
   const T = useTheme(); 
   const { state, dispatch } = useStore();
   const [modal, setModal] = useState(false);
@@ -6895,30 +6929,30 @@ function WorkOrdersAdmin({ workOrders, setWorkOrders }) {
     sources: [{ lotId: "", volume: "" }]
   });
 
-  const availLots = state.lots.filter(l => l.volume > 0 && l.status !== "TIRE");
-  const availCuves = state.containers.filter(c => c.status === "VIDE" && c.status !== "ARCHIVÉE");
+  const availLots = state.lots.filter((l: any) => l.volume > 0 && l.status !== "TIRE");
+  const availCuves = state.containers.filter((c: any) => c.status === "VIDE" && c.status !== "ARCHIVÉE");
   
-  const getLotCode = id => state.lots.find(l => String(l.id) === String(id))?.code || id;
-  const getContainerName = id => state.containers.find(c => String(c.id) === String(id))?.displayName || state.containers.find(c => String(c.id) === String(id))?.name || id;
+  const getLotCode = (id: any) => state.lots.find((l: any) => String(l.id) === String(id))?.code || id;
+  const getContainerName = (id: any) => state.containers.find((c: any) => String(c.id) === String(id))?.displayName || state.containers.find((c: any) => String(c.id) === String(id))?.name || id;
 
   const isTransfer = form.recette === "SOUTIRAGE";
   const isAssemblage = form.recette === "ASSEMBLAGE";
   const isIntrant = ["LEVURAGE", "SULFITAGE", "CHAPTALISATION", "ACIDIFICATION", "COLLAGE", "FILTRATION", "STABILISATION TARTRIQUE", "OUILLAGE", "AJOUT AUTRE PRODUIT"].includes(form.recette);
 
-  const updateSource = (index, field, value) => {
-    const newSources = [...form.sources];
+  const updateSource = (index: any, field: any, value: any) => {
+    const newSources: any[] = [...form.sources];
     newSources[index][field] = value;
     setForm({ ...form, sources: newSources });
   };
   const addSource = () => setForm({ ...form, sources: [...form.sources, { lotId: "", volume: "" }] });
-  const removeSource = (index) => setForm({ ...form, sources: form.sources.filter((_, i) => i !== index) });
+  const removeSource = (index: any) => setForm({ ...form, sources: form.sources.filter((_: any, i: any) => i !== index) });
 
   const createWO = async () => {
     // 1. Validation Frontend rapide
     if (isTransfer) {
       if (!form.sources[0].lotId || !form.targetContainerId || !form.sources[0].volume) return alert("Remplissez tous les champs pour le soutirage.");
     } else if (isAssemblage) {
-      if (!form.targetContainerId || form.sources.some(s => !s.lotId || !s.volume)) return alert("Remplissez tous les champs et volumes des lots à assembler.");
+      if (!form.targetContainerId || form.sources.some((s: any) => !s.lotId || !s.volume)) return alert("Remplissez tous les champs et volumes des lots à assembler.");
     } else if (isIntrant) {
       if (!form.targetLotId || !form.details) return alert("Veuillez choisir un lot et indiquer les détails du produit.");
     }
@@ -6935,14 +6969,13 @@ function WorkOrdersAdmin({ workOrders, setWorkOrders }) {
         // On n'envoie que les sources valides pour éviter les erreurs Zod
         sources: isIntrant 
           ? [{ lotId: form.targetLotId, volume: "1" }] // Volume factice pour passer la validation Zod si intrant
-          : form.sources.filter(s => s.lotId && s.volume),
+          : form.sources.filter((s: any) => s.lotId && s.volume),
         idempotencyKey
       };
 
       const res = await fetch('/api/workorders', {
         method: 'POST',
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify(payload)
       });
 
@@ -6961,8 +6994,8 @@ function WorkOrdersAdmin({ workOrders, setWorkOrders }) {
       setModal(false);
       setForm({ recette: "SOUTIRAGE", targetContainerId: "", targetLotId: "", details: "", sources: [{ lotId: "", volume: "" }] });
 
-    } catch (error) {
-      alert(error.message);
+    } catch (error: any) {
+      alert(error?.message || "Erreur lors de la planification de l'ordre de travail.");
     } finally {
       setIsSubmitting(false);
     }
@@ -6978,7 +7011,7 @@ function WorkOrdersAdmin({ workOrders, setWorkOrders }) {
         <div style={{ display:"grid", gridTemplateColumns:"120px 150px 2fr 2fr 120px", padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
           <div>Date</div><div>Action</div><div>Lot Source / Cible</div><div>Détails</div><div>Statut</div>
         </div>
-        {workOrders.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucun ordre de travail planifié.</div> : workOrders.map((w, i) => (
+        {workOrders.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucun ordre de travail planifié.</div> : workOrders.map((w: any, i: any) => (
             <div key={w.id} style={{ display:"grid", gridTemplateColumns:"120px 150px 2fr 2fr 120px", gap:12, padding:"16px 16px", alignItems:"center", borderBottom:i<workOrders.length-1?`1px solid ${T.border}`:"none" }}>
               <div style={{ fontSize:11, color:T.textDim, fontFamily:"monospace" }}>{w.date.split('T')[0]}</div>
               <Badge label={w.recette} color={T.accent} />
@@ -6992,27 +7025,27 @@ function WorkOrdersAdmin({ workOrders, setWorkOrders }) {
       {modal && (
         <Modal title="Nouveau plan de travail" onClose={() => setModal(false)}>
           <FF label="Type d'opération">
-            <Select value={form.recette} onChange={e=>setForm({...form, recette: e.target.value})} disabled={isSubmitting}>
-              {["SOUTIRAGE","ASSEMBLAGE","LEVURAGE","SULFITAGE","CHAPTALISATION","ACIDIFICATION","COLLAGE","FILTRATION","STABILISATION TARTRIQUE","OUILLAGE","AJOUT AUTRE PRODUIT"].map(r=><option key={r}>{r}</option>)}
+            <Select value={form.recette} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, recette: e.target.value})} disabled={isSubmitting}>
+              {["SOUTIRAGE","ASSEMBLAGE","LEVURAGE","SULFITAGE","CHAPTALISATION","ACIDIFICATION","COLLAGE","FILTRATION","STABILISATION TARTRIQUE","OUILLAGE","AJOUT AUTRE PRODUIT"].map((r: any)=><option key={r}>{r}</option>)}
             </Select>
           </FF>
 
           {isTransfer && (
             <>
               <FF label="Lot source (Cuve de départ)">
-                <Select value={form.sources[0].lotId} onChange={e=>updateSource(0, "lotId", e.target.value)} disabled={isSubmitting}>
+                <Select value={form.sources[0].lotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>updateSource(0, "lotId", e.target.value)} disabled={isSubmitting}>
                   <option value="">-- Choisir un lot à soutirer --</option>
-                  {availLots.map(l=><option key={l.id} value={l.id}>{l.code} (Dispo: {formatVolShort(l.volume)})</option>)}
+                  {availLots.map((l: any)=><option key={l.id} value={l.id}>{l.code} (Dispo: {formatVolShort(l.volume)})</option>)}
                 </Select>
               </FF>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
                 <FF label="Volume (hL) à transférer">
-                  <Input type="number" step="0.1" value={form.sources[0].volume} onChange={e=>updateSource(0, "volume", e.target.value)} disabled={isSubmitting} />
+                  <Input type="number" step="0.1" value={form.sources[0].volume} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateSource(0, "volume", e.target.value)} disabled={isSubmitting} />
                 </FF>
                 <FF label="Cuve de destination">
-                  <Select value={form.targetContainerId} onChange={e=>setForm({...form, targetContainerId:e.target.value})} disabled={isSubmitting}>
+                  <Select value={form.targetContainerId} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, targetContainerId:e.target.value})} disabled={isSubmitting}>
                     <option value="">-- Choisir une cuve vide --</option>
-                    {availCuves.map(c=><option key={c.id} value={c.id}>{c.displayName || c.name} (Capacité: {c.capacity} hL)</option>)}
+                    {availCuves.map((c: any)=><option key={c.id} value={c.id}>{c.displayName || c.name} (Capacité: {c.capacity} hL)</option>)}
                   </Select>
                 </FF>
               </div>
@@ -7022,13 +7055,13 @@ function WorkOrdersAdmin({ workOrders, setWorkOrders }) {
           {isAssemblage && (
             <div style={{ background:T.surfaceHigh, padding:14, borderRadius:6, border:`1px solid ${T.border}`, marginBottom:16 }}>
               <div style={{ fontSize:10, textTransform:"uppercase", color:T.textDim, marginBottom:10, fontWeight: "bold" }}>Composition de l'assemblage (Lots sources)</div>
-              {form.sources.map((s, i) => (
+              {form.sources.map((s: any, i: any) => (
                 <div key={i} style={{ display:"flex", gap:8, marginBottom:8 }}>
-                  <Select value={s.lotId} onChange={e=>updateSource(i, "lotId", e.target.value)} style={{ flex:2 }} disabled={isSubmitting}>
+                  <Select value={s.lotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>updateSource(i, "lotId", e.target.value)} style={{ flex:2 }} disabled={isSubmitting}>
                     <option value="">-- Sélectionner un Lot --</option>
-                    {availLots.map(l=><option key={l.id} value={l.id}>{l.code} (Dispo: {formatVolShort(l.volume)})</option>)}
+                    {availLots.map((l: any)=><option key={l.id} value={l.id}>{l.code} (Dispo: {formatVolShort(l.volume)})</option>)}
                   </Select>
-                  <Input type="number" step="0.1" placeholder="Vol (hL)" value={s.volume} onChange={e=>updateSource(i, "volume", e.target.value)} style={{ flex:1 }} disabled={isSubmitting} />
+                  <Input type="number" step="0.1" placeholder="Vol (hL)" value={s.volume} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateSource(i, "volume", e.target.value)} style={{ flex:1 }} disabled={isSubmitting} />
                   {form.sources.length > 1 && <Btn variant="ghost" onClick={()=>removeSource(i)} disabled={isSubmitting} style={{ color:T.red, padding:"0 8px" }}>✕</Btn>}
                 </div>
               ))}
@@ -7036,9 +7069,9 @@ function WorkOrdersAdmin({ workOrders, setWorkOrders }) {
               
               <div style={{ marginTop:16, borderTop:`1px solid ${T.border}`, paddingTop:16 }}>
                 <FF label="Cuve de destination finale (Assemblage)">
-                  <Select value={form.targetContainerId} onChange={e=>setForm({...form, targetContainerId:e.target.value})} disabled={isSubmitting}>
+                  <Select value={form.targetContainerId} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, targetContainerId:e.target.value})} disabled={isSubmitting}>
                     <option value="">-- Choisir une cuve pour recevoir l'assemblage --</option>
-                    {availCuves.map(c=><option key={c.id} value={c.id}>{c.displayName || c.name} (Capacité: {c.capacity} hL)</option>)}
+                    {availCuves.map((c: any)=><option key={c.id} value={c.id}>{c.displayName || c.name} (Capacité: {c.capacity} hL)</option>)}
                   </Select>
                 </FF>
               </div>
@@ -7048,13 +7081,13 @@ function WorkOrdersAdmin({ workOrders, setWorkOrders }) {
           {isIntrant && (
             <div style={{ background:T.surfaceHigh, padding:14, borderRadius:6, border:`1px solid ${T.border}`, marginBottom:16 }}>
               <FF label="Lot cible (à traiter)">
-                <Select value={form.targetLotId} onChange={e=>setForm({...form, targetLotId:e.target.value})} disabled={isSubmitting}>
+                <Select value={form.targetLotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, targetLotId:e.target.value})} disabled={isSubmitting}>
                   <option value="">-- Choisir le lot à traiter --</option>
-                  {state.lots.filter(l => l.status !== "TIRE").map(l=><option key={l.id} value={l.id}>{l.code}</option>)}
+                  {state.lots.filter((l: any) => l.status !== "TIRE").map((l: any)=><option key={l.id} value={l.id}>{l.code}</option>)}
                 </Select>
               </FF>
               <FF label="Détails du produit (Nom exact, Quantité, Dosage...)">
-                <Input value={form.details} onChange={e=>setForm({...form, details:e.target.value})} disabled={isSubmitting} placeholder="Ex: 5g/hL de SO2, Levure IOC 18-2007 (500g)..." />
+                <Input value={form.details} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, details:e.target.value})} disabled={isSubmitting} placeholder="Ex: 5g/hL de SO2, Levure IOC 18-2007 (500g)..." />
               </FF>
             </div>
           )}
@@ -7074,7 +7107,7 @@ function WorkOrdersAdmin({ workOrders, setWorkOrders }) {
 // =============================================================================
 // PARAMÈTRES
 // =============================================================================
-function Parametres({ theme, setTheme }) {
+function Parametres({ theme, setTheme }: { theme: any; setTheme: any }) {
   const T = useTheme();
   return (
     <div>
@@ -7083,7 +7116,7 @@ function Parametres({ theme, setTheme }) {
       </div>
       <div style={{ fontSize: 13, color: T.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 16, fontWeight: "bold" }}>Apparence (Thème)</div>
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(185px,1fr))", gap:12 }}>
-        {Object.entries(THEMES).map(([key, th]) => (
+        {Object.entries(THEMES).map(([key, th]: any) => (
           <div key={key} onClick={() => setTheme(key)} style={{ border:`2px solid ${theme===key?th.accent:T.border}`, padding:16, cursor:"pointer", background:theme===key?th.accent+"11":T.surfaceHigh, borderRadius:8, transition: "all 0.2s" }}>
             <div style={{ color:T.textStrong, fontWeight:"bold", marginBottom:4 }}>{th.name}</div>
             <div style={{ color:T.textDim, fontSize:11 }}>{th.desc}</div>
@@ -7103,14 +7136,15 @@ function AdminUsers() {
   const { user, setUser } = useAuth(); 
   
   const [modal, setModal] = useState(false); 
-  const [editUser, setEditUser] = useState(null); 
+  const [editUser, setEditUser] = useState<any | null>(null); 
   const [form, setForm]   = useState({ name:"", email:"", role:"Caviste", pwd:"" });
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  const set = (k,v) => setForm(f => ({...f,[k]:v}));
+  const set = (k: any,v: any) => setForm((f: any) => ({...f,[k]:v}));
 
   const handleUpsertUser = async (isEdit = false) => {
     const dataToSubmit = isEdit ? editUser : form;
+    if (!dataToSubmit) return;
     if (!dataToSubmit.name || !dataToSubmit.email) return alert("Nom et Email obligatoires.");
     
     setIsSubmitting(true);
@@ -7119,7 +7153,6 @@ function AdminUsers() {
       // 👈 VRAI APPEL API (Fini la simulation !)
       const res = await fetch('/api/users', { 
         method: isEdit ? 'PUT' : 'POST', 
-        headers: buildApiHeaders(user),
         headers: buildApiHeaders(user),
         body: JSON.stringify(dataToSubmit) 
       });
@@ -7152,8 +7185,8 @@ function AdminUsers() {
         setForm({ name:"", email:"", role:"Caviste", pwd:"" });
       }
 
-    } catch (error) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: error.message, color: T.red } });
+    } catch (error: any) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: error?.message ?? "Erreur inconnue", color: T.red } });
     } finally {
       setIsSubmitting(false);
     }
@@ -7169,7 +7202,7 @@ function AdminUsers() {
         <div style={{ display:"grid", gridTemplateColumns:"2fr 2fr 1fr 100px", padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1, background: T.surfaceHigh }}>
           <div>Nom & Prénom</div><div>Adresse Email</div><div>Rôle (Droits)</div><div>Actions</div>
         </div>
-        {state.users.map((u, i) => (
+        {state.users.map((u: any, i: number) => (
           <div key={u.id} style={{ display:"grid", gridTemplateColumns:"2fr 2fr 1fr 100px", alignItems:"center", padding:"16px 16px", borderBottom: i < state.users.length - 1 ? `1px solid ${T.border}` : "none" }}>
             <span style={{ color:T.textStrong, fontWeight:600 }}>{u.name}</span>
             <span style={{ color:T.textDim, fontFamily:"monospace", fontSize:12 }}>{u.email}</span>
@@ -7182,13 +7215,13 @@ function AdminUsers() {
       {modal && (
         <Modal title="Ajouter un nouvel utilisateur" onClose={() => setModal(false)}>
           <FF label="Nom complet">
-            <Input value={form.name} onChange={e => set("name",e.target.value)} disabled={isSubmitting} placeholder="Ex: Jean Dupont" />
+            <Input value={form.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("name",e.target.value)} disabled={isSubmitting} placeholder="Ex: Jean Dupont" />
           </FF>
           <FF label="Adresse Email (Sert d'identifiant)">
-            <Input type="email" value={form.email} onChange={e => set("email",e.target.value)} disabled={isSubmitting} placeholder="jean@domaine.fr" />
+            <Input type="email" value={form.email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("email",e.target.value)} disabled={isSubmitting} placeholder="jean@domaine.fr" />
           </FF>
           <FF label="Niveau d'accès (Rôle)">
-            <Select value={form.role} onChange={e => set("role",e.target.value)} disabled={isSubmitting}>
+            <Select value={form.role} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => set("role",e.target.value)} disabled={isSubmitting}>
               {["Chef de cave","Caviste","Lecture seule"].map(r => <option key={r} value={r}>{r}</option>)}
             </Select>
           </FF>
@@ -7205,13 +7238,13 @@ function AdminUsers() {
       {editUser && (
         <Modal title="Modifier les droits utilisateur" onClose={() => setEditUser(null)}>
           <FF label="Nom complet">
-            <Input value={editUser.name} onChange={e => setEditUser({...editUser, name:e.target.value})} disabled={isSubmitting} />
+            <Input value={editUser.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditUser({...(editUser || {}), name:e.target.value})} disabled={isSubmitting} />
           </FF>
           <FF label="Adresse Email">
-            <Input type="email" value={editUser.email} onChange={e => setEditUser({...editUser, email:e.target.value})} disabled={isSubmitting} />
+            <Input type="email" value={editUser.email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditUser({...(editUser || {}), email:e.target.value})} disabled={isSubmitting} />
           </FF>
           <FF label="Niveau d'accès (Rôle)">
-            <Select value={editUser.role} onChange={e => setEditUser({...editUser, role:e.target.value})} disabled={isSubmitting}>
+            <Select value={editUser.role} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditUser({...(editUser || {}), role:e.target.value})} disabled={isSubmitting}>
               {["Admin","Chef de cave","Caviste","Lecture seule"].map(r => <option key={r} value={r}>{r}</option>)}
             </Select>
           </FF>
@@ -7231,35 +7264,35 @@ function AdminUsers() {
 function AdminLogs() {
   const T = useTheme(); 
   const { state } = useStore();
-  const lots = state.lots || []; 
-  const getLotCode = id => lots.find(l => String(l.id) === String(id))?.code || id || "--";
+  const lots = (state.lots || []) as any[]; 
+  const getLotCode = (id: any) => lots.find((l: any) => String(l.id) === String(id))?.code || id || "--";
   
   const [search, setSearch] = useState(""); 
-  const [filterDates, setFilterDates] = useState([]);
-  const [filterTypes, setFilterTypes] = useState([]); 
-  const [filterLots, setFilterLots] = useState([]);
-  const [filterOperators, setFilterOperators] = useState([]);
-  const [selectedIds, setSelectedIds] = useState([]);
+  const [filterDates, setFilterDates] = useState<string[]>([]);
+  const [filterTypes, setFilterTypes] = useState<string[]>([]); 
+  const [filterLots, setFilterLots] = useState<string[]>([]);
+  const [filterOperators, setFilterOperators] = useState<string[]>([]);
+  const [selectedIds, setSelectedIds] = useState<any[]>([]);
 
   // Génération des options uniques pour les filtres (basé sur le store local pour l'instant)
-  const uniqueDates = [...new Set((state.events || []).map(e => e.date.split(" à ")[0]))].sort((a, b) => {
+  const uniqueDates = [...new Set((state.events || []).map((e: any) => e.date.split(" à ")[0]))].sort((a: any, b: any) => {
       const [d1, m1, y1] = a.split('/'); const [d2, m2, y2] = b.split('/');
-      return new Date(y2, m2-1, d2) - new Date(y1, m1-1, d1);
+      return new Date(Number(y2), Number(m2)-1, Number(d2)).getTime() - new Date(Number(y1), Number(m1)-1, Number(d1)).getTime();
   });
-  const uniqueTypes = [...new Set((state.events || []).map(e => e.type))].sort();
-  const uniqueLots = [...new Set((state.events || []).map(e => getLotCode(e.lotId)))].filter(c => c !== "--").sort();
-  const uniqueOperators = [...new Set((state.events || []).map(e => e.operator))].filter(Boolean).sort();
+  const uniqueTypes = [...new Set((state.events || []).map((e: any) => e.type))].sort();
+  const uniqueLots = [...new Set((state.events || []).map((e: any) => getLotCode(e.lotId)))].filter((c: any) => c !== "--").sort();
+  const uniqueOperators = [...new Set((state.events || []).map((e: any) => e.operator))].filter(Boolean).sort();
 
-  const parseDate = (dStr) => {
+  const parseDate = (dStr: any) => {
       if(!dStr) return 0;
       const [datePart, timePart] = dStr.split(' à ');
       if(!datePart) return 0;
       const [d, m, y] = datePart.split('/');
       const [h, min] = timePart ? timePart.split(':') : [0,0];
-      return new Date(y, m-1, d, h, min).getTime();
+      return new Date(Number(y), Number(m)-1, Number(d), Number(h), Number(min)).getTime();
   };
   
-  const filteredEvents = (state.events || []).filter(e => {
+  const filteredEvents = (state.events || []).filter((e: any) => {
     const lotCode = getLotCode(e.lotId);
     const dateOnly = e.date.split(' à ')[0];
 
@@ -7270,24 +7303,24 @@ function AdminLogs() {
     const matchOperator = filterOperators.length === 0 || filterOperators.includes(e.operator);
 
     return matchSearch && matchDate && matchType && matchLot && matchOperator;
-  }).sort((a,b) => parseDate(b.date) - parseDate(a.date));
+  }).sort((a: any, b: any) => parseDate(b.date) - parseDate(a.date));
 
   const toggleAll = () => { 
     if (selectedIds.length === filteredEvents.length && filteredEvents.length > 0) setSelectedIds([]); 
-    else setSelectedIds(filteredEvents.map(e => e.id)); 
+    else setSelectedIds(filteredEvents.map((e: any) => e.id)); 
   };
   
-  const toggleOne = (id) => { 
-    if (selectedIds.includes(id)) setSelectedIds(selectedIds.filter(x => x !== id)); 
+  const toggleOne = (id: any) => { 
+    if (selectedIds.includes(id)) setSelectedIds(selectedIds.filter((x: any) => x !== id)); 
     else setSelectedIds([...selectedIds, id]); 
   };
 
   const handleExportExcel = () => {
-    const toExport = selectedIds.length > 0 ? filteredEvents.filter(e => selectedIds.includes(e.id)) : filteredEvents;
+    const toExport = selectedIds.length > 0 ? filteredEvents.filter((e: any) => selectedIds.includes(e.id)) : filteredEvents;
     if (toExport.length === 0) return alert("Aucune donnée à exporter.");
     const rows = [["Date", "Type d'opération", "Code Lot", "Flux Volume", "Détails / Notes", "Opérateur Validant"].join(";")];
     
-    toExport.forEach(e => {
+    toExport.forEach((e: any) => {
       const flux = e.volumeIn > 0 ? `+${e.volumeIn} hL` : e.volumeOut > 0 ? `-${e.volumeOut} hL` : "0";
       const cleanNote = `"${(e.note || "").replace(/"/g, '""')}"`;
       rows.push([e.date, e.type, getLotCode(e.lotId), flux, cleanNote, e.operator].join(";"));
@@ -7313,12 +7346,12 @@ function AdminLogs() {
       
       {/* FILTRES AVANCÉS MULTIPLES */}
       <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap", alignItems:"center", background: T.surfaceHigh, padding: "16px 20px", borderRadius: 8, border: `1px solid ${T.border}` }}>
-        <Input value={search} onChange={e => { setSearch(e.target.value); setSelectedIds([]); }} placeholder="🔍 Recherche libre..." style={{ width: 180 }} />
+        <Input value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setSearch(e.target.value); setSelectedIds([]); }} placeholder="🔍 Recherche libre..." style={{ width: 180 }} />
         
-        <MultiSelectDrop label="Toutes les dates" options={uniqueDates} selected={filterDates} onChange={v => { setFilterDates(v); setSelectedIds([]); }} width={160} />
-        <MultiSelectDrop label="Tous les types" options={uniqueTypes} selected={filterTypes} onChange={v => { setFilterTypes(v); setSelectedIds([]); }} format={t => t.replace(/_/g, " ")} width={160} />
-        <MultiSelectDrop label="Tous les lots" options={uniqueLots} selected={filterLots} onChange={v => { setFilterLots(v); setSelectedIds([]); }} width={160} />
-        <MultiSelectDrop label="Tous les opérateurs" options={uniqueOperators} selected={filterOperators} onChange={v => { setFilterOperators(v); setSelectedIds([]); }} width={180} />
+        <MultiSelectDrop label="Toutes les dates" options={uniqueDates} selected={filterDates} onChange={(v: string[]) => { setFilterDates(v); setSelectedIds([]); }} width={160} />
+        <MultiSelectDrop label="Tous les types" options={uniqueTypes} selected={filterTypes} onChange={(v: string[]) => { setFilterTypes(v); setSelectedIds([]); }} format={(t: any) => t.replace(/_/g, " ")} width={160} />
+        <MultiSelectDrop label="Tous les lots" options={uniqueLots} selected={filterLots} onChange={(v: string[]) => { setFilterLots(v); setSelectedIds([]); }} width={160} />
+        <MultiSelectDrop label="Tous les opérateurs" options={uniqueOperators} selected={filterOperators} onChange={(v: string[]) => { setFilterOperators(v); setSelectedIds([]); }} width={180} />
         
         {(search || filterDates.length > 0 || filterTypes.length > 0 || filterLots.length > 0 || filterOperators.length > 0) && (
           <Btn variant="ghost" onClick={() => { setSearch(""); setFilterDates([]); setFilterTypes([]); setFilterLots([]); setFilterOperators([]); }} style={{ color: T.accent }}>
@@ -7336,7 +7369,7 @@ function AdminLogs() {
         </div>
         {filteredEvents.length === 0 ? (
            <div style={{ padding:"60px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucun événement d'audit ne correspond à vos filtres actuels.</div>
-        ) : filteredEvents.map((e, i) => (
+        ) : filteredEvents.map((e: any, i: number) => (
             <div key={e.id} style={{ display:"grid", gridTemplateColumns:"40px 130px 150px 170px 80px 1fr 120px", padding:"14px 16px", alignItems:"center", borderBottom: i < filteredEvents.length - 1 ? `1px solid ${T.border}` : "none", background: selectedIds.includes(e.id) ? T.accent+"11" : "transparent", transition:"background .15s" }}>
               <div style={{ display:"flex", alignItems:"center", justifyContent:"center" }}>
                 <input type="checkbox" checked={selectedIds.includes(e.id)} onChange={() => toggleOne(e.id)} style={{cursor:"pointer", accentColor:T.accent}} />
@@ -7361,20 +7394,20 @@ function AdminLogs() {
 // =============================================================================
 // RECHERCHE GLOBALE (SEARCH BAR)
 // =============================================================================
-function GlobalSearch({ onNavigate, onSelectContainer, onSelectLot }) {
+function GlobalSearch({ onNavigate, onSelectContainer, onSelectLot }: { onNavigate: any; onSelectContainer: any; onSelectLot: any }) {
   const T = useTheme(); 
   const { state } = useStore();
   const [query, setQuery] = useState(""); 
   const [open, setOpen] = useState(false);
   
   // Limite la recherche à 5 résultats max pour la performance
-  const results = (state.lots || []).filter(l => l.code.toLowerCase().includes(query.toLowerCase())).map(l => ({ type:"lot", label:l.code, obj:l })).slice(0, 5);
+  const results = (state.lots || []).filter((l: any) => l.code.toLowerCase().includes(query.toLowerCase())).map((l: any) => ({ type:"lot", label:l.code, obj:l })).slice(0, 5);
 
   return (
     <div style={{ position:"relative", flex:1, maxWidth:420 }}>
       <Input 
         value={query} 
-        onChange={e => { setQuery(e.target.value); setOpen(true); }} 
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setQuery(e.target.value); setOpen(true); }} 
         placeholder="Rechercher un code lot (Ex: 2025-CH-AVZ)..." 
         style={{ width:"100%", background:T.surfaceHigh, border:`1px solid ${T.border}`, padding:"10px 14px", color:T.text, outline:"none", borderRadius: 20, fontFamily:"monospace", fontSize:13 }} 
       />
@@ -7382,11 +7415,11 @@ function GlobalSearch({ onNavigate, onSelectContainer, onSelectLot }) {
         <div style={{ position:"absolute", top:"100%", left:0, right:0, background:T.surface, zIndex:500, border:`1px solid ${T.border}`, borderRadius: 8, marginTop:8, boxShadow:"0 10px 30px rgba(0,0,0,0.5)", overflow: "hidden" }}>
           {results.length === 0 ? (
             <div style={{ padding: "12px 16px", fontSize: 12, color: T.textDim, fontStyle: "italic" }}>Aucun lot trouvé.</div>
-          ) : results.map((r, i) => (
+          ) : results.map((r: any, i: number) => (
             <div key={i} onMouseDown={() => { setQuery(""); setOpen(false); onNavigate("lots"); onSelectLot(r.obj); }} 
                  style={{ padding:"12px 16px", cursor:"pointer", borderBottom: i < results.length-1 ? `1px solid ${T.border}` : "none", transition: "background 0.2s" }}
-                 onMouseOver={e => e.currentTarget.style.background = T.surfaceHigh}
-                 onMouseOut={e => e.currentTarget.style.background = "transparent"}>
+                 onMouseOver={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = T.surfaceHigh}
+                 onMouseOut={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = "transparent"}>
               <span style={{color:T.accentLight, fontFamily:"monospace", fontSize:13, fontWeight:600}}>🍷 {r.label}</span>
             </div>
           ))}
@@ -7414,15 +7447,15 @@ function Administratif() {
   // ==========================================
   // 1. LOGIQUE CAHIER DE PRESSOIR
   // ==========================================
-  const pressings = state.pressings || [];
-  const years = [...new Set(pressings.map(p => p.date ? p.date.split("-")[0] : ""))].filter(Boolean).sort((a,b) => b - a);
+  const pressings = (state.pressings || []) as any[];
+  const years = [...new Set(pressings.map((p: any) => p.date ? p.date.split("-")[0] : ""))].filter(Boolean).sort((a: any,b: any) => Number(b) - Number(a));
   
   const activeYear = years.includes(year) ? year : (years[0] || new Date().getFullYear().toString());
   const filteredPressings = pressings
-    .filter(p => p.date && p.date.startsWith(activeYear))
-    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    .filter((p: any) => p.date && p.date.startsWith(activeYear))
+    .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  const totalKg = filteredPressings.reduce((sum, p) => sum + (parseFloat(p.weightKilos || p.weight) || 0), 0);
+  const totalKg = filteredPressings.reduce((sum: number, p: any) => sum + (parseFloat(p.weightKilos || p.weight) || 0), 0);
   const totalTheoCuvee = ((totalKg / 4000) * 20.5).toFixed(2);
   const totalTheoTaille = ((totalKg / 4000) * 5.0).toFixed(2);
 
@@ -7433,22 +7466,22 @@ function Administratif() {
   const targetMonthStr = `${drmM}/${drmY}`; 
   const currentMonthLabel = new Date(drmMonth + '-01').toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
 
-  const drmEvents = (state.events || []).filter(e => e.date.includes(targetMonthStr));
-  const pertesMois = drmEvents.filter(e => e.type === "PERTE" || e.type === "CASSE");
-  const distillerieMois = drmEvents.filter(e => e.type === "DISTILLERIE");
+  const drmEvents = (state.events || []).filter((e: any) => e.date.includes(targetMonthStr));
+  const pertesMois = drmEvents.filter((e: any) => e.type === "PERTE" || e.type === "CASSE");
+  const distillerieMois = drmEvents.filter((e: any) => e.type === "DISTILLERIE");
 
-  const getVolSafe = (e) => {
+  const getVolSafe = (e: any) => {
     const vol = parseFloat(e.volumeOut || e.volumeIn || 0);
     if (vol > 0) return vol;
     return parseFloat(e.note?.match(/\d+(\.\d+)?/)?.[0] || 0);
   };
 
-  const distilMoisHl = distillerieMois.reduce((s, e) => s + getVolSafe(e), 0);
+  const distilMoisHl = distillerieMois.reduce((s: number, e: any) => s + getVolSafe(e), 0);
 
-  const getLotNameSafe = (e) => {
-    const lot = state.lots?.find(l => String(l.id) === String(e.lotId));
+  const getLotNameSafe = (e: any) => {
+    const lot = state.lots?.find((l: any) => String(l.id) === String(e.lotId));
     if (lot) return lot.code;
-    const bLot = state.bottleLots?.find(b => String(b.id) === String(e.lotId));
+    const bLot = state.bottleLots?.find((b: any) => String(b.id) === String(e.lotId));
     return bLot ? bLot.code : "Inconnu";
   };
 
@@ -7457,7 +7490,7 @@ function Administratif() {
   // ==========================================
   
   // Fonction utilitaire pour déclencher le téléchargement d'un CSV
-  const downloadCSV = (csvContent, fileName) => {
+  const downloadCSV = (csvContent: string, fileName: string) => {
     // Le BOM (\uFEFF) force Excel à lire le fichier en UTF-8 (pour les accents)
     const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement("a");
@@ -7473,7 +7506,7 @@ function Administratif() {
   const exportPressoirCSV = () => {
     // Séparateur Point-Virgule pour Excel France
     let csv = "Date;N° Marc;Parcelle/Provenance;Cépage;Kilos;Degré;Destination\n";
-    filteredPressings.forEach(p => {
+    filteredPressings.forEach((p: any) => {
       const dateStr = new Date(p.date).toLocaleDateString('fr-FR');
       const marc = p.marcNumber || "";
       const parcelle = p.parcelleName || p.provenance || "";
@@ -7489,13 +7522,13 @@ function Administratif() {
   const exportDrmCSV = () => {
     let csv = "Date;Type de Sortie;Lot concerne;Quantite Sortie;Unite;Motif/Destinataire;Operateur\n";
     
-    distillerieMois.forEach(e => {
+    distillerieMois.forEach((e: any) => {
       const dateStr = e.date.split(" à ")[0];
       const note = e.note?.replace("[DISTILLERIE] Motif: ", "") || "";
       csv += `${dateStr};DISTILLERIE;${getLotNameSafe(e)};${getVolSafe(e)};hL;${note};${e.operator}\n`;
     });
 
-    pertesMois.forEach(e => {
+    pertesMois.forEach((e: any) => {
       const dateStr = e.date.split(" à ")[0];
       const unite = e.type === "CASSE" ? "Bouteilles" : "hL";
       csv += `${dateStr};${e.type};${getLotNameSafe(e)};${getVolSafe(e)};${unite};${e.note};${e.operator}\n`;
@@ -7545,8 +7578,8 @@ function Administratif() {
           <div className="no-print" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", background:T.surfaceHigh, padding:20, borderRadius:8, border:`1px solid ${T.border}` }}>
             <div style={{ display:"flex", gap:24, alignItems:"center" }}>
               <FF label="Année de récolte">
-                <Select value={activeYear} onChange={e => setYear(e.target.value)} style={{ width:120 }}>
-                  {years.length > 0 ? years.map(y => <option key={y} value={y}>{y}</option>) : <option value={year}>{year}</option>}
+                <Select value={activeYear} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setYear(e.target.value)} style={{ width:120 }}>
+                  {years.length > 0 ? (years as any[]).map((y: any) => <option key={y} value={y}>{y}</option>) : <option value={year}>{year}</option>}
                 </Select>
               </FF>
               <div style={{ height:30, width:1, background:T.border }} />
@@ -7565,7 +7598,7 @@ function Administratif() {
              <div style={{ display: "grid", gridTemplateColumns: "100px 100px 1.5fr 1fr 100px 80px 1fr", padding: "12px 20px", background: T.surfaceHigh, borderBottom: `2px solid ${T.border}`, fontSize: 10, fontWeight: "bold", color: T.textDim, textTransform: "uppercase" }}>
                 <div>Date</div><div>N° Marc</div><div>Parcelle</div><div>Cépage</div><div style={{textAlign:"right"}}>Kilos</div><div style={{textAlign:"right"}}>Dég.</div><div>Destination</div>
              </div>
-             {filteredPressings.map((p, i) => (
+             {filteredPressings.map((p: any, i: number) => (
                 <div key={p.id} style={{ display: "grid", gridTemplateColumns: "100px 100px 1.5fr 1fr 100px 80px 1fr", padding: "14px 20px", alignItems: "center", borderBottom: `1px solid ${T.border}`, background: i%2===0?"transparent":T.surfaceHigh+"44", fontSize: 13 }}>
                    <div style={{ color:T.textDim }}>{new Date(p.date).toLocaleDateString('fr-FR').slice(0,5)}</div>
                    <div style={{ fontFamily:"monospace", fontWeight:"bold" }}>{p.marcNumber || `M-${i+1}`}</div>
@@ -7592,7 +7625,7 @@ function Administratif() {
           <div className="no-print" style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
             <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
               <span style={{ fontSize: 13, fontWeight: "bold", color: T.textStrong }}>Période :</span>
-              <Input type="month" value={drmMonth} onChange={e => setDrmMonth(e.target.value)} style={{ width: 170 }} />
+              <Input type="month" value={drmMonth} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDrmMonth(e.target.value)} style={{ width: 170 }} />
             </div>
             <div style={{ display: "flex", gap: 12 }}>
                <Btn variant="secondary" onClick={exportDrmCSV}>📥 Exporter CSV</Btn>
@@ -7610,7 +7643,7 @@ function Administratif() {
               <div>Date</div><div>Lot</div><div>Quantité</div><div>Motif</div><div>Opérateur</div>
             </div>
             {distillerieMois.length === 0 ? <div style={{ padding:30, textAlign:"center", color:T.textDim }}>Aucun mouvement ce mois-ci.</div> : 
-              distillerieMois.map(e => (
+              distillerieMois.map((e: any) => (
                 <div key={e.id} style={{ display:"grid", gridTemplateColumns:"120px 150px 100px 1fr 120px", padding:"14px 16px", borderBottom:`1px solid ${T.border}`, fontSize:12 }}>
                   <div style={{ color:T.textDim }}>{e.date.split(" à ")[0]}</div>
                   <div style={{ fontWeight:"bold" }}>{getLotNameSafe(e)}</div>
@@ -7626,13 +7659,13 @@ function Administratif() {
           <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:20 }}>
              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                 <div style={{ fontSize: 12, fontWeight: "bold", color: T.textStrong, textTransform: "uppercase", letterSpacing: 1 }}>Pertes & Casses déclarées</div>
-                <Btn className="no-print" onClick={() => setModal("perte")} style={{ background:T.red, borderColor:T.red, color:"#fff" }}>⚠️ Déclarer Perte</Btn>
+                <Btn className="no-print" onClick={() => setModal("perte" as any)} style={{ background:T.red, borderColor:T.red, color:"#fff" }}>⚠️ Déclarer Perte</Btn>
              </div>
              <div style={{ display:"grid", gridTemplateColumns:"120px 80px 150px 100px 1fr 120px", padding:"10px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase" }}>
                 <div>Date</div><div>Type</div><div>Lot</div><div>Quantité</div><div>Motif</div><div>Opérateur</div>
              </div>
              {pertesMois.length === 0 ? <div style={{ padding:30, textAlign:"center", color:T.textDim }}>Aucune perte déclarée.</div> :
-               pertesMois.map(e => (
+               pertesMois.map((e: any) => (
                  <div key={e.id} style={{ display:"grid", gridTemplateColumns:"120px 80px 150px 100px 1fr 120px", padding:"14px 16px", borderBottom:`1px solid ${T.border}`, fontSize:12 }}>
                    <div style={{ color:T.textDim }}>{e.date.split(" à ")[0]}</div>
                    <div><Badge label={e.type} color={T.red} /></div>
@@ -7655,7 +7688,7 @@ function Administratif() {
 // =============================================================================
 // MODALE : DÉCLARATION DE PERTES ET CASSES (SÉCURISÉE)
 // =============================================================================
-function PerteCasseModal({ onClose }) {
+function PerteCasseModal({ onClose }: { onClose: any }) {
   const T = useTheme();
   const { user } = useAuth();
   const { state, dispatch, refreshData } = useStore();
@@ -7669,8 +7702,8 @@ function PerteCasseModal({ onClose }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
-  const availBulk = (state.lots || []).filter(l => l.volume > 0 && l.status !== "TIRE" && l.status !== "ARCHIVE");
-  const availBottles = (state.bottleLots || []).filter(b => b.currentCount > 0);
+  const availBulk = (state.lots || []).filter((l: any) => l.volume > 0 && l.status !== "TIRE" && l.status !== "ARCHIVE");
+  const availBottles = (state.bottleLots || []).filter((b: any) => b.currentCount > 0);
 
   const submit = async () => {
     if (!entityId || !amount || !note) return alert("Veuillez remplir tous les champs, le motif est obligatoire.");
@@ -7688,14 +7721,12 @@ function PerteCasseModal({ onClose }) {
       const res = await fetch('/api/pertes', {
         method: 'POST',
         headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
         body: JSON.stringify(payload)
       });
 
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.message || data.error || "Une erreur est survenue.");
         throw new Error(data.message || data.error || "Une erreur est survenue.");
       }
 
@@ -7705,8 +7736,8 @@ function PerteCasseModal({ onClose }) {
       if (refreshData) await refreshData();
       onClose();
 
-    } catch(e) { 
-      dispatch({ type: "TOAST_ADD", payload: { msg: e.message, color: T.red } });
+    } catch(e: any) { 
+      dispatch({ type: "TOAST_ADD", payload: { msg: e?.message ?? "Une erreur est survenue.", color: T.red } });
     } finally {
       setIsSubmitting(false);
     }
@@ -7720,17 +7751,17 @@ function PerteCasseModal({ onClose }) {
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12, marginBottom:16 }}>
         <FF label="Type de perte">
-          <Select value={type} onChange={e => { setType(e.target.value); setEntityId(""); }}>
+          <Select value={type} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setType(e.target.value); setEntityId(""); }}>
             <option value="BOTTLE">Casse Bouteilles (unités)</option>
             <option value="BULK">Perte Vrac (hL) / Distillerie</option>
           </Select>
         </FF>
         <FF label="Lot concerné">
-          <Select value={entityId} onChange={e => setEntityId(e.target.value)}>
+          <Select value={entityId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEntityId(e.target.value)}>
             <option value="">-- Choisir un lot --</option>
             {type === "BULK" 
-              ? availBulk.map(l => <option key={l.id} value={l.id}>{l.code} (Dispo: {l.volume} hL)</option>)
-              : availBottles.map(b => <option key={b.id} value={b.id}>{b.code} (Dispo: {b.currentCount} btl)</option>)
+              ? availBulk.map((l: any) => <option key={l.id} value={l.id}>{l.code} (Dispo: {l.volume} hL)</option>)
+              : availBottles.map((b: any) => <option key={b.id} value={b.id}>{b.code} (Dispo: {b.currentCount} btl)</option>)
             }
           </Select>
         </FF>
@@ -7738,10 +7769,10 @@ function PerteCasseModal({ onClose }) {
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12 }}>
         <FF label={type === "BULK" ? "Volume perdu (hL)" : "Nombre de bouteilles"}>
-          <Input type="number" step={type === "BULK" ? "0.1" : "1"} value={amount} onChange={e => setAmount(e.target.value)} />
+          <Input type="number" step={type === "BULK" ? "0.1" : "1"} value={amount} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAmount(e.target.value)} />
         </FF>
         <FF label="Motif (Obligatoire Douanes)">
-          <Input value={note} onChange={e => setNote(e.target.value)} placeholder="Ex: Casse palette, [DISTILLERIE] Envoi MCR..." />
+          <Input value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} placeholder="Ex: Casse palette, [DISTILLERIE] Envoi MCR..." />
         </FF>
       </div>
 
@@ -7781,15 +7812,14 @@ function PlanificateurVendanges() {
       try {
         const res = await fetch('/api/vendanges/calculate', {
           method: 'POST',
-          headers: buildApiHeaders(user),
-          headers: buildApiHeaders(user),
+          headers: buildApiHeaders(undefined),
           body: JSON.stringify({ globalTarget, customTargets })
         });
         
         if (res.ok) {
           const data = await res.json();
           // Conversion des ISO strings reçues du serveur en objets Date pour le tri
-          const hydratedData = data.map(d => ({
+          const hydratedData = data.map((d: any) => ({
             ...d,
             proj: { 
               ...d.proj, 
@@ -7816,18 +7846,18 @@ function PlanificateurVendanges() {
 
 
   // --- HELPERS D'AFFICHAGE ---
-  const handleCustomTarget = (parcelleName, val) => {
+  const handleCustomTarget = (parcelleName: any, val: any) => {
     const num = parseFloat(val);
     if (isNaN(num)) {
-      const newT = { ...customTargets };
+      const newT = { ...(customTargets as any) };
       delete newT[parcelleName];
       setCustomTargets(newT);
     } else {
-      setCustomTargets({ ...customTargets, [parcelleName]: num });
+      setCustomTargets({ ...(customTargets as any), [parcelleName]: num });
     }
   };
 
-  const getSanitaryColor = (maladie, intensite) => {
+  const getSanitaryColor = (maladie: any, intensite: any) => {
     if (!maladie || maladie === "Aucune") return T.green;
     const num = parseFloat(intensite) || 0;
     if (!intensite || num >= 10) return T.red;
@@ -7836,8 +7866,8 @@ function PlanificateurVendanges() {
   };
 
   // Synchronisation avec les données géographiques locales
-  const allProjections = serverProjections.map(backendProj => {
-    const geoParcelle = (state.parcelles || []).find(p => p.nom === backendProj.parcelleNom) || {};
+  const allProjections = serverProjections.map((backendProj: any) => {
+    const geoParcelle = (state.parcelles || []).find((p: any) => p.nom === backendProj.parcelleNom) || {};
     return {
       parcelle: { 
         nom: backendProj.parcelleNom, 
@@ -7848,22 +7878,22 @@ function PlanificateurVendanges() {
     };
   });
 
-  const availableCepages = [...new Set(allProjections.map(p => p.parcelle.cepage).filter(Boolean))].sort();
-  const availableCommunes = [...new Set(allProjections.map(p => p.parcelle.commune).filter(Boolean))].sort();
+  const availableCepages = [...new Set(allProjections.map((p: any) => p.parcelle.cepage).filter(Boolean))].sort();
+  const availableCommunes = [...new Set(allProjections.map((p: any) => p.parcelle.commune).filter(Boolean))].sort();
 
-  let displayedProjections = allProjections.filter(({ parcelle }) => {
+  let displayedProjections = allProjections.filter(({ parcelle }: any) => {
     if (filterCepage && parcelle.cepage !== filterCepage) return false;
     if (filterCommune && parcelle.commune !== filterCommune) return false;
     return true;
   });
 
-  const handleSort = (key) => {
+  const handleSort = (key: any) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') direction = 'desc';
     setSortConfig({ key, direction });
   };
 
-  displayedProjections.sort((a, b) => {
+  displayedProjections.sort((a: any, b: any) => {
     let valA, valB;
     switch (sortConfig.key) {
       case 'parcelle': valA = a.parcelle.nom.toLowerCase(); valB = b.parcelle.nom.toLowerCase(); break;
@@ -7879,7 +7909,7 @@ function PlanificateurVendanges() {
     return 0;
   });
 
-  const SortHeader = ({ label, sortKey, align = "left" }) => {
+  const SortHeader = ({ label, sortKey, align = "left" }: { label: any; sortKey: any; align?: any }) => {
     const isActive = sortConfig.key === sortKey;
     const arrow = isActive ? (sortConfig.direction === 'asc' ? ' ▲' : ' ▼') : ' ↕';
     return (
@@ -7893,10 +7923,10 @@ function PlanificateurVendanges() {
   };
 
   const calculateAverages = () => {
-    const statsByCepage = {};
-    const statsByZone = {};
+    const statsByCepage: Record<string, { sumDates: number; count: number }> = {};
+    const statsByZone: Record<string, { sumDates: number; count: number }> = {};
 
-    allProjections.forEach(({ parcelle, proj }) => {
+    allProjections.forEach(({ parcelle, proj }: any) => {
       const c = parcelle.cepage || "Autre";
       if (!statsByCepage[c]) statsByCepage[c] = { sumDates: 0, count: 0 };
       statsByCepage[c].sumDates += proj.projDate.getTime();
@@ -7908,7 +7938,7 @@ function PlanificateurVendanges() {
       statsByZone[z].count += 1;
     });
 
-    const formatMeanDate = (sum, count) => {
+    const formatMeanDate = (sum: number, count: number) => {
       if (count === 0) return "-";
       return new Date(sum / count).toLocaleDateString('fr-FR');
     };
@@ -7939,20 +7969,20 @@ function PlanificateurVendanges() {
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
               <span style={{ fontSize: 13, fontWeight: "bold", color: T.textStrong }}>Cible globale :</span>
               <div style={{ display: "flex", alignItems: "center" }}>
-                <Input type="number" step="0.1" value={globalTarget} onChange={e => setGlobalTarget(parseFloat(e.target.value) || 10.0)} style={{ width: 80, fontSize: 16, textAlign: "center", fontWeight: "bold", color: T.accent }} />
+                <Input type="number" step="0.1" value={globalTarget} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setGlobalTarget(parseFloat(e.target.value) || 10.0)} style={{ width: 80, fontSize: 16, textAlign: "center", fontWeight: "bold", color: T.accent }} />
                 <span style={{ marginLeft: 8, color: T.textDim, fontSize: 12 }}>%vol</span>
               </div>
             </div>
 
             <div style={{ display: "flex", gap: 12, alignItems: "center", borderLeft: `1px dashed ${T.border}`, paddingLeft: 32 }}>
               <span style={{ fontSize: 12, color: T.textDim }}>Filtrer :</span>
-              <Select value={filterCepage} onChange={e => setFilterCepage(e.target.value)} style={{ width: 140 }}>
+              <Select value={filterCepage} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterCepage(e.target.value)} style={{ width: 140 }}>
                 <option value="">Tous Cépages</option>
-                {availableCepages.map(c => <option key={c} value={c}>{c}</option>)}
+                {availableCepages.map((c: any) => <option key={c} value={c}>{c}</option>)}
               </Select>
-              <Select value={filterCommune} onChange={e => setFilterCommune(e.target.value)} style={{ width: 160 }}>
+              <Select value={filterCommune} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterCommune(e.target.value)} style={{ width: 160 }}>
                 <option value="">Toutes Communes</option>
-                {availableCommunes.map(c => <option key={c} value={c}>{c}</option>)}
+                {availableCommunes.map((c: any) => <option key={c} value={c}>{c}</option>)}
               </Select>
             </div>
           </div>
@@ -7964,7 +7994,7 @@ function PlanificateurVendanges() {
             <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: 20 }}>
               <div style={{ fontSize: 12, fontWeight: "bold", color: T.accent, textTransform: "uppercase", letterSpacing: 1, marginBottom: 16 }}>📊 Moyenne par Cépage</div>
               <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
-                {averages.cepages.map(avg => (
+                {averages.cepages.map((avg: any) => (
                   <div key={avg.name} style={{ background: T.surfaceHigh, border: `1px solid ${T.border}`, padding: "12px 20px", borderRadius: 6, flex: 1, minWidth: 120 }}>
                     <div style={{ fontSize: 14, fontWeight: "bold", color: T.textStrong }}>{avg.name}</div>
                     <div style={{ fontSize: 11, color: T.textDim, marginBottom: 8 }}>({avg.count} parcelles)</div>
@@ -7987,7 +8017,7 @@ function PlanificateurVendanges() {
             <SortHeader label="État Sanitaire" sortKey="sanitaire" align="center" />
             <SortHeader label="Date estimée" sortKey="date" align="right" />
           </div>
-          {displayedProjections.map(({ parcelle, proj }, i) => {
+	          {displayedProjections.map(({ parcelle, proj }: any, i: number) => {
             const sColor = getSanitaryColor(proj.maladie, proj.intensiteNum);
             return (
               <div key={parcelle.nom} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1.5fr 1fr 1.5fr 1.5fr", padding: "16px 20px", alignItems: "center", borderBottom: i < displayedProjections.length - 1 ? `1px solid ${T.border}` : 'none', background: proj.isReady ? T.green+"11" : "transparent" }}>
@@ -7996,7 +8026,7 @@ function PlanificateurVendanges() {
                   <div style={{ fontSize: 11, color: T.accent, marginTop: 4 }}>{parcelle.cepage} • {parcelle.commune}</div>
                 </div>
                 <div style={{ textAlign: "center" }}>
-                  <Input type="number" step="0.1" placeholder={globalTarget.toString()} value={customTargets[parcelle.nom] || ""} onChange={e => handleCustomTarget(parcelle.nom, e.target.value)} style={{ width: 60, fontSize: 14, fontWeight: "bold", color: T.textStrong, textAlign: "center", padding: "4px", background: "transparent", borderColor: customTargets[parcelle.nom] ? T.accent : "transparent" }} />
+	                  <Input type="number" step="0.1" placeholder={globalTarget.toString()} value={(customTargets as any)[parcelle.nom] || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleCustomTarget(parcelle.nom, e.target.value)} style={{ width: 60, fontSize: 14, fontWeight: "bold", color: T.textStrong, textAlign: "center", padding: "4px", background: "transparent", borderColor: (customTargets as any)[parcelle.nom] ? T.accent : "transparent" }} />
                 </div>
                 <div style={{ textAlign: "center" }}>
                   <div style={{ fontSize: 14, fontWeight: "bold", color: T.textStrong }}>{proj.currentDeg.toFixed(2)}</div>
