@@ -3098,7 +3098,7 @@ function TourFA({ onSelectLot }: any) {
       if (refreshData) await refreshData();
 
     } catch (e: any) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: e.message, color: T.red } });
+      dispatch({ type: "TOAST_ADD", payload: { msg: e instanceof Error ? e.message : String(e), color: T.red } });
       setIdempotencyKey(crypto.randomUUID()); // Renouvellement de la clé en cas d'erreur
     } finally {
       setIsSubmitting(false);
@@ -8053,7 +8053,7 @@ function PlanificateurVendanges() {
 // =============================================================================
 // SUIVI DE MATURATION (VIGNOBLE) - PRODUCTION READY
 // =============================================================================
-function MaturationModal({ onClose, editData = null }) {
+function MaturationModal({ onClose, editData = null }: { onClose: any; editData?: any }) {
   const T = useTheme();
   const { user } = useAuth();
   const { state, dispatch, refreshData } = useStore();
@@ -8089,7 +8089,6 @@ function MaturationModal({ onClose, editData = null }) {
       const res = await fetch('/api/parcelles', { 
         method: 'POST', 
         headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
         body: JSON.stringify({ nom: newNom.trim(), departement: newDep, region: newReg, commune: newCom }) 
       });
       if (res.ok) {
@@ -8110,7 +8109,7 @@ function MaturationModal({ onClose, editData = null }) {
     
     try {
       // Nettoyage des virgules pour les décimales
-      const cleanNum = (val) => val ? String(val).replace(',', '.') : "";
+      const cleanNum = (val: any) => val ? String(val).replace(',', '.') : "";
       
       const payload = {
         ...form,
@@ -8126,7 +8125,6 @@ function MaturationModal({ onClose, editData = null }) {
       const res = await fetch('/api/maturation', {
         method: 'POST', // L'API gère l'upsert si l'ID est présent
         headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
         body: JSON.stringify(payload)
       });
 
@@ -8141,22 +8139,22 @@ function MaturationModal({ onClose, editData = null }) {
       } else {
         throw new Error(data.error || "Erreur de sauvegarde.");
       }
-    } catch (e) { 
-      alert(e.message); 
+    } catch (e: any) { 
+      alert(e?.message ?? "Erreur de sauvegarde."); 
       setIsSubmitting(false);
     }
   };
 
   const depts = Object.keys(CHAMPAGNE_GEODATA || {});
-  const regions = newDep ? Object.keys(CHAMPAGNE_GEODATA[newDep]) : [];
-  const communes = (newDep && newReg) ? CHAMPAGNE_GEODATA[newDep][newReg] : [];
+  const regions = newDep ? Object.keys((CHAMPAGNE_GEODATA as any)[newDep] || {}) : [];
+  const communes = (newDep && newReg) ? ((CHAMPAGNE_GEODATA as any)[newDep]?.[newReg] || []) : [];
 
   return (
     <Modal title={form.id ? "Compléter les analyses" : "Saisir un prélèvement"} onClose={onClose}>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
-        <FF label="Date"><Input type="date" value={form.date} onChange={e=>setForm({...form, date:e.target.value})} disabled={isSubmitting} /></FF>
-        <FF label="Cépage">
-          <Select value={form.cepage} onChange={e=>setForm({...form, cepage:e.target.value})} disabled={isSubmitting}>
+	        <FF label="Date"><Input type="date" value={form.date} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, date:e.target.value})} disabled={isSubmitting} /></FF>
+	        <FF label="Cépage">
+	          <Select value={form.cepage} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, cepage:e.target.value})} disabled={isSubmitting}>
             <option value="CH">Chardonnay (CH)</option>
             <option value="PN">Pinot Noir (PN)</option>
             <option value="PM">Meunier (PM)</option>
@@ -8172,12 +8170,12 @@ function MaturationModal({ onClose, editData = null }) {
       
       {!isAddingParcelle ? (
         <FF label="Parcelle">
-          <Select value={form.parcelle} onChange={e => {
-            if (e.target.value === "ADD_NEW") setIsAddingParcelle(true);
-            else setForm({...form, parcelle: e.target.value});
-          }} disabled={isSubmitting}>
-            <option value="">-- Choisir une parcelle --</option>
-            {(state.parcelles || []).map(p => <option key={p.id} value={p.nom}>{p.nom} {p.commune ? `(${p.commune})` : ""}</option>)}
+	          <Select value={form.parcelle} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+	            if (e.target.value === "ADD_NEW") setIsAddingParcelle(true);
+	            else setForm({...form, parcelle: e.target.value});
+	          }} disabled={isSubmitting}>
+	            <option value="">-- Choisir une parcelle --</option>
+	            {(state.parcelles || []).map((p: any) => <option key={p.id} value={p.nom}>{p.nom} {p.commune ? `(${p.commune})` : ""}</option>)}
             <option value="ADD_NEW" style={{ fontWeight: "bold", color: T.accent }}>+ Ajouter une nouvelle parcelle...</option>
           </Select>
         </FF>
@@ -8189,22 +8187,22 @@ function MaturationModal({ onClose, editData = null }) {
           </div>
           
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-            <Select value={newDep} onChange={e => { setNewDep(e.target.value); setNewReg(""); setNewCom(""); }}>
-              <option value="">Département</option>
-              {depts.map(d => <option key={d}>{d}</option>)}
-            </Select>
-            <Select value={newReg} onChange={e => { setNewReg(e.target.value); setNewCom(""); }} disabled={!newDep}>
-              <option value="">Région / Sous-région</option>
-              {regions.map(r => <option key={r}>{r}</option>)}
-            </Select>
+	            <Select value={newDep} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setNewDep(e.target.value); setNewReg(""); setNewCom(""); }}>
+	              <option value="">Département</option>
+	              {depts.map((d: any) => <option key={d}>{d}</option>)}
+	            </Select>
+	            <Select value={newReg} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setNewReg(e.target.value); setNewCom(""); }} disabled={!newDep}>
+	              <option value="">Région / Sous-région</option>
+	              {regions.map((r: any) => <option key={r}>{r}</option>)}
+	            </Select>
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 12 }}>
-            <Select value={newCom} onChange={e => setNewCom(e.target.value)} disabled={!newReg}>
-              <option value="">Commune</option>
-              {communes.map(c => <option key={c}>{c}</option>)}
-            </Select>
-            <Input autoFocus value={newNom} onChange={e=>setNewNom(e.target.value)} placeholder="Nom (Ex: Les Craies)" />
+	            <Select value={newCom} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setNewCom(e.target.value)} disabled={!newReg}>
+	              <option value="">Commune</option>
+	              {communes.map((c: any) => <option key={c}>{c}</option>)}
+	            </Select>
+	            <Input autoFocus value={newNom} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setNewNom(e.target.value)} placeholder="Nom (Ex: Les Craies)" />
           </div>
 
           <Btn onClick={handleSaveNewParcelle} style={{ width: "100%" }} disabled={!newNom || !newDep || !newReg || !newCom}>Enregistrer la parcelle</Btn>
@@ -8214,11 +8212,11 @@ function MaturationModal({ onClose, editData = null }) {
       <div style={{ background: T.surfaceHigh, padding: 14, borderRadius: 4, border: `1px solid ${T.border}`, marginTop: 16 }}>
         <div style={{ fontSize:11, color:T.textDim, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Analyses</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-          <FF label="Sucre (g/L)"><Input type="text" inputMode="decimal" value={form.sucre} onChange={e=>setForm({...form, sucre:e.target.value})} placeholder="Ex: 154" disabled={isSubmitting} /></FF>
-          <FF label="Acidité Totale"><Input type="text" inputMode="decimal" value={form.at} onChange={e=>setForm({...form, at:e.target.value})} placeholder="Ex: 8.5" disabled={isSubmitting} /></FF>
-          <FF label="pH"><Input type="text" inputMode="decimal" value={form.ph} onChange={e=>setForm({...form, ph:e.target.value})} placeholder="Ex: 3.05" disabled={isSubmitting} /></FF>
-          <FF label="Acide Malique"><Input type="text" inputMode="decimal" value={form.malique} onChange={e=>setForm({...form, malique:e.target.value})} placeholder="Ex: 6.2" disabled={isSubmitting} /></FF>
-          <FF label="Acide Tartrique"><Input type="text" inputMode="decimal" value={form.tartrique} onChange={e=>setForm({...form, tartrique:e.target.value})} placeholder="Ex: 7.1" disabled={isSubmitting} /></FF>
+	          <FF label="Sucre (g/L)"><Input type="text" inputMode="decimal" value={form.sucre} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, sucre:e.target.value})} placeholder="Ex: 154" disabled={isSubmitting} /></FF>
+	          <FF label="Acidité Totale"><Input type="text" inputMode="decimal" value={form.at} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, at:e.target.value})} placeholder="Ex: 8.5" disabled={isSubmitting} /></FF>
+	          <FF label="pH"><Input type="text" inputMode="decimal" value={form.ph} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, ph:e.target.value})} placeholder="Ex: 3.05" disabled={isSubmitting} /></FF>
+	          <FF label="Acide Malique"><Input type="text" inputMode="decimal" value={form.malique} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, malique:e.target.value})} placeholder="Ex: 6.2" disabled={isSubmitting} /></FF>
+	          <FF label="Acide Tartrique"><Input type="text" inputMode="decimal" value={form.tartrique} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, tartrique:e.target.value})} placeholder="Ex: 7.1" disabled={isSubmitting} /></FF>
         </div>
       </div>
 
@@ -8226,7 +8224,7 @@ function MaturationModal({ onClose, editData = null }) {
         <div style={{ fontSize:11, color:T.textDim, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>État Sanitaire</div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
           <FF label="Symptôme">
-            <Select value={form.maladie} onChange={e=>setForm({...form, maladie:e.target.value})} disabled={isSubmitting}>
+	            <Select value={form.maladie} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, maladie:e.target.value})} disabled={isSubmitting}>
               <option value="Aucune">Sain (Aucune)</option>
               <option value="Mildiou">Mildiou</option>
               <option value="Oïdium">Oïdium</option>
@@ -8234,7 +8232,7 @@ function MaturationModal({ onClose, editData = null }) {
             </Select>
           </FF>
           <FF label="Fréquence (%)">
-            <Input type="text" inputMode="decimal" value={form.intensite} onChange={e=>setForm({...form, intensite:e.target.value})} disabled={form.maladie === "Aucune" || isSubmitting} placeholder="Ex: 5" />
+	            <Input type="text" inputMode="decimal" value={form.intensite} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, intensite:e.target.value})} disabled={form.maladie === "Aucune" || isSubmitting} placeholder="Ex: 5" />
           </FF>
         </div>
       </div>
@@ -8253,11 +8251,11 @@ function Maturation() {
   const T = useTheme();
   const { state } = useStore();
   
-  const [modalData, setModalData] = useState(null);
-  const [graphData, setGraphData] = useState(null); 
+  const [modalData, setModalData] = useState<any | null>(null);
+  const [graphData, setGraphData] = useState<any | null>(null); 
   const [activeYear, setActiveYear] = useState(new Date().getFullYear().toString());
   
-  const [exportSelection, setExportSelection] = useState([]);
+  const [exportSelection, setExportSelection] = useState<any[]>([]);
   const [expDep, setExpDep] = useState("");
   const [expReg, setExpReg] = useState("");
   const [expCom, setExpCom] = useState("");
@@ -8265,15 +8263,15 @@ function Maturation() {
   const maturations = state.maturations || [];
   
   const currentYear = new Date().getFullYear().toString();
-  const availableYears = maturations.map(m => m.date ? m.date.substring(0, 4) : "").filter(Boolean);
-  const displayYears = [...new Set([currentYear, activeYear, ...availableYears])].sort((a,b) => b - a);
+  const availableYears = maturations.map((m: any) => m.date ? m.date.substring(0, 4) : "").filter(Boolean);
+  const displayYears = [...new Set([currentYear, activeYear, ...availableYears])].sort((a: any,b: any) => Number(b) - Number(a));
 
   const dataForYear = maturations
-    .filter(m => m.date && m.date.startsWith(activeYear))
-    .sort((a,b) => new Date(a.date) - new Date(b.date));
+    .filter((m: any) => m.date && m.date.startsWith(activeYear))
+    .sort((a: any,b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
-  const parcelles = {};
-  dataForYear.forEach(m => {
+  const parcelles: Record<string, any[]> = {};
+  dataForYear.forEach((m: any) => {
     const key = `${m.parcelle} (${m.cepage})`;
     if (!parcelles[key]) parcelles[key] = [];
     parcelles[key].push(m);
@@ -8281,10 +8279,10 @@ function Maturation() {
 
   const allParcelleKeys = Object.keys(parcelles);
 
-  const parcelleGeoMap = {};
-  (state.parcelles || []).forEach(p => { parcelleGeoMap[p.nom] = p; });
+  const parcelleGeoMap: Record<string, any> = {};
+  (state.parcelles || []).forEach((p: any) => { parcelleGeoMap[p.nom] = p; });
 
-  const filteredParcelleKeys = allParcelleKeys.filter(key => {
+  const filteredParcelleKeys = allParcelleKeys.filter((key: any) => {
     const nomParcelle = parcelles[key][0].parcelle; 
     const geo = parcelleGeoMap[nomParcelle] || {};
 
@@ -8295,18 +8293,18 @@ function Maturation() {
   });
 
   const depts = Object.keys(CHAMPAGNE_GEODATA || {});
-  const regions = expDep ? Object.keys(CHAMPAGNE_GEODATA[expDep]) : [];
-  const communes = (expDep && expReg) ? CHAMPAGNE_GEODATA[expDep][expReg] : [];
+  const regions = expDep ? Object.keys((CHAMPAGNE_GEODATA as any)[expDep] || {}) : [];
+  const communes = (expDep && expReg) ? ((CHAMPAGNE_GEODATA as any)[expDep]?.[expReg] || []) : [];
 
-  const toggleExportSelection = (key) => {
-    if (exportSelection.includes(key)) setExportSelection(exportSelection.filter(k => k !== key));
+  const toggleExportSelection = (key: any) => {
+    if (exportSelection.includes(key)) setExportSelection(exportSelection.filter((k: any) => k !== key));
     else setExportSelection([...exportSelection, key]);
   };
 
   const selectAllFiltered = () => {
-    const allFilteredSelected = filteredParcelleKeys.length > 0 && filteredParcelleKeys.every(k => exportSelection.includes(k));
+    const allFilteredSelected = filteredParcelleKeys.length > 0 && filteredParcelleKeys.every((k: any) => exportSelection.includes(k));
     if (allFilteredSelected) {
-      setExportSelection(exportSelection.filter(k => !filteredParcelleKeys.includes(k)));
+      setExportSelection(exportSelection.filter((k: any) => !filteredParcelleKeys.includes(k)));
     } else {
       const newSelection = new Set([...exportSelection, ...filteredParcelleKeys]);
       setExportSelection(Array.from(newSelection));
@@ -8314,18 +8312,18 @@ function Maturation() {
   };
 
   const getExportData = () => {
-    let dataToExport = [];
-    (exportSelection.length > 0 ? exportSelection : filteredParcelleKeys).forEach(key => {
+    let dataToExport: any[] = [];
+    (exportSelection.length > 0 ? exportSelection : filteredParcelleKeys).forEach((key: any) => {
       dataToExport = [...dataToExport, ...parcelles[key]];
     });
-    return dataToExport.sort((a,b) => new Date(a.date) - new Date(b.date));
+    return dataToExport.sort((a: any,b: any) => new Date(a.date).getTime() - new Date(b.date).getTime());
   };
 
   const exportCSV = () => {
     const data = getExportData();
     if (data.length === 0) return alert("Aucune donnée à exporter.");
     const rows = [["Date", "Parcelle", "Cépage", "Sucre (g/L)", "TAVP (°)", "AT", "pH", "Maladie", "Intensité"].join(";")];
-    data.forEach(r => {
+    data.forEach((r: any) => {
       const d = new Date(r.date);
       const shortDate = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       rows.push([
@@ -8353,7 +8351,7 @@ function Maturation() {
       </style></head><body>
       <h1>Suivi de Maturation - ${activeYear}</h1>
       <table><tr><th>Date</th><th>Parcelle</th><th>Cépage</th><th>Sucre</th><th>TAVP</th><th>AT</th><th>pH</th><th>État Sanitaire</th></tr>
-      ${data.map(r => {
+      ${data.map((r: any) => {
         const d = new Date(r.date);
         const shortDate = `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}`;
         return `<tr>
@@ -8364,10 +8362,12 @@ function Maturation() {
         </tr>`;
       }).join('')}
       </table></body></html>`;
-    const win = window.open('', '_blank'); win.document.write(html); win.document.close(); win.print();
+    const win = window.open('', '_blank');
+    if (!win) return;
+    win.document.write(html); win.document.close(); win.print();
   };
 
-  const getSanitaryStyle = (maladie, intensite) => {
+  const getSanitaryStyle = (maladie: any, intensite: any) => {
     if (!maladie || maladie === "Aucune") return { color: T.green, bg: "transparent", border: "transparent" };
     const num = parseFloat(intensite) || 0;
     if (!intensite) return { color: T.red, bg: T.red + "22", border: T.red };
@@ -8384,10 +8384,10 @@ function Maturation() {
           <div style={{ color:T.textDim, fontSize:13, marginTop:4 }}>Réseau de maturation et contrôles sanitaires.</div>
         </div>
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-          <Select value={activeYear} onChange={e => setActiveYear(e.target.value)} style={{ width: 100, fontWeight: "bold", cursor:"pointer" }}>
-            {displayYears.map(y => <option key={y} value={y}>{y}</option>)}
+          <Select value={activeYear} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setActiveYear(e.target.value)} style={{ width: 100, fontWeight: "bold", cursor:"pointer" }}>
+            {displayYears.map((y: any) => <option key={y} value={y}>{y}</option>)}
           </Select>
-          <Btn onClick={() => setModalData("new")}>+ Nouveau Prélèvement</Btn>
+          <Btn onClick={() => setModalData("new" as any)} >+ Nouveau Prélèvement</Btn>
         </div>
       </div>
 
@@ -8399,21 +8399,21 @@ function Maturation() {
               
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
                 <div style={{ width: "100%" }}>
-                  <Select value={expDep} onChange={e => { setExpDep(e.target.value); setExpReg(""); setExpCom(""); setExportSelection([]); }}>
+                  <Select value={expDep} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setExpDep(e.target.value); setExpReg(""); setExpCom(""); setExportSelection([]); }}>
                     <option value="">Tous Départements</option>
-                    {depts.map(d => <option key={d}>{d}</option>)}
+                    {depts.map((d: any) => <option key={d}>{d}</option>)}
                   </Select>
                 </div>
                 <div style={{ width: "100%" }}>
-                  <Select value={expReg} onChange={e => { setExpReg(e.target.value); setExpCom(""); setExportSelection([]); }} disabled={!expDep}>
+                  <Select value={expReg} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setExpReg(e.target.value); setExpCom(""); setExportSelection([]); }} disabled={!expDep}>
                     <option value="">Toutes Régions</option>
-                    {regions.map(r => <option key={r}>{r}</option>)}
+                    {regions.map((r: any) => <option key={r}>{r}</option>)}
                   </Select>
                 </div>
                 <div style={{ width: "100%" }}>
-                  <Select value={expCom} onChange={e => { setExpCom(e.target.value); setExportSelection([]); }} disabled={!expReg}>
+                  <Select value={expCom} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setExpCom(e.target.value); setExportSelection([]); }} disabled={!expReg}>
                     <option value="">Toutes Communes</option>
-                    {communes.map(c => <option key={c}>{c}</option>)}
+                    {communes.map((c: any) => <option key={c}>{c}</option>)}
                   </Select>
                 </div>
               </div>
@@ -8430,10 +8430,10 @@ function Maturation() {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
               <button 
                 onClick={selectAllFiltered} 
-                style={{ padding: "4px 8px", fontSize: 11, borderRadius: 4, border: `1px solid ${T.border}`, background: filteredParcelleKeys.length > 0 && filteredParcelleKeys.every(k => exportSelection.includes(k)) ? T.accent : "transparent", color: filteredParcelleKeys.length > 0 && filteredParcelleKeys.every(k => exportSelection.includes(k)) ? "#fff" : T.textDim, cursor: "pointer" }}>
-                Tout Cocher
-              </button>
-              {filteredParcelleKeys.map(k => (
+	                style={{ padding: "4px 8px", fontSize: 11, borderRadius: 4, border: `1px solid ${T.border}`, background: filteredParcelleKeys.length > 0 && filteredParcelleKeys.every((k: any) => exportSelection.includes(k)) ? T.accent : "transparent", color: filteredParcelleKeys.length > 0 && filteredParcelleKeys.every((k: any) => exportSelection.includes(k)) ? "#fff" : T.textDim, cursor: "pointer" }}>
+	                Tout Cocher
+	              </button>
+	              {filteredParcelleKeys.map((k: any) => (
                 <button 
                   key={k} 
                   onClick={() => toggleExportSelection(k)} 
@@ -8456,7 +8456,7 @@ function Maturation() {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
-          {filteredParcelleKeys.map(name => {
+          {filteredParcelleKeys.map((name: any) => {
             const records = parcelles[name];
             return (
               <div key={name} style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 6, overflow: "hidden" }}>
@@ -8474,13 +8474,13 @@ function Maturation() {
                   <div>Date</div><div>Sucre</div><div>TAVP</div><div>Dynamique</div><div>AT</div><div>pH</div><div>Indice</div><div>État Sanitaire</div><div></div>
                 </div>
 
-                {records.map((r, i) => {
+                {records.map((r: any, i: number) => {
                   let dynStr = "--";
                   let dynColor = T.textDim;
                   
                   if (i > 0) {
                     const prev = records[i - 1];
-                    const days = (new Date(r.date) - new Date(prev.date)) / (1000 * 3600 * 24);
+                    const days = (new Date(r.date).getTime() - new Date(prev.date).getTime()) / (1000 * 3600 * 24);
                     if (days > 0 && r.tavp && prev.tavp) {
                       const delta = (r.tavp - prev.tavp) / days;
                       dynStr = `${delta > 0 ? '+' : ''}${delta.toFixed(2)} °/j`;
@@ -8542,10 +8542,10 @@ function Maturation() {
   );
 }
 
-function MaturationGraphModal({ data, title, onClose }) {
+function MaturationGraphModal({ data, title, onClose }: { data: any[]; title: string; onClose: () => void }) {
   const T = useTheme();
   
-  const config = {
+  const config: Record<string, { label: string; color: string; isDashed?: boolean }> = {
     sucre: { label: "Sucre (g/L)", color: "#f59e0b" },
     tavp: { label: "TAVP (°)", color: "#3b82f6" },
     dyn: { label: "Dynamique (°/j)", color: "#10b981", isDashed: true },
@@ -8555,18 +8555,18 @@ function MaturationGraphModal({ data, title, onClose }) {
     maladie: { label: "État Sanitaire (%)", color: T.red, isDashed: true } 
   };
   
-  const [activeMetrics, setActiveMetrics] = useState(['tavp', 'maladie']);
+  const [activeMetrics, setActiveMetrics] = useState<string[]>(['tavp', 'maladie']);
 
-  const toggleMetric = (m) => {
+  const toggleMetric = (m: string) => {
     if (activeMetrics.includes(m)) setActiveMetrics(activeMetrics.filter(x => x !== m));
     else setActiveMetrics([...activeMetrics, m]);
   };
 
-  const chartData = data.map((r, i) => {
+  const chartData = data.map((r: any, i: number) => {
     let dyn = null;
     if (i > 0 && r.tavp && data[i-1].tavp) {
       const prev = data[i - 1];
-      const days = (new Date(r.date) - new Date(prev.date)) / (1000 * 3600 * 24);
+      const days = (new Date(r.date).getTime() - new Date(prev.date).getTime()) / (1000 * 3600 * 24);
       if (days > 0) dyn = (parseFloat(r.tavp) - parseFloat(prev.tavp)) / days;
     }
 
@@ -8628,7 +8628,7 @@ function MaturationGraphModal({ data, title, onClose }) {
                 <line x1={padLeft} y1={padTop - 10} x2={padLeft} y2={H - padBottom} stroke={T.textDim} strokeWidth={1.5} />
                 <line x1={padLeft} y1={H - padBottom} x2={W - padRight + 10} y2={H - padBottom} stroke={T.textDim} strokeWidth={1.5} />
 
-                {chartData.map((d, i) => {
+                {chartData.map((d: any, i: number) => {
                   const x = padLeft + (i * (W - padLeft - padRight) / (chartData.length - 1));
                   return (
                     <g key={`x-${i}`}>
@@ -8642,22 +8642,22 @@ function MaturationGraphModal({ data, title, onClose }) {
                 {/* Tracé de toutes les courbes actives */}
                 {activeMetrics.map((metric, mIdx) => {
                   const conf = config[metric];
-                  const values = chartData.map(d => parseFloat(d[metric])).filter(v => !isNaN(v));
+                  const values = chartData.map((d: any) => parseFloat(d[metric])).filter((v: number) => !isNaN(v));
                   if (values.length < 2) return null;
                   
                   // L'échelle de la maladie part toujours de 0 et monte à au moins 10%
                   const minV = metric === 'maladie' ? 0 : Math.min(...values) * 0.90; 
                   const maxV = metric === 'maladie' ? Math.max(10, ...values) * 1.10 : Math.max(...values) * 1.10;
 
-                  const getPoint = (val, index) => {
+                  const getPoint = (val: number, index: number) => {
                     const x = padLeft + (index * (W - padLeft - padRight) / (chartData.length - 1));
                     const y = (H - padBottom) - ((val - minV) / (maxV - minV)) * (H - padTop - padBottom);
                     return { x, y };
                   };
 
                   let pathD = "";
-                  const points = [];
-                  chartData.forEach((d, i) => {
+                  const points: Array<{ x: number; y: number; val: any; yOffset: number; maladieName: string }> = [];
+                  chartData.forEach((d: any, i: number) => {
                     if (d[metric] !== null && d[metric] !== undefined) {
                       const pt = getPoint(parseFloat(d[metric]), i);
                       let yOffset = mIdx % 2 === 0 ? -16 : 24; 
@@ -8760,7 +8760,7 @@ const AROMES_TAXONOMY = {
 // Descripteurs de Bouche / Saveurs (Inspiré de votre document)
 const SAVEURS_TAXONOMY = ["Acide", "Amer", "Sucré", "Salé", "Umami", "Rond", "Astringent", "Huileux"];
 
-function DegustationModal({ onClose, defaultPhase = "BAIES" }) {
+function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => void; defaultPhase?: string }) {
   const T = useTheme();
   const { state, dispatch, refreshData } = useStore();
 
@@ -8777,26 +8777,26 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }) {
   });
 
   // Gestion des tags cliquables
-  const [selectedNez, setSelectedNez] = useState([]);
-  const [selectedBouche, setSelectedBouche] = useState([]);
+  const [selectedNez, setSelectedNez] = useState<string[]>([]);
+  const [selectedBouche, setSelectedBouche] = useState<string[]>([]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
-  const toggleTag = (list, setList, tag) => {
-    if (list.includes(tag)) setList(list.filter(t => t !== tag));
+  const toggleTag = (list: string[], setList: (next: string[]) => void, tag: string) => {
+    if (list.includes(tag)) setList(list.filter((t: string) => t !== tag));
     else setList([...list, tag]);
   };
 
   const getTargetOptions = () => {
     if (form.phase === "BAIES") {
-      return (state.parcelles || []).map(p => <option key={p.id} value={p.nom}>{p.nom}</option>);
+      return (state.parcelles || []).map((p: any) => <option key={p.id} value={p.nom}>{p.nom}</option>);
     }
     if (["FERMENTATION", "VINS_CLAIRS"].includes(form.phase)) {
-      return (state.lots || []).filter(l => l.volume > 0).map(l => <option key={l.id} value={l.id}>{l.code} ({l.volume} hL)</option>);
+      return (state.lots || []).filter((l: any) => l.volume > 0).map((l: any) => <option key={l.id} value={l.id}>{l.code} ({l.volume} hL)</option>);
     }
     if (["DOSAGE", "CHAMPAGNE"].includes(form.phase)) {
-      return (state.bottleLots || []).map(b => <option key={b.id} value={b.id}>{b.code} ({b.currentCount} btl)</option>);
+      return (state.bottleLots || []).map((b: any) => <option key={b.id} value={b.id}>{b.code} ({b.currentCount} btl)</option>);
     }
     return null;
   };
@@ -8821,8 +8821,7 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }) {
 
       const res = await fetch('/api/degustations', {
         method: 'POST',
-        headers: buildApiHeaders(user),
-        headers: buildApiHeaders(user),
+        headers: buildApiHeaders(undefined),
         body: JSON.stringify(payload)
       });
 
@@ -8838,7 +8837,7 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }) {
       onClose();
 
     } catch (e) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: e.message, color: T.red } });
+      dispatch({ type: "TOAST_ADD", payload: { msg: e instanceof Error ? e.message : String(e), color: T.red } });
       setIsSubmitting(false);
     }
   };
