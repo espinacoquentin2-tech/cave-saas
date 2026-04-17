@@ -8846,11 +8846,11 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
     <Modal title="Nouvelle Dégustation" onClose={onClose}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
         <FF label="Date">
-          <Input type="date" value={form.date} onChange={e => setForm({...form, date: e.target.value})} disabled={isSubmitting} />
+          <Input type="date" value={form.date} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, date: e.target.value})} disabled={isSubmitting} />
         </FF>
         <FF label="Phase d'élaboration">
-          <Select value={form.phase} onChange={e => setForm({...form, phase: e.target.value, parcelle: "", lotId: "", bottleLotId: ""})} disabled={isSubmitting}>
-            {PHASES_DEGUSTATION.map(p => <option key={p.id} value={p.id}>{p.label}</option>)}
+          <Select value={form.phase} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, phase: e.target.value, parcelle: "", lotId: "", bottleLotId: ""})} disabled={isSubmitting}>
+            {PHASES_DEGUSTATION.map((p: any) => <option key={p.id} value={p.id}>{p.label}</option>)}
           </Select>
         </FF>
       </div>
@@ -8858,7 +8858,7 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
       <div style={{ background: T.surfaceHigh, padding: 16, borderRadius: 6, border: `1px solid ${T.border}`, marginBottom: 20 }}>
         <FF label="Élément dégusté (Cible obligatoire)">
           <Select value={form.phase === "BAIES" ? form.parcelle : (form.phase === "DOSAGE" || form.phase === "CHAMPAGNE" ? form.bottleLotId : form.lotId)} 
-                  onChange={e => {
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                     const val = e.target.value;
                     if (form.phase === "BAIES") setForm({...form, parcelle: val});
                     else if (["DOSAGE", "CHAMPAGNE"].includes(form.phase)) setForm({...form, bottleLotId: val});
@@ -8872,11 +8872,11 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
         <FF label="👁️ Robe / Visuel (Optionnel)">
-          <Input value={form.robe} onChange={e => setForm({...form, robe: e.target.value})} disabled={isSubmitting} placeholder="Ex: Or pâle, reflets verts..." />
+          <Input value={form.robe} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, robe: e.target.value})} disabled={isSubmitting} placeholder="Ex: Or pâle, reflets verts..." />
         </FF>
         {form.phase === "DOSAGE" && (
           <FF label="Dosage testé (g/L)">
-            <Input type="number" step="0.5" value={form.sucreTest} onChange={e => setForm({...form, sucreTest: e.target.value})} disabled={isSubmitting} placeholder="Ex: 5.5" />
+            <Input type="number" step="0.5" value={form.sucreTest} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, sucreTest: e.target.value})} disabled={isSubmitting} placeholder="Ex: 5.5" />
           </FF>
         )}
       </div>
@@ -8888,7 +8888,7 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
         <div key={category} style={{ marginBottom: 12 }}>
           <div style={{ fontSize: 11, color: T.textDim, marginBottom: 6 }}>{category}</div>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {tags.map(tag => {
+            {tags.map((tag: any) => {
               const isActive = selectedNez.includes(tag);
               return (
                 <button key={tag} onClick={() => toggleTag(selectedNez, setSelectedNez, tag)} disabled={isSubmitting}
@@ -8908,7 +8908,7 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
 
       <div style={{ fontSize: 13, fontWeight: "bold", color: T.accentLight, marginBottom: 12, textTransform: "uppercase" }}>👄 Analyse Gustative (Bouche)</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 20 }}>
-        {SAVEURS_TAXONOMY.map(tag => {
+        {SAVEURS_TAXONOMY.map((tag: any) => {
           const isActive = selectedBouche.includes(tag);
           return (
             <button key={tag} onClick={() => toggleTag(selectedBouche, setSelectedBouche, tag)} disabled={isSubmitting}
@@ -8924,7 +8924,7 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
 
       <div style={{ display:"grid", gridTemplateColumns:"120px 1fr", gap:16, alignItems:"start" }}>
         <FF label="Note Globale (/20)">
-          <Input type="number" step="0.5" max="20" min="0" value={form.noteGlobale} onChange={e => setForm({...form, noteGlobale: e.target.value})} disabled={isSubmitting} style={{ fontSize: 18, fontWeight: "bold", textAlign: "center", color: T.accentLight }} />
+          <Input type="number" step="0.5" max="20" min="0" value={form.noteGlobale} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, noteGlobale: e.target.value})} disabled={isSubmitting} style={{ fontSize: 18, fontWeight: "bold", textAlign: "center", color: T.accentLight }} />
         </FF>
         <FF label="Conclusion / Mots-clés libres">
           <textarea 
@@ -8961,17 +8961,17 @@ function Degustation() {
   
   // On filtre selon l'onglet actif et on trie de la plus récente à la plus ancienne
   const filteredData = degustations
-    .filter(d => d.phase === activePhase)
-    .sort((a, b) => new Date(b.date) - new Date(a.date));
+    .filter((d: any) => d.phase === activePhase)
+    .sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const getTargetName = (d) => {
+  const getTargetName = (d: any) => {
     if (d.parcelle) return d.parcelle;
     if (d.lotId) {
-      const l = state.lots?.find(x => String(x.id) === String(d.lotId));
+      const l = state.lots?.find((x: any) => String(x.id) === String(d.lotId));
       return l ? l.code : `Lot #${d.lotId}`;
     }
     if (d.bottleLotId) {
-      const b = state.bottleLots?.find(x => String(x.id) === String(d.bottleLotId));
+      const b = state.bottleLots?.find((x: any) => String(x.id) === String(d.bottleLotId));
       return b ? b.code : `Bouteilles #${d.bottleLotId}`;
     }
     return "Cible inconnue";
@@ -8989,7 +8989,7 @@ function Degustation() {
 
       {/* ONGLETS DES PHASES */}
       <div style={{ display:"flex", gap:10, borderBottom:`1px solid ${T.border}`, paddingBottom:16, marginBottom:24, overflowX:"auto" }}>
-        {PHASES_DEGUSTATION.map(p => (
+        {PHASES_DEGUSTATION.map((p: any) => (
           <button 
             key={p.id} 
             onClick={() => setActivePhase(p.id)}
@@ -9010,7 +9010,7 @@ function Degustation() {
         </div>
       ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))", gap: 16 }}>
-          {filteredData.map(d => {
+          {filteredData.map((d: any) => {
             const targetName = getTargetName(d);
             return (
               <div key={d.id} style={{ background: T.surfaceHigh, border: `1px solid ${T.border}`, borderRadius: 8, padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
@@ -9042,7 +9042,7 @@ function Degustation() {
                   <div>
                     <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>👃 Nez</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {d.nez ? d.nez.split(',').map((tag, i) => (
+                      {d.nez ? d.nez.split(',').map((tag: any, i: number) => (
                         <span key={i} style={{ background: T.accent+"15", color: T.accent, border: `1px solid ${T.accent}33`, padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: "bold" }}>{tag.trim()}</span>
                       )) : <span style={{ color: T.textDim, fontStyle: "italic", fontSize: 11 }}>Non renseigné</span>}
                     </div>
@@ -9050,7 +9050,7 @@ function Degustation() {
                   <div>
                     <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>👄 Bouche</div>
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {d.bouche ? d.bouche.split(',').map((tag, i) => (
+                      {d.bouche ? d.bouche.split(',').map((tag: any, i: number) => (
                         <span key={i} style={{ background: "#d98b2b15", color: "#d98b2b", border: "1px solid #d98b2b33", padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: "bold" }}>{tag.trim()}</span>
                       )) : <span style={{ color: T.textDim, fontStyle: "italic", fontSize: 11 }}>Non renseigné</span>}
                     </div>
@@ -9128,31 +9128,31 @@ const ADMIN_NAV = [
 ];
 
 export default function App() {
-  const [themeKey, setThemeKey]     = useState("terroir");
-  const [user, setUser]             = useState(null);
-  const [nav, setNav]               = useState("dashboard");
-  const [selContainer, setSelCont]  = useState(null);
-  const [selLot, setSelLot]         = useState(null);
+  const [themeKey, setThemeKey]     = useState<string>("terroir");
+  const [user, setUser]             = useState<any | null>(null);
+  const [nav, setNav]               = useState<string>("dashboard");
+  const [selContainer, setSelCont]  = useState<any | null>(null);
+  const [selLot, setSelLot]         = useState<any | null>(null);
   const [state, dispatch]           = useReducer(storeReducer, initialState);
   
-  const [workOrders, setWorkOrders] = useState([]);
+  const [workOrders, setWorkOrders] = useState<any[]>([]);
 
   const [showResetModal, setShowResetModal] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   
-  const [openMenus, setOpenMenus] = useState([1, 2, 3]); 
+  const [openMenus, setOpenMenus] = useState<number[]>([1, 2, 3]); 
   const [adminOpen, setAdminOpen] = useState(false);     
 
   const T = THEMES[themeKey];
 
   const fetchAll = async () => {
     const t = Date.now();
-    const opts = { cache: 'no-store' }; 
+    const opts: RequestInit = { cache: 'no-store' }; 
 
     try {
-      const safeMap = (data, mapFn) => Array.isArray(data) ? data.map(mapFn) : [];
+      const safeMap = (data: any, mapFn: (item: any) => any) => Array.isArray(data) ? data.map(mapFn) : [];
 
-      const fetchSafe = async (url) => {
+      const fetchSafe = async (url: string) => {
         try {
           const res = await fetch(url, opts);
           if (!res.ok) return []; 
@@ -9164,21 +9164,21 @@ export default function App() {
         }
       };
 
-      fetchSafe(`/api/containers?t=${t}`).then(d => {
-        dispatch({type:"SET_CONTAINERS", payload: safeMap(d, c=>{const l=c.currentLots?.[0]; return{id:c.id.toString(),name:c.displayName,type:c.type,capacity:c.capacityValue,currentVolume:l?l.currentVolume:0,lotId:l?l.id.toString():null,zone:c.zone||"Cave",status:c.status,notes:c.notes||""};})});
+      fetchSafe(`/api/containers?t=${t}`).then((d: any) => {
+        dispatch({type:"SET_CONTAINERS", payload: safeMap(d, (c: any)=>{const l=c.currentLots?.[0]; return{id:c.id.toString(),name:c.displayName,type:c.type,capacity:c.capacityValue,currentVolume:l?l.currentVolume:0,lotId:l?l.id.toString():null,zone:c.zone||"Cave",status:c.status,notes:c.notes||""};})});
       });
-      fetchSafe(`/api/lots?t=${t}`).then(d => {
-        dispatch({type:"SET_LOTS", payload: safeMap(d, l=>({id:l.id.toString(),code:l.businessCode,millesime:l.year,cepage:l.mainGrapeCode,lieu:l.placeCode||"",volume:l.currentVolume,containerId:l.currentContainerId?.toString(),status:l.status==="ACTIF"?"FERMENTATION_ALCOOLIQUE":l.status,composition:[{cepage:l.mainGrapeCode,pct:100}],parentIds:[],childIds:[],notes:l.notes||""}))});
+      fetchSafe(`/api/lots?t=${t}`).then((d: any) => {
+        dispatch({type:"SET_LOTS", payload: safeMap(d, (l: any)=>({id:l.id.toString(),code:l.businessCode,millesime:l.year,cepage:l.mainGrapeCode,lieu:l.placeCode||"",volume:l.currentVolume,containerId:l.currentContainerId?.toString(),status:l.status==="ACTIF"?"FERMENTATION_ALCOOLIQUE":l.status,composition:[{cepage:l.mainGrapeCode,pct:100}],parentIds:[],childIds:[],notes:l.notes||""}))});
       });
-      fetchSafe(`/api/bottles?t=${t}`).then(d => {
-        dispatch({type:"SET_BOTTLE_LOTS", payload: safeMap(d, b=>({id:b.id.toString(),code:b.businessCode,type:b.type,sourceLotId:b.sourceLotId?.toString(),format:b.formatCode,initialCount:b.initialBottleCount,currentCount:b.currentBottleCount,degorgeCount:0,zone:b.locationZone||"",palette:b.locationPalette||"",tirageDate:b.tirageDate?new Date(b.tirageDate).toISOString().split('T')[0]:"",status:b.status,dosage:b.dosageValue?`${b.dosageValue} ${b.dosageUnit}`:"",notes:""}))});
+      fetchSafe(`/api/bottles?t=${t}`).then((d: any) => {
+        dispatch({type:"SET_BOTTLE_LOTS", payload: safeMap(d, (b: any)=>({id:b.id.toString(),code:b.businessCode,type:b.type,sourceLotId:b.sourceLotId?.toString(),format:b.formatCode,initialCount:b.initialBottleCount,currentCount:b.currentBottleCount,degorgeCount:0,zone:b.locationZone||"",palette:b.locationPalette||"",tirageDate:b.tirageDate?new Date(b.tirageDate).toISOString().split('T')[0]:"",status:b.status,dosage:b.dosageValue?`${b.dosageValue} ${b.dosageUnit}`:"",notes:""}))});
       });
-      fetchSafe(`/api/events?t=${t}`).then(d => {
-        dispatch({type:"SET_EVENTS", payload: safeMap(d, e=>{const dD=new Date(e.eventDatetime); return{id:e.id.toString(),type:e.eventType,date:`${dD.toLocaleDateString('fr-FR')} à ${dD.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`,lotId:e.lots?.[0]?.lotId?.toString(),containerId:e.containers?.[0]?.containerId?.toString(),volumeIn:e.eventType==='CREATION'?e.lots?.[0]?.volumeChange||0:0,volumeOut:e.eventType==='TRANSFERT'?e.lots?.[0]?.volumeChange||0:0,operator: e.operator || "Inconnu",note:e.comment||""};})});
+      fetchSafe(`/api/events?t=${t}`).then((d: any) => {
+        dispatch({type:"SET_EVENTS", payload: safeMap(d, (e: any)=>{const dD=new Date(e.eventDatetime); return{id:e.id.toString(),type:e.eventType,date:`${dD.toLocaleDateString('fr-FR')} à ${dD.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`,lotId:e.lots?.[0]?.lotId?.toString(),containerId:e.containers?.[0]?.containerId?.toString(),volumeIn:e.eventType==='CREATION'?e.lots?.[0]?.volumeChange||0:0,volumeOut:e.eventType==='TRANSFERT'?e.lots?.[0]?.volumeChange||0:0,operator: e.operator || "Inconnu",note:e.comment||""};})});
       });
-      fetchSafe(`/api/fa?t=${t}`).then(d => dispatch({type:"SET_FA_READINGS", payload: Array.isArray(d) ? d : []}));
-      fetchSafe(`/api/pressings?t=${t}`).then(d => dispatch({type:"SET_PRESSINGS", payload: Array.isArray(d) ? d.map(p => ({...p, id: p.id.toString()})) : []}));
-      fetchSafe(`/api/users?t=${t}`).then(d => dispatch({type: "SET_USERS", payload: Array.isArray(d) ? d.map(u => ({...u, id: u.id.toString(), initials: u.name ? u.name.substring(0, 2).toUpperCase() : "??"})) : [] }));
+      fetchSafe(`/api/fa?t=${t}`).then((d: any) => dispatch({type:"SET_FA_READINGS", payload: Array.isArray(d) ? d : []}));
+      fetchSafe(`/api/pressings?t=${t}`).then((d: any) => dispatch({type:"SET_PRESSINGS", payload: Array.isArray(d) ? d.map((p: any) => ({...p, id: p.id.toString()})) : []}));
+      fetchSafe(`/api/users?t=${t}`).then((d: any) => dispatch({type: "SET_USERS", payload: Array.isArray(d) ? d.map((u: any) => ({...u, id: u.id.toString(), initials: u.name ? u.name.substring(0, 2).toUpperCase() : "??"})) : [] }));
       fetchSafe(`/api/maturation?t=${t}`).then(d => dispatch({type:"SET_MATURATIONS", payload: Array.isArray(d) ? d : []}));
       fetchSafe(`/api/parcelles?t=${t}`).then(d => dispatch({type:"SET_PARCELLES", payload: Array.isArray(d)?d:[]}));
       fetchSafe(`/api/degustations?t=${t}`).then(d => dispatch({type:"SET_DEGUSTATIONS", payload: Array.isArray(d)?d:[]}));
@@ -9200,7 +9200,7 @@ export default function App() {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
-        const email = session.user.email;
+      const email = session.user.email || "";
         const name = email.split('@')[0].toUpperCase();
         
         setUser({ 
@@ -9222,19 +9222,19 @@ export default function App() {
     bootstrap();
   }, []); 
 
-  const goNav = id => { setNav(id); setSelCont(null); setSelLot(null); };
+  const goNav = (id: string) => { setNav(id); setSelCont(null); setSelLot(null); };
   const logout = () => { supabase.auth.signOut(); setUser(null); setNav("dashboard"); setSelCont(null); setSelLot(null); };
   
   const isAdmin = user?.role === "Admin" || user?.role === "Chef de cave"; 
-  const alertCount = state.containers.filter(c => c.status === "VIDE" && c.notes).length + state.lots.filter(l => l.notes && l.notes.includes("sans suivi")).length + state.bottleLots.filter(b => b.status === "A_DEGORGER").length;
+  const alertCount = state.containers.filter((c: any) => c.status === "VIDE" && c.notes).length + state.lots.filter((l: any) => l.notes && l.notes.includes("sans suivi")).length + state.bottleLots.filter((b: any) => b.status === "A_DEGORGER").length;
 
-  const handleSelectLot = (lotObj) => {
+  const handleSelectLot = (lotObj: any) => {
     setSelCont(null);  
     setNav("lots");    
     setSelLot(lotObj); 
   };
 
-  const handleSelectContainer = (containerObj) => {
+  const handleSelectContainer = (containerObj: any) => {
     setSelLot(null);           
     setNav("cuverie");         
     setSelCont(containerObj);  
@@ -9286,7 +9286,7 @@ export default function App() {
       setShowResetModal(false);
 
     } catch (e) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: e.message, color: T.red } });
+      dispatch({ type: "TOAST_ADD", payload: { msg: e instanceof Error ? e.message : String(e), color: T.red } });
     } finally {
       setIsResetting(false);
     }
@@ -9316,13 +9316,13 @@ export default function App() {
                   <div style={{ fontSize:9, color:T.textDim, textTransform:"uppercase", letterSpacing:3, marginTop:4 }}>Gestion viticole</div>
                 </div>
                 <nav style={{ padding:"16px 0", flex:1, overflowY:"auto" }}>
-                  {NAV_CATEGORIES.map((cat, catIdx) => {
+                  {NAV_CATEGORIES.map((cat: any, catIdx: number) => {
                     const isOpen = openMenus.includes(catIdx);
                     
                     const handleClick = () => {
                       if (cat.id) goNav(cat.id);
                       else {
-                        if (isOpen) setOpenMenus(openMenus.filter(i => i !== catIdx));
+                        if (isOpen) setOpenMenus(openMenus.filter((i: number) => i !== catIdx));
                         else setOpenMenus([...openMenus, catIdx]);
                       }
                     };
@@ -9342,7 +9342,7 @@ export default function App() {
                             )}
                           </div>
                         )}
-                        {(!cat.id && isOpen) && cat.items.map(item => (
+                        {(!cat.id && isOpen) && cat.items.map((item: any) => (
                           <button key={item.id} onClick={() => goNav(item.id)} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", width:"100%", padding:"10px 20px", background: nav === item.id ? T.accent+"15" : "none", border:"none", borderLeft:`3px solid ${nav === item.id ? T.accent : "transparent"}`, color: nav === item.id ? T.accentLight : T.textDim, cursor:"pointer", fontSize:13, textAlign:"left", transition:"all .15s", fontFamily:"sans-serif" }}>
                             <span style={{ display:"flex", gap:12, alignItems:"center" }}><span style={{ fontSize:16 }}>{item.icon}</span>{item.label}</span>
                           </button>
@@ -9357,7 +9357,7 @@ export default function App() {
                         <span style={{ fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1.5, fontWeight:"bold" }}>Système</span>
                         <span style={{ fontSize: 9, color: T.textDim, transition: "transform 0.2s", transform: adminOpen ? "rotate(0deg)" : "rotate(-90deg)" }}>▼</span>
                       </div>
-                      {adminOpen && ADMIN_NAV.map(item => (
+                      {adminOpen && ADMIN_NAV.map((item: any) => (
                         <button key={item.id} onClick={() => goNav(item.id)} style={{ display:"flex", alignItems:"center", width:"100%", padding:"10px 20px", background: nav === item.id ? T.accent+"15" : "none", border:"none", borderLeft:`3px solid ${nav === item.id ? T.accent : "transparent"}`, color: nav === item.id ? T.accentLight : T.textDim, cursor:"pointer", fontSize:13, textAlign:"left", transition:"all .15s", fontFamily:"sans-serif" }}>
                           <span style={{ display:"flex", gap:12, alignItems:"center" }}><span style={{ fontSize:16 }}>{item.icon}</span>{item.label}</span>
                         </button>
@@ -9383,7 +9383,7 @@ export default function App() {
               {/* --- MAIN CONTENT AREA --- */}
               <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0, overflow:"hidden" }}>
                 <div style={{ background:T.surface, borderBottom:`1px solid ${T.border}`, padding:"12px 32px", display:"flex", alignItems:"center", gap:16, flexShrink:0 }}>
-                  <GlobalSearch onNavigate={goNav} onSelectContainer={c => { setSelCont(c); goNav("cuverie"); }} onSelectLot={l => { setSelLot(l); goNav("lots"); }} />
+                  <GlobalSearch onNavigate={goNav} onSelectContainer={(c: any) => { setSelCont(c); goNav("cuverie"); }} onSelectLot={(l: any) => { setSelLot(l); goNav("lots"); }} />
                 </div>
                 
                 <div style={{ flex:1, overflowY:"auto", padding:"40px 48px" }}>
