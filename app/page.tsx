@@ -1078,12 +1078,19 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       const res = await fetch('/api/pressoirs', { 
         method: 'POST', 
         headers: buildApiHeaders(user),
-        body: JSON.stringify(newPress) 
+        body: JSON.stringify({ ...newPress, idempotencyKey }) 
       });
-      if (!res.ok) throw new Error("Erreur serveur");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        const validationDetails = errorData?.details?.fieldErrors
+          ? Object.values(errorData.details.fieldErrors).flat().filter(Boolean)[0]
+          : null;
+        throw new Error(validationDetails || errorData?.message || errorData?.error || "Erreur serveur");
+      }
       
       if (refreshData) await refreshData();
       setNewPress({ nom: "", type: "Pneumatique", marque: "Bücher", capacite: 4000 });
+      setIdempotencyKey(crypto.randomUUID());
       setShowAddPress(false);
     } catch (e) { 
       alert(e instanceof Error ? e.message : String(e));
