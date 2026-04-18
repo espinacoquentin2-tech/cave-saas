@@ -77,10 +77,37 @@ export const resolveAuthenticatedActor = async (request: Request): Promise<Reque
     throw new UnauthorizedError('Session invalide ou expirée.');
   }
 
-  const dbUser = await prisma.user.findUnique({
-    where: { email: user.email },
+  let dbUser = await prisma.user.findFirst({
+    where: { email: { equals: user.email, mode: 'insensitive' } },
     select: { email: true, role: true },
   });
+
+  if (!dbUser) {
+    const roleFromMetadata = normalizePersistedRole(
+      typeof user.user_metadata?.role === 'string' ? user.user_metadata.role : null,
+    );
+    const defaultRole = roleFromMetadata ?? 'CAVISTE';
+    const fallbackName =
+      typeof user.user_metadata?.full_name === 'string' && user.user_metadata.full_name.trim()
+        ? user.user_metadata.full_name.trim()
+        : user.email.split('@')[0];
+
+    try {
+      dbUser = await prisma.user.create({
+        data: {
+          email: user.email.toLowerCase(),
+          name: fallbackName,
+          role: defaultRole,
+        },
+        select: { email: true, role: true },
+      });
+    } catch {
+      dbUser = await prisma.user.findFirst({
+        where: { email: { equals: user.email, mode: 'insensitive' } },
+        select: { email: true, role: true },
+      });
+    }
+  }
 
   if (!dbUser) {
     throw new UnauthorizedError('Utilisateur introuvable ou non autorisé.');
