@@ -95,12 +95,8 @@ export async function POST(request: Request) {
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
-
     payload = createParcelleSchema.parse(await request.json());
-
-    const parcelle = await prisma.parcelle.create({
-      data: payload,
-    });
+    const parcelle = await prisma.parcelle.create({ data: payload });
 
     logger.info({
       action: 'parcelles.post.success',
@@ -160,36 +156,15 @@ export async function POST(request: Request) {
         : null;
 
       if (existingSameTerroir) {
-        logger.warn({
-          action: 'parcelles.post.duplicate_same_terroir',
-          requestId,
-          details: {
-            parcelleId: existingSameTerroir.id,
-            nom: existingSameTerroir.nom,
-          },
-        });
-
-        return NextResponse.json(existingSameTerroir, {
-          status: 200,
-          headers: { 'x-request-id': requestId },
-        });
+        return NextResponse.json(existingSameTerroir, { status: 200, headers: { 'x-request-id': requestId } });
       }
 
-      const target = Array.isArray(error.meta?.target)
-        ? error.meta.target.join(',')
-        : '';
+      const target = Array.isArray(error.meta?.target) ? error.meta.target.join(',') : '';
+      const message = target === 'nom'
+        ? 'Contrainte DB active: nom de parcelle unique global (migration Prisma non appliquée).'
+        : 'Une parcelle avec ce terroir existe déjà.';
 
-      const message =
-        target === 'nom'
-          ? 'Contrainte DB active: nom de parcelle unique global. La migration Prisma n’est probablement pas appliquée.'
-          : 'Une parcelle avec ce terroir existe déjà.';
-
-      logger.warn({
-        action: 'parcelles.post.duplicate_name',
-        requestId,
-        details: { error: error.message, target },
-      });
-
+      logger.warn({ action: 'parcelles.post.duplicate_name', requestId, details: { error: error.message, target } });
       return NextResponse.json(
         { error: 'DUPLICATE_PARCELLE', message },
         { status: 409, headers: { 'x-request-id': requestId } },
