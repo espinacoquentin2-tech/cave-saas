@@ -8134,7 +8134,8 @@ function MaturationModal({ onClose, editData = null }: { onClose: any; editData?
       const data = await res.json();
 
       if (res.ok) {
-        dispatch({ type: form.id ? "UPDATE_MATURATION" : "ADD_MATURATION", payload: data });
+        const savedRecord = data?.data || data;
+        dispatch({ type: form.id ? "UPDATE_MATURATION" : "ADD_MATURATION", payload: savedRecord });
         dispatch({ type: "TOAST_ADD", payload: { msg: `Prélèvement ${form.id ? 'mis à jour' : 'enregistré'} avec succès.`, color: T.green } });
         
         if (refreshData) await refreshData(); // Force la resync de la base

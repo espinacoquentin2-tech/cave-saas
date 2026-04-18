@@ -344,7 +344,7 @@ model Maturation {
 // ==========================================
 model Parcelle {
   id          Int      @id @default(autoincrement())
-  nom         String   @unique
+  nom         String
   
   // Nouvelles colonnes de terroir
   departement String?
@@ -352,6 +352,8 @@ model Parcelle {
   commune     String?
   
   createdAt   DateTime @default(now())
+
+  @@unique([nom, departement, region, commune])
 }
 
 // ==========================================
