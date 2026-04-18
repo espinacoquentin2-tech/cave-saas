@@ -9154,14 +9154,14 @@ export default function App() {
 
   const fetchAll = async () => {
     const t = Date.now();
-    const opts: RequestInit = { cache: 'no-store' }; 
+    const opts: RequestInit = { cache: 'no-store' };
 
     try {
       const safeMap = (data: any, mapFn: (item: any) => any) => Array.isArray(data) ? data.map(mapFn) : [];
 
       const fetchSafe = async (url: string) => {
         try {
-          const res = await fetch(url, opts);
+          const res = await fetch(url, { ...opts, headers: buildApiHeaders(user) });
           if (!res.ok) return []; 
           const text = await res.text();
           return text ? JSON.parse(text) : []; 
