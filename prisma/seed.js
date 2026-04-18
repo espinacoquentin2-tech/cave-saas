@@ -15,14 +15,18 @@ async function main() {
   
   console.log('🌱 Création des données de base...')
 
-  // 1. Création d'un utilisateur (Indispensable pour se connecter à l'app)
-  const chef = await prisma.user.create({
-    data: {
-      name: 'Jean Dubois',
-      email: 'jean@domaine.fr',
-      role: 'CHEF_CAVE',
-    },
-  })
+  // 1. Création des utilisateurs de référence attendus par l'application
+  const users = [
+    { name: 'Marie Laurent', email: 'admin@cave.fr', role: 'ADMIN' },
+    { name: 'Jean Dupont', email: 'chef@cave.fr', role: 'CHEF_CAVE' },
+    { name: 'Pierre Martin', email: 'caviste@cave.fr', role: 'CAVISTE' },
+    { name: 'Sophie Bernard', email: 'lecture@cave.fr', role: 'LECTURE_SEULE' },
+    { name: 'Jean Dubois', email: 'jean@domaine.fr', role: 'CHEF_CAVE' },
+  ]
+
+  for (const user of users) {
+    await prisma.user.create({ data: user })
+  }
 
   // =========================================================================
   // 🚫 PARTIE DÉSACTIVÉE POUR LES TESTS (Base 100% Vierge)
