@@ -69,11 +69,12 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
+  let payload: z.infer<typeof createParcelleSchema> | null = null;
 
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
-    const payload = createParcelleSchema.parse(await request.json());
+    payload = createParcelleSchema.parse(await request.json());
     const parcelle = await prisma.parcelle.create({ data: payload });
 
     logger.info({
@@ -114,9 +115,41 @@ export async function POST(request: Request) {
     }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+<<<<<<< ours
+<<<<<<< ours
       logger.warn({ action: 'parcelles.post.duplicate_name', requestId, details: { error: error.message } });
       return NextResponse.json(
         { error: 'DUPLICATE_PARCELLE', message: 'Une parcelle avec ce nom existe déjà.' },
+=======
+=======
+>>>>>>> theirs
+      const existingSameTerroir = payload
+        ? await prisma.parcelle.findFirst({
+            where: {
+              nom: payload.nom,
+              departement: payload.departement ?? null,
+              region: payload.region ?? null,
+              commune: payload.commune ?? null,
+            },
+          })
+        : null;
+
+      if (existingSameTerroir) {
+        return NextResponse.json(existingSameTerroir, { status: 200, headers: { 'x-request-id': requestId } });
+      }
+
+      const target = Array.isArray(error.meta?.target) ? error.meta.target.join(',') : '';
+      const message = target === 'nom'
+        ? 'Contrainte DB active: nom de parcelle unique global (migration Prisma non appliquée).'
+        : 'Une parcelle avec ce terroir existe déjà.';
+
+      logger.warn({ action: 'parcelles.post.duplicate_name', requestId, details: { error: error.message, target } });
+      return NextResponse.json(
+        { error: 'DUPLICATE_PARCELLE', message },
+<<<<<<< ours
+>>>>>>> theirs
+=======
+>>>>>>> theirs
         { status: 409, headers: { 'x-request-id': requestId } },
       );
     }
