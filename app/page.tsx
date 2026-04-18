@@ -8097,8 +8097,11 @@ function MaturationModal({ onClose, editData = null }: { onClose: any; editData?
         setForm({ ...form, parcelle: d.nom });
         setIsAddingParcelle(false);
         setNewDep(""); setNewReg(""); setNewCom(""); setNewNom("");
-      } else { alert("Erreur lors de la création de la parcelle."); }
-    } catch (e) { alert("Erreur réseau."); }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err?.message || err?.error || "Erreur lors de la création de la parcelle.");
+      }
+    } catch (e: any) { alert(e?.message || "Erreur réseau."); }
   };
 
   const submit = async () => {

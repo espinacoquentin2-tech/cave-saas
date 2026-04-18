@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { z, ZodError } from 'zod';
+import { Prisma } from '@prisma/client';
 import { logger } from '@/server/shared/logger';
 import { prisma } from '@/server/shared/prisma';
 import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
@@ -109,6 +110,14 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'VALIDATION_ERROR', details: error.flatten() },
         { status: 400, headers: { 'x-request-id': requestId } },
+      );
+    }
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      logger.warn({ action: 'parcelles.post.duplicate_name', requestId, details: { error: error.message } });
+      return NextResponse.json(
+        { error: 'DUPLICATE_PARCELLE', message: 'Une parcelle avec ce nom existe déjà.' },
+        { status: 409, headers: { 'x-request-id': requestId } },
       );
     }
 
