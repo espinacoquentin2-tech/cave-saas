@@ -4,7 +4,13 @@ import { z, ZodError } from 'zod';
 import { Prisma } from '@prisma/client';
 import { logger } from '@/server/shared/logger';
 import { prisma } from '@/server/shared/prisma';
-import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
+import {
+  READ_ROLES,
+  WRITE_ROLES,
+  assertRole,
+  getRequestId,
+  resolveAuthenticatedActor,
+} from '@/server/shared/request-context';
 
 const createParcelleSchema = z.object({
   nom: z.string().trim().min(1),
@@ -19,7 +25,10 @@ export async function GET(request: Request) {
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
-    const parcelles = await prisma.parcelle.findMany({ orderBy: { nom: 'asc' } });
+
+    const parcelles = await prisma.parcelle.findMany({
+      orderBy: { nom: 'asc' },
+    });
 
     logger.info({
       action: 'parcelles.get.success',
@@ -29,7 +38,10 @@ export async function GET(request: Request) {
       details: { count: parcelles.length },
     });
 
-    return NextResponse.json(parcelles, { status: 200, headers: { 'x-request-id': requestId } });
+    return NextResponse.json(parcelles, {
+      status: 200,
+      headers: { 'x-request-id': requestId },
+    });
   } catch (error) {
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
@@ -51,7 +63,12 @@ export async function GET(request: Request) {
     }
 
     if (error instanceof ZodError) {
-      logger.warn({ action: 'parcelles.get.validation_failed', requestId, details: { issues: error.flatten() } });
+      logger.warn({
+        action: 'parcelles.get.validation_failed',
+        requestId,
+        details: { issues: error.flatten() },
+      });
+
       return NextResponse.json(
         { error: 'VALIDATION_ERROR', details: error.flatten() },
         { status: 400, headers: { 'x-request-id': requestId } },
@@ -63,21 +80,27 @@ export async function GET(request: Request) {
       requestId,
       details: { error: error instanceof Error ? error.message : 'unknown_error' },
     });
-    return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
+
+    return NextResponse.json(
+      { error: 'INTERNAL_SERVER_ERROR' },
+      { status: 500, headers: { 'x-request-id': requestId } },
+    );
   }
 }
 
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
   let payload: z.infer<typeof createParcelleSchema> | null = null;
-  let payload: z.infer<typeof createParcelleSchema> | null = null;
 
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
+
     payload = createParcelleSchema.parse(await request.json());
-    payload = createParcelleSchema.parse(await request.json());
-    const parcelle = await prisma.parcelle.create({ data: payload });
+
+    const parcelle = await prisma.parcelle.create({
+      data: payload,
+    });
 
     logger.info({
       action: 'parcelles.post.success',
@@ -87,7 +110,10 @@ export async function POST(request: Request) {
       details: { parcelleId: parcelle.id, nom: parcelle.nom },
     });
 
-    return NextResponse.json(parcelle, { status: 201, headers: { 'x-request-id': requestId } });
+    return NextResponse.json(parcelle, {
+      status: 201,
+      headers: { 'x-request-id': requestId },
+    });
   } catch (error) {
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
@@ -109,7 +135,12 @@ export async function POST(request: Request) {
     }
 
     if (error instanceof ZodError) {
-      logger.warn({ action: 'parcelles.post.validation_failed', requestId, details: { issues: error.flatten() } });
+      logger.warn({
+        action: 'parcelles.post.validation_failed',
+        requestId,
+        details: { issues: error.flatten() },
+      });
+
       return NextResponse.json(
         { error: 'VALIDATION_ERROR', details: error.flatten() },
         { status: 400, headers: { 'x-request-id': requestId } },
@@ -117,14 +148,6 @@ export async function POST(request: Request) {
     }
 
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-<<<<<<< ours
-<<<<<<< ours
-      logger.warn({ action: 'parcelles.post.duplicate_name', requestId, details: { error: error.message } });
-      return NextResponse.json(
-        { error: 'DUPLICATE_PARCELLE', message: 'Une parcelle avec ce nom existe déjà.' },
-=======
-=======
->>>>>>> theirs
       const existingSameTerroir = payload
         ? await prisma.parcelle.findFirst({
             where: {
@@ -137,21 +160,38 @@ export async function POST(request: Request) {
         : null;
 
       if (existingSameTerroir) {
-        return NextResponse.json(existingSameTerroir, { status: 200, headers: { 'x-request-id': requestId } });
+        logger.warn({
+          action: 'parcelles.post.duplicate_same_terroir',
+          requestId,
+          details: {
+            parcelleId: existingSameTerroir.id,
+            nom: existingSameTerroir.nom,
+          },
+        });
+
+        return NextResponse.json(existingSameTerroir, {
+          status: 200,
+          headers: { 'x-request-id': requestId },
+        });
       }
 
-      const target = Array.isArray(error.meta?.target) ? error.meta.target.join(',') : '';
-      const message = target === 'nom'
-        ? 'Contrainte DB active: nom de parcelle unique global (migration Prisma non appliquée).'
-        : 'Une parcelle avec ce terroir existe déjà.';
+      const target = Array.isArray(error.meta?.target)
+        ? error.meta.target.join(',')
+        : '';
 
-      logger.warn({ action: 'parcelles.post.duplicate_name', requestId, details: { error: error.message, target } });
+      const message =
+        target === 'nom'
+          ? 'Contrainte DB active: nom de parcelle unique global. La migration Prisma n’est probablement pas appliquée.'
+          : 'Une parcelle avec ce terroir existe déjà.';
+
+      logger.warn({
+        action: 'parcelles.post.duplicate_name',
+        requestId,
+        details: { error: error.message, target },
+      });
+
       return NextResponse.json(
         { error: 'DUPLICATE_PARCELLE', message },
-<<<<<<< ours
->>>>>>> theirs
-=======
->>>>>>> theirs
         { status: 409, headers: { 'x-request-id': requestId } },
       );
     }
@@ -161,6 +201,10 @@ export async function POST(request: Request) {
       requestId,
       details: { error: error instanceof Error ? error.message : 'unknown_error' },
     });
-    return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
+
+    return NextResponse.json(
+      { error: 'INTERNAL_SERVER_ERROR' },
+      { status: 500, headers: { 'x-request-id': requestId } },
+    );
   }
 }
