@@ -70,10 +70,12 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
   let payload: z.infer<typeof createParcelleSchema> | null = null;
+  let payload: z.infer<typeof createParcelleSchema> | null = null;
 
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
+    payload = createParcelleSchema.parse(await request.json());
     payload = createParcelleSchema.parse(await request.json());
     const parcelle = await prisma.parcelle.create({ data: payload });
 
