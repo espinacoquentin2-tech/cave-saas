@@ -71,10 +71,34 @@ type VendangesProps = {
   onSelectContainer: (container: any) => void;
 };
 
+let latestAccessToken: string | undefined;
+
+const setLatestAccessToken = (token: string | undefined) => {
+  latestAccessToken = token;
+};
+
+const unwrapApiData = (payload: any) => {
+  if (payload && typeof payload === 'object' && 'data' in payload) {
+    return payload.data;
+  }
+  return payload;
+};
+
+const extractApiErrorMessage = (payload: any, fallback = "Erreur serveur") => {
+  const fieldError = payload?.details?.fieldErrors
+    ? Object.values(payload.details.fieldErrors).flat().find(Boolean)
+    : null;
+  const formError = Array.isArray(payload?.details?.formErrors)
+    ? payload.details.formErrors.find(Boolean)
+    : null;
+
+  return fieldError || formError || payload?.message || payload?.error || fallback;
+};
+
 const buildApiHeaders = (user: { accessToken?: string } | null | undefined, extra: Record<string, string> = {}) => ({
   'Content-Type': 'application/json',
   'x-request-id': crypto.randomUUID(),
-  ...(user?.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {}),
+  ...((user?.accessToken ?? latestAccessToken) ? { Authorization: `Bearer ${user?.accessToken ?? latestAccessToken}` } : {}),
   ...extra,
 });
 
@@ -1038,10 +1062,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        const validationDetails = errorData?.details?.fieldErrors
-          ? Object.values(errorData.details.fieldErrors).flat().filter(Boolean)[0]
-          : null;
-        throw new Error(validationDetails || errorData?.message || errorData?.error || "Erreur lors de la création du lot.");
+        throw new Error(extractApiErrorMessage(errorData, "Erreur lors de la création du lot."));
       }
       
       dispatch({ type: "TOAST_ADD", payload: { msg: "Raisins réceptionnés sur le quai", color: T.green } });
@@ -1061,8 +1082,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     if (!apportToDelete) return;
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/pressings?id=${(apportToDelete as any).id}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error((await res.json()).error);
+      const res = await fetch(`/api/pressings?id=${(apportToDelete as any).id}`, { method: 'DELETE', headers: buildApiHeaders(user) });
+      if (!res.ok) throw new Error(extractApiErrorMessage(await res.json().catch(() => ({}))));
       if (refreshData) await refreshData();
     } catch(e) { 
       alert(e instanceof Error ? e.message : String(e));
@@ -1082,10 +1103,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        const validationDetails = errorData?.details?.fieldErrors
-          ? Object.values(errorData.details.fieldErrors).flat().filter(Boolean)[0]
-          : null;
-        throw new Error(validationDetails || errorData?.message || errorData?.error || "Erreur serveur");
+        throw new Error(extractApiErrorMessage(errorData));
       }
       
       if (refreshData) await refreshData();
@@ -1107,7 +1125,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
         headers: buildApiHeaders(user),
         body: JSON.stringify({ id, status, ...extraData }) 
       });
-      if (!res.ok) throw new Error("Erreur serveur");
+      if (!res.ok) throw new Error(extractApiErrorMessage(await res.json().catch(() => ({}))));
       
       if (refreshData) await refreshData();
       if (status === "VIDE") setActionModal(null);
@@ -1172,11 +1190,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
           setIsSubmitting(false);
           return;
         }
-        const fieldError = errorData?.details?.fieldErrors
-          ? Object.values(errorData.details.fieldErrors).flat().find(Boolean)
-          : null;
-        const formError = Array.isArray(errorData?.details?.formErrors) ? errorData.details.formErrors.find(Boolean) : null;
-        throw new Error(fieldError || formError || errorData?.message || errorData?.error || "Erreur serveur");
+        throw new Error(extractApiErrorMessage(errorData));
       }
 
       dispatch({ type: "TOAST_ADD", payload: { msg: "Pressoir chargé avec succès !", color: T.green } });
@@ -3112,9 +3126,10 @@ function TourFA({ onSelectLot }: any) {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erreur lors de l'enregistrement en base de données.");
+      if (!res.ok) throw new Error(extractApiErrorMessage(data, "Erreur lors de l'enregistrement en base de données."));
+      const result = unwrapApiData(data);
 
-      dispatch({ type: "TOAST_ADD", payload: { msg: `Tour de FA enregistré (${data.count} cuves mises à jour)`, color: T.green } });
+      dispatch({ type: "TOAST_ADD", payload: { msg: `Tour de FA enregistré (${result?.count ?? 0} cuves mises à jour)`, color: T.green } });
       
       // On vide les champs de saisie et on génère une nouvelle clé pour le prochain tour
       setReadings({});
@@ -6681,7 +6696,7 @@ function AnalyseModal({ initial, onClose, onSuccess, title }: { initial: any; on
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erreur lors de la sauvegarde.");
+      if (!res.ok) throw new Error(extractApiErrorMessage(data, "Erreur lors de la sauvegarde."));
 
       dispatch({ type: "TOAST_ADD", payload: { msg: "Analyse enregistrée avec succès.", color: T.green } });
       onSuccess(); // Déclenche le rafraîchissement global
@@ -6779,9 +6794,10 @@ function AIImportModal({ initialFile, onClose, onSuccess }: { initialFile: any; 
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erreur lors de l'importation.");
+      if (!res.ok) throw new Error(extractApiErrorMessage(data, "Erreur lors de l'importation."));
+      const result = unwrapApiData(data);
 
-      dispatch({ type: "TOAST_ADD", payload: { msg: `${data.count} analyses importées avec succès !`, color: T.green } });
+      dispatch({ type: "TOAST_ADD", payload: { msg: `${result?.count ?? 0} analyses importées avec succès !`, color: T.green } });
       onSuccess(); // Rafraîchissement global
 
     } catch (e: any) {
@@ -7007,11 +7023,12 @@ function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any; setWo
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Erreur lors de la planification de l'ordre de travail.");
+        throw new Error(extractApiErrorMessage(data, "Erreur lors de la planification de l'ordre de travail."));
       }
+      const workOrder = unwrapApiData(data);
 
       // 3. Mise à jour de l'UI (Optimistic UI ou remplacement par les données du serveur)
-      setWorkOrders([data, ...workOrders]);
+      setWorkOrders([workOrder, ...workOrders]);
       dispatch({ type: "TOAST_ADD", payload: { msg: "Ordre de travail planifié avec succès !", color: T.green } });
       
       // Réinitialisation
@@ -8126,7 +8143,7 @@ function MaturationModal({ onClose, editData = null }: { onClose: any; editData?
         setNewDep(""); setNewReg(""); setNewCom(""); setNewNom("");
       } else {
         const err = await res.json().catch(() => ({}));
-        alert(err?.message || err?.error || "Erreur lors de la création de la parcelle.");
+        alert(extractApiErrorMessage(err, "Erreur lors de la création de la parcelle."));
       }
     } catch (e: any) { alert(e?.message || "Erreur réseau."); }
   };
@@ -8168,10 +8185,7 @@ function MaturationModal({ onClose, editData = null }: { onClose: any; editData?
         if (refreshData) await refreshData(); // Force la resync de la base
         onClose();
       } else {
-        const validationDetails = data?.details?.fieldErrors
-          ? Object.values(data.details.fieldErrors).flat().filter(Boolean)[0]
-          : null;
-        throw new Error(validationDetails || data?.message || data?.error || "Erreur de sauvegarde.");
+        throw new Error(extractApiErrorMessage(data, "Erreur de sauvegarde."));
       }
     } catch (e: any) { 
       alert(e?.message ?? "Erreur de sauvegarde."); 
@@ -9189,41 +9203,49 @@ export default function App() {
       const fetchSafe = async (url: string) => {
         try {
           const res = await fetch(url, { ...opts, headers: buildApiHeaders(user) });
-          if (!res.ok) return []; 
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            console.error(`Erreur API sur ${url}:`, extractApiErrorMessage(err, `HTTP ${res.status}`));
+            return null;
+          }
           const text = await res.text();
-          return text ? JSON.parse(text) : []; 
+          const parsed = text ? JSON.parse(text) : [];
+          return unwrapApiData(parsed);
         } catch (e) {
           console.error(`Erreur réseau sur ${url}`);
-          return [];
+          return null;
         }
       };
 
       fetchSafe(`/api/containers?t=${t}`).then((d: any) => {
+        if (!Array.isArray(d)) return;
         dispatch({type:"SET_CONTAINERS", payload: safeMap(d, (c: any)=>{const l=c.currentLots?.[0]; return{id:c.id.toString(),name:c.displayName,type:c.type,capacity:c.capacityValue,currentVolume:l?l.currentVolume:0,lotId:l?l.id.toString():null,zone:c.zone||"Cave",status:c.status,notes:c.notes||""};})});
       });
       fetchSafe(`/api/lots?t=${t}`).then((d: any) => {
+        if (!Array.isArray(d)) return;
         dispatch({type:"SET_LOTS", payload: safeMap(d, (l: any)=>({id:l.id.toString(),code:l.businessCode,millesime:l.year,cepage:l.mainGrapeCode,lieu:l.placeCode||"",volume:l.currentVolume,containerId:l.currentContainerId?.toString(),status:l.status==="ACTIF"?"FERMENTATION_ALCOOLIQUE":l.status,composition:[{cepage:l.mainGrapeCode,pct:100}],parentIds:[],childIds:[],notes:l.notes||""}))});
       });
       fetchSafe(`/api/bottles?t=${t}`).then((d: any) => {
+        if (!Array.isArray(d)) return;
         dispatch({type:"SET_BOTTLE_LOTS", payload: safeMap(d, (b: any)=>({id:b.id.toString(),code:b.businessCode,type:b.type,sourceLotId:b.sourceLotId?.toString(),format:b.formatCode,initialCount:b.initialBottleCount,currentCount:b.currentBottleCount,degorgeCount:0,zone:b.locationZone||"",palette:b.locationPalette||"",tirageDate:b.tirageDate?new Date(b.tirageDate).toISOString().split('T')[0]:"",status:b.status,dosage:b.dosageValue?`${b.dosageValue} ${b.dosageUnit}`:"",notes:""}))});
       });
       fetchSafe(`/api/events?t=${t}`).then((d: any) => {
+        if (!Array.isArray(d)) return;
         dispatch({type:"SET_EVENTS", payload: safeMap(d, (e: any)=>{const dD=new Date(e.eventDatetime); return{id:e.id.toString(),type:e.eventType,date:`${dD.toLocaleDateString('fr-FR')} à ${dD.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`,lotId:e.lots?.[0]?.lotId?.toString(),containerId:e.containers?.[0]?.containerId?.toString(),volumeIn:e.eventType==='CREATION'?e.lots?.[0]?.volumeChange||0:0,volumeOut:e.eventType==='TRANSFERT'?e.lots?.[0]?.volumeChange||0:0,operator: e.operator || "Inconnu",note:e.comment||""};})});
       });
-      fetchSafe(`/api/fa?t=${t}`).then((d: any) => dispatch({type:"SET_FA_READINGS", payload: Array.isArray(d) ? d : []}));
-      fetchSafe(`/api/pressings?t=${t}`).then((d: any) => dispatch({type:"SET_PRESSINGS", payload: Array.isArray(d) ? d.map((p: any) => ({...p, id: p.id.toString()})) : []}));
-      fetchSafe(`/api/users?t=${t}`).then((d: any) => dispatch({type: "SET_USERS", payload: Array.isArray(d) ? d.map((u: any) => ({...u, id: u.id.toString(), initials: u.name ? u.name.substring(0, 2).toUpperCase() : "??"})) : [] }));
-      fetchSafe(`/api/maturation?t=${t}`).then(d => dispatch({type:"SET_MATURATIONS", payload: Array.isArray(d) ? d : []}));
-      fetchSafe(`/api/parcelles?t=${t}`).then(d => dispatch({type:"SET_PARCELLES", payload: Array.isArray(d)?d:[]}));
-      fetchSafe(`/api/degustations?t=${t}`).then(d => dispatch({type:"SET_DEGUSTATIONS", payload: Array.isArray(d)?d:[]}));
-      fetchSafe(`/api/pressoirs?t=${t}`).then(d => dispatch({type:"SET_PRESSOIRS", payload: Array.isArray(d)?d:[]}));
+      fetchSafe(`/api/pressings?t=${t}`).then((d: any) => { if (Array.isArray(d)) dispatch({type:"SET_PRESSINGS", payload: d.map((p: any) => ({...p, id: p.id.toString()}))}); });
+      fetchSafe(`/api/users?t=${t}`).then((d: any) => { if (Array.isArray(d)) dispatch({type: "SET_USERS", payload: d.map((u: any) => ({...u, id: u.id.toString(), initials: u.name ? u.name.substring(0, 2).toUpperCase() : "??"})) }); });
+      fetchSafe(`/api/maturation?t=${t}`).then(d => { if (Array.isArray(d)) dispatch({type:"SET_MATURATIONS", payload: d}); });
+      fetchSafe(`/api/parcelles?t=${t}`).then(d => { if (Array.isArray(d)) dispatch({type:"SET_PARCELLES", payload:d}); });
+      fetchSafe(`/api/degustations?t=${t}`).then(d => { if (Array.isArray(d)) dispatch({type:"SET_DEGUSTATIONS", payload:d}); });
+      fetchSafe(`/api/pressoirs?t=${t}`).then(d => { if (Array.isArray(d)) dispatch({type:"SET_PRESSOIRS", payload:d}); });
       
       // 👇 LES NOUVEAUX FETCHS POUR L'INVENTAIRE SONT LÀ 👇
       fetchSafe(`/api/inventory/products?t=${t}`).then(d => {
-        dispatch({type:"SET_PRODUCTS", payload: Array.isArray(d) ? d : []});
+        if (Array.isArray(d)) dispatch({type:"SET_PRODUCTS", payload: d});
       });
       fetchSafe(`/api/inventory/movements?t=${t}`).then(d => {
-        dispatch({type:"SET_MOVEMENTS", payload: Array.isArray(d) ? d : []});
+        if (Array.isArray(d)) dispatch({type:"SET_MOVEMENTS", payload: d});
       });
 
     } catch(e) { console.error("Erreur globale de chargement", e); }
@@ -9250,13 +9272,13 @@ export default function App() {
 
     const bootstrap = async () => {
       await checkSession();
-      await fetchAll();
     };
 
     bootstrap();
   }, []); 
 
   useEffect(() => {
+    setLatestAccessToken(user?.accessToken);
     if (user?.accessToken) fetchAll();
   }, [user?.accessToken]);
 

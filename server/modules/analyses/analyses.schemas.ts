@@ -1,14 +1,17 @@
 import { z } from 'zod';
 
+const optionalNullableNumber = (schema: z.ZodTypeAny) =>
+  z.preprocess((value) => (value === '' || value === undefined ? null : value), schema.nullable().optional());
+
 const analyseRowSchema = z.object({
   id: z.coerce.number().int().optional(),
   analysisDate: z.string().trim().min(1, 'La date est requise'),
   lotId: z.coerce.number().int().positive('Veuillez sélectionner un lot valide'),
-  ph: z.coerce.number().positive().optional().nullable(),
-  at: z.coerce.number().nonnegative().optional().nullable(),
-  so2Free: z.coerce.number().nonnegative().optional().nullable(),
-  so2Total: z.coerce.number().nonnegative().optional().nullable(),
-  alcohol: z.coerce.number().nonnegative().optional().nullable(),
+  ph: optionalNullableNumber(z.coerce.number().positive()),
+  at: optionalNullableNumber(z.coerce.number().nonnegative()),
+  so2Free: optionalNullableNumber(z.coerce.number().nonnegative()),
+  so2Total: optionalNullableNumber(z.coerce.number().nonnegative()),
+  alcohol: optionalNullableNumber(z.coerce.number().nonnegative()),
   notes: z.string().trim().max(250).optional().nullable(),
   extraData: z.any().optional().nullable(),
 });
