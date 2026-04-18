@@ -8097,8 +8097,11 @@ function MaturationModal({ onClose, editData = null }: { onClose: any; editData?
         setForm({ ...form, parcelle: d.nom });
         setIsAddingParcelle(false);
         setNewDep(""); setNewReg(""); setNewCom(""); setNewNom("");
-      } else { alert("Erreur lors de la création de la parcelle."); }
-    } catch (e) { alert("Erreur réseau."); }
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err?.message || err?.error || "Erreur lors de la création de la parcelle.");
+      }
+    } catch (e: any) { alert(e?.message || "Erreur réseau."); }
   };
 
   const submit = async () => {
@@ -8131,13 +8134,17 @@ function MaturationModal({ onClose, editData = null }: { onClose: any; editData?
       const data = await res.json();
 
       if (res.ok) {
-        dispatch({ type: form.id ? "UPDATE_MATURATION" : "ADD_MATURATION", payload: data });
+        const savedRecord = data?.data || data;
+        dispatch({ type: form.id ? "UPDATE_MATURATION" : "ADD_MATURATION", payload: savedRecord });
         dispatch({ type: "TOAST_ADD", payload: { msg: `Prélèvement ${form.id ? 'mis à jour' : 'enregistré'} avec succès.`, color: T.green } });
         
         if (refreshData) await refreshData(); // Force la resync de la base
         onClose();
       } else {
-        throw new Error(data.error || "Erreur de sauvegarde.");
+        const validationDetails = data?.details?.fieldErrors
+          ? Object.values(data.details.fieldErrors).flat().filter(Boolean)[0]
+          : null;
+        throw new Error(validationDetails || data?.message || data?.error || "Erreur de sauvegarde.");
       }
     } catch (e: any) { 
       alert(e?.message ?? "Erreur de sauvegarde."); 
@@ -9147,14 +9154,14 @@ export default function App() {
 
   const fetchAll = async () => {
     const t = Date.now();
-    const opts: RequestInit = { cache: 'no-store' }; 
+    const opts: RequestInit = { cache: 'no-store' };
 
     try {
       const safeMap = (data: any, mapFn: (item: any) => any) => Array.isArray(data) ? data.map(mapFn) : [];
 
       const fetchSafe = async (url: string) => {
         try {
-          const res = await fetch(url, opts);
+          const res = await fetch(url, { ...opts, headers: buildApiHeaders(user) });
           if (!res.ok) return []; 
           const text = await res.text();
           return text ? JSON.parse(text) : []; 
