@@ -4,6 +4,7 @@ import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/err
 import { upsertUserSchema } from '@/server/modules/users/user.schemas';
 import { UserModuleService } from '@/server/modules/users/user.service';
 import { logger } from '@/server/shared/logger';
+import { prisma } from '@/server/shared/prisma';
 import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
 const handleUpsert = async (request: Request, method: 'POST' | 'PUT') => {
@@ -129,6 +130,67 @@ const handleUpsert = async (request: Request, method: 'POST' | 'PUT') => {
     );
   }
 };
+
+
+export async function GET(request: Request) {
+  const requestId = getRequestId(request);
+
+  try {
+    const actor = await resolveAuthenticatedActor(request);
+    assertRole(actor, READ_ROLES);
+
+    const users = await prisma.user.findMany({
+      orderBy: { name: 'asc' },
+    });
+
+    logger.info({
+      action: 'users.get.success',
+      requestId,
+      userEmail: actor.email,
+      role: actor.role,
+      details: { count: users.length },
+    });
+
+    return NextResponse.json(users, { status: 200, headers: { 'x-request-id': requestId } });
+  } catch (error) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      logger.warn({
+        action: 'auth.rejected',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    logger.error({
+      action: 'users.get.unhandled_error',
+      requestId,
+      details: {
+        error: error instanceof Error ? error.message : 'unknown_error',
+      },
+    });
+
+    return NextResponse.json(
+      {
+        error: 'INTERNAL_SERVER_ERROR',
+      },
+      {
+        status: 500,
+        headers: { 'x-request-id': requestId },
+      },
+    );
+  }
+}
 
 export async function POST(request: Request) {
   return handleUpsert(request, 'POST');
