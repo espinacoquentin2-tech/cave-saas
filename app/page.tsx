@@ -1125,6 +1125,12 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     const apport = apports.find((a: any) => String(a.id) === String(selectedApport));
     const weightToLoad = safeParseFloat(loadWeight);
     const p = (actionModal as any).press;
+    const pressId = Number(p?.id);
+    const apportId = Number(apport?.id);
+
+    if (!Number.isInteger(pressId) || !Number.isInteger(apportId)) {
+      return alert("Identifiants pressoir/apport invalides.");
+    }
 
     if (weightToLoad > apport.poids) return alert("Vous ne pouvez pas charger plus que ce qu'il reste sur le quai !");
     
@@ -1150,8 +1156,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
         method: 'POST', 
         headers: buildApiHeaders(user),
         body: JSON.stringify({ 
-          pressId: p.id, 
-          apportId: apport.id, 
+          pressId, 
+          apportId, 
           weightToLoad, 
           forceMix, 
           idempotencyKey 
@@ -1159,14 +1165,18 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       });
       
       if (!res.ok) {
-        const errorData = await res.json();
+        const errorData = await res.json().catch(() => ({}));
         // Gestion de l'erreur 409 (Mélange de cépage détecté par le backend)
         if (res.status === 409) {
           setMixWarning({ apport, press: p, weightToLoad } as any);
           setIsSubmitting(false);
           return;
         }
-        throw new Error(errorData.error);
+        const fieldError = errorData?.details?.fieldErrors
+          ? Object.values(errorData.details.fieldErrors).flat().find(Boolean)
+          : null;
+        const formError = Array.isArray(errorData?.details?.formErrors) ? errorData.details.formErrors.find(Boolean) : null;
+        throw new Error(fieldError || formError || errorData?.message || errorData?.error || "Erreur serveur");
       }
 
       dispatch({ type: "TOAST_ADD", payload: { msg: "Pressoir chargé avec succès !", color: T.green } });
