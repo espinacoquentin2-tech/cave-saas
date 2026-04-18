@@ -8140,7 +8140,10 @@ function MaturationModal({ onClose, editData = null }: { onClose: any; editData?
         if (refreshData) await refreshData(); // Force la resync de la base
         onClose();
       } else {
-        throw new Error(data.error || "Erreur de sauvegarde.");
+        const validationDetails = data?.details?.fieldErrors
+          ? Object.values(data.details.fieldErrors).flat().filter(Boolean)[0]
+          : null;
+        throw new Error(validationDetails || data?.message || data?.error || "Erreur de sauvegarde.");
       }
     } catch (e: any) { 
       alert(e?.message ?? "Erreur de sauvegarde."); 
