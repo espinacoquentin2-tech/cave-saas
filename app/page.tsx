@@ -9233,7 +9233,6 @@ export default function App() {
         if (!Array.isArray(d)) return;
         dispatch({type:"SET_EVENTS", payload: safeMap(d, (e: any)=>{const dD=new Date(e.eventDatetime); return{id:e.id.toString(),type:e.eventType,date:`${dD.toLocaleDateString('fr-FR')} à ${dD.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`,lotId:e.lots?.[0]?.lotId?.toString(),containerId:e.containers?.[0]?.containerId?.toString(),volumeIn:e.eventType==='CREATION'?e.lots?.[0]?.volumeChange||0:0,volumeOut:e.eventType==='TRANSFERT'?e.lots?.[0]?.volumeChange||0:0,operator: e.operator || "Inconnu",note:e.comment||""};})});
       });
-      fetchSafe(`/api/fa?t=${t}`).then((d: any) => { if (Array.isArray(d)) dispatch({type:"SET_FA_READINGS", payload: d}); });
       fetchSafe(`/api/pressings?t=${t}`).then((d: any) => { if (Array.isArray(d)) dispatch({type:"SET_PRESSINGS", payload: d.map((p: any) => ({...p, id: p.id.toString()}))}); });
       fetchSafe(`/api/users?t=${t}`).then((d: any) => { if (Array.isArray(d)) dispatch({type: "SET_USERS", payload: d.map((u: any) => ({...u, id: u.id.toString(), initials: u.name ? u.name.substring(0, 2).toUpperCase() : "??"})) }); });
       fetchSafe(`/api/maturation?t=${t}`).then(d => { if (Array.isArray(d)) dispatch({type:"SET_MATURATIONS", payload: d}); });
