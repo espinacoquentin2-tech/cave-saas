@@ -9201,11 +9201,12 @@ export default function App() {
       const safeMap = (data: any, mapFn: (item: any) => any) => Array.isArray(data) ? data.map(mapFn) : [];
 
       const fetchSafe = async (url: string) => {
+        const method = 'GET';
         try {
-          const res = await fetch(url, { ...opts, headers: buildApiHeaders(user) });
+          const res = await fetch(url, { ...opts, method, headers: buildApiHeaders(user) });
           if (!res.ok) {
             const err = await res.json().catch(() => ({}));
-            console.error(`Erreur API sur ${url}:`, extractApiErrorMessage(err, `HTTP ${res.status}`));
+            console.error(`Erreur API ${method} sur ${url}:`, extractApiErrorMessage(err, `HTTP ${res.status}`));
             return null;
           }
           const text = await res.text();
