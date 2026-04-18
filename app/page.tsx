@@ -1031,14 +1031,22 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
           parcelle: finalParcelle, 
           cepage: newApport.cepage, 
           poids: safeParseFloat(newApport.poids), 
-          status: "EN_ATTENTE" 
+          status: "EN_ATTENTE",
+          idempotencyKey,
         }) 
       });
       
-      if (!res.ok) throw new Error((await res.json()).error);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        const validationDetails = errorData?.details?.fieldErrors
+          ? Object.values(errorData.details.fieldErrors).flat().filter(Boolean)[0]
+          : null;
+        throw new Error(validationDetails || errorData?.message || errorData?.error || "Erreur lors de la création du lot.");
+      }
       
       dispatch({ type: "TOAST_ADD", payload: { msg: "Raisins réceptionnés sur le quai", color: T.green } });
       if (refreshData) await refreshData();
+      setIdempotencyKey(crypto.randomUUID());
       
       setNewApport({ parcelle: "", cepage: "CH", poids: "" });
       setIsCustomOrigin(false); setCustomDep(""); setCustomReg(""); setCustomCom(""); setCustomNom("");
@@ -9230,6 +9238,10 @@ export default function App() {
 
     bootstrap();
   }, []); 
+
+  useEffect(() => {
+    if (user?.accessToken) fetchAll();
+  }, [user?.accessToken]);
 
   const goNav = (id: string) => { setNav(id); setSelCont(null); setSelLot(null); };
   const logout = () => { supabase.auth.signOut(); setUser(null); setNav("dashboard"); setSelCont(null); setSelLot(null); };
