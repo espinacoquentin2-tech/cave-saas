@@ -1,5 +1,8 @@
 import { z } from 'zod';
 
+const optionalNullableNumber = (schema: z.ZodTypeAny) =>
+  z.preprocess((value) => (value === '' || value === undefined ? null : value), schema.nullable().optional());
+
 export const saveDegustationSchema = z
   .object({
     date: z.string().trim().min(1, 'La date est requise'),
@@ -10,8 +13,8 @@ export const saveDegustationSchema = z
     robe: z.string().trim().optional().nullable(),
     nez: z.string().trim().optional().nullable(),
     bouche: z.string().trim().optional().nullable(),
-    noteGlobale: z.coerce.number().min(0).max(20).optional().nullable(),
-    sucreTest: z.coerce.number().nonnegative().optional().nullable(),
+    noteGlobale: optionalNullableNumber(z.coerce.number().min(0).max(20)),
+    sucreTest: optionalNullableNumber(z.coerce.number().nonnegative()),
     notes: z.string().trim().max(250).optional().nullable(),
     idempotencyKey: z.string().trim().min(10),
   })
