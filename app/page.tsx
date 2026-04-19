@@ -590,11 +590,15 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }: DashboardPr
   
   const [executingTask, setExecutingTask] = useState(null);
 
-  const totalCapacity = containers.reduce((s: any, c: any) => s + (c.capacityValue || c.capacity || 0), 0);
-  const totalVol      = containers.reduce((s: any, c: any) => s + (c.currentVolume || 0), 0);
+  const toNum = (value: any) => {
+    const n = Number(value);
+    return Number.isFinite(n) ? n : 0;
+  };
+  const totalCapacity = containers.reduce((s: number, c: any) => s + toNum(c.capacityValue ?? c.capacity), 0);
+  const totalVol      = containers.reduce((s: number, c: any) => s + toNum(c.currentVolume), 0);
   const lotsActifs    = lots.filter((l: any) => l.status !== "TIRE" && l.status !== "ARCHIVE").length;
-  const cuvesPleines  = containers.filter((c: any) => (c.currentVolume || 0) > 0).length;
-  const cuvesVides    = containers.filter((c: any) => (c.currentVolume || 0) === 0).length;
+  const cuvesPleines  = containers.filter((c: any) => toNum(c.currentVolume) > 0).length;
+  const cuvesVides    = containers.filter((c: any) => toNum(c.currentVolume) === 0).length;
   
   // Utilisation des bons champs BDD (currentBottleCount)
   const surLattes     = bottleLots.filter((b: any) => b.status === "SUR_LATTES" || b.status === "A_DEGORGER").reduce((s: any, b: any) => s + (b.currentBottleCount || b.currentCount || 0), 0);
