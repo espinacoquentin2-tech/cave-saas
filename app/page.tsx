@@ -1330,12 +1330,10 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       // 1. Préparation du payload pour l'API
       const payload = {
-        pressoirId: p.id,
-        parcelle: p.parcelle,
-        cepage: p.cepage,
-        cuvees: cuveeDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
-        tailles: tailleDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
-        rebeches: rebechesDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
+        pressId: Number(p.id),
+        cuveeDests: cuveeDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ cuveId: parseInt(d.cuveId), vol: parseToHl(d.vol) })),
+        tailleDests: tailleDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ cuveId: parseInt(d.cuveId), vol: parseToHl(d.vol) })),
+        rebechesDests: rebechesDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ cuveId: parseInt(d.cuveId), vol: parseToHl(d.vol) })),
         operator: user?.name || "Système",
         idempotencyKey: idempotencyKey || crypto.randomUUID()
       };
@@ -1347,7 +1345,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erreur lors de l'écoulement en base de données.");
+      if (!res.ok) throw new Error(extractApiErrorMessage(data, "Erreur lors de l'écoulement en base de données."));
 
       // 2. SUCCÈS
       dispatch({ type: "TOAST_ADD", payload: { msg: "Jus écoulés, lots créés et pressoir vidé !", color: T.green } });
