@@ -2173,6 +2173,7 @@ type AddContainerModalProps = {
 function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialType = "CUVE_INOX" }: AddContainerModalProps) {
   const T = useTheme(); 
   const { dispatch, refreshData } = useStore();
+  const { user } = useAuth();
   
   const [form, setForm] = useState({ name:"", type: initialType, customType:"", capacity:initialCapacity, zone:"", notes:"", status:"VIDE" });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -2201,11 +2202,11 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
     try {
       const res = await fetch('/api/containers', { 
         method: 'POST', 
-        headers: buildApiHeaders(undefined), 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ ...form, type: finalType, capacity: parseFloat(form.capacity), idempotencyKey }) 
       });
       
-      if (!res.ok) throw new Error((await res.json()).error || "Erreur serveur");
+      if (!res.ok) throw new Error(extractApiErrorMessage(await res.json().catch(() => ({}))));
       const dbC = await res.json(); 
       
       dispatch({ type:"TOAST_ADD", payload:{ msg:`${form.name} ajouté`, color:"#2d6640" } }); 
