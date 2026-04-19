@@ -8954,7 +8954,7 @@ const GUSTATIF_TAXONOMY = [
 
 const BAIES_ECRASEMENT = ["Faible", "Moyenne", "Bonne", "Très bonne"];
 const BAIES_NATURE_CITRONNEE = ["Absente", "Légère", "Marquée"];
-const BAIES_VENDANGE = ["À attendre", "Dans 3-5 jours", "Vendange immédiate"];
+const BAIES_VENDANGE = ["Plus d’une semaine", "Dans quelques jours", "Prêt à vendanger"];
 const BAIES_DATA_PREFIX = "BAIES_DATA::";
 
 function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => void; defaultPhase?: string }) {
@@ -8983,6 +8983,7 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
     aromePellicule: "",
     astringencePellicule: "",
     dateVendange: "",
+    vendange: "",
   });
 
   // Gestion des tags cliquables
@@ -9029,6 +9030,7 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
         aromePellicule: baiesForm.aromePellicule,
         astringencePellicule: baiesForm.astringencePellicule,
         dateVendange: baiesForm.dateVendange,
+        vendange: baiesForm.vendange,
       } : null;
 
       const payload = {
@@ -9122,15 +9124,31 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
               ["Astringence pellicule", "astringencePellicule"],
             ].map(([label, key]) => (
               <FF key={key} label={`${label} (0-10)`}>
-                <Input
-                  type="number"
-                  min="0"
-                  max="10"
-                  step="1"
-                  value={(baiesForm as any)[key]}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBaiesForm({ ...baiesForm, [key]: e.target.value })}
-                  disabled={isSubmitting}
-                />
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(11, minmax(0, 1fr))", gap: 4 }}>
+                  {Array.from({ length: 11 }, (_, i) => {
+                    const active = String((baiesForm as any)[key]) === String(i);
+                    return (
+                      <button
+                        key={`${key}-${i}`}
+                        type="button"
+                        disabled={isSubmitting}
+                        onClick={() => setBaiesForm({ ...baiesForm, [key]: String(i) })}
+                        style={{
+                          padding: "6px 0",
+                          borderRadius: 4,
+                          border: `1px solid ${active ? T.accent : T.border}`,
+                          background: active ? `${T.accent}22` : T.surface,
+                          color: active ? T.accent : T.textDim,
+                          fontSize: 11,
+                          fontWeight: active ? "bold" : "normal",
+                          cursor: isSubmitting ? "not-allowed" : "pointer",
+                        }}
+                      >
+                        {i}
+                      </button>
+                    );
+                  })}
+                </div>
               </FF>
             ))}
           </div>
@@ -9139,9 +9157,9 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
             <FF label="Date de vendange">
               <Input type="date" value={baiesForm.dateVendange} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBaiesForm({ ...baiesForm, dateVendange: e.target.value })} disabled={isSubmitting} />
             </FF>
-            <FF label="Recommandation vendange">
-              <Select value={baiesForm.dateVendange ? "Vendange immédiate" : ""} onChange={() => {}} disabled>
-                <option value="">Suivre la date de vendange renseignée</option>
+            <FF label="Vendange">
+              <Select value={baiesForm.vendange} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setBaiesForm({ ...baiesForm, vendange: e.target.value })} disabled={isSubmitting}>
+                <option value="">-- Choisir --</option>
                 {BAIES_VENDANGE.map((v: string) => <option key={v} value={v}>{v}</option>)}
               </Select>
             </FF>
@@ -9277,6 +9295,17 @@ function Degustation() {
     }
   };
 
+  const formatBaiesValue = (k: string, v: any) => {
+    if (!v) return '-';
+    if (k !== 'vendange') return String(v);
+    const legacyMap: Record<string, string> = {
+      'À attendre': 'Plus d’une semaine',
+      'Dans 3-5 jours': 'Dans quelques jours',
+      'Vendange immédiate': 'Prêt à vendanger',
+    };
+    return legacyMap[String(v)] || String(v);
+  };
+
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:28 }}>
@@ -9340,7 +9369,7 @@ function Degustation() {
                 {d.phase === "BAIES" && parseBaiesData(d.notes) ? (
                   <div style={{ fontSize: 12, color: T.textStrong, lineHeight: 1.6 }}>
                     {Object.entries(parseBaiesData(d.notes)?.data || {}).map(([k, v]: [string, any]) => (
-                      <div key={k}><span style={{ color: T.textDim }}>{k} :</span> {String(v || '-')}</div>
+                      <div key={k}><span style={{ color: T.textDim }}>{k} :</span> {formatBaiesValue(k, v)}</div>
                     ))}
                   </div>
                 ) : (
