@@ -1036,6 +1036,13 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
   const safeParseFloat = (val: any) => parseFloat(String(val).replace(',', '.'));
   const parseToHl = (val: any) => parseFloat((parseFloat(String(val).replace(',', '.')) || 0).toFixed(2));
+  const sanitizeNonNegativeInput = (val: string) => {
+    const normalized = String(val).replace(',', '.').trim();
+    if (!normalized) return "";
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed)) return "";
+    return parsed < 0 ? "0" : normalized;
+  };
 
   // --- ACTIONS SIMPLES ---
   const handleAddApport = async () => {
@@ -1382,7 +1389,12 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
   const pressoirsActifs = pressoirs.filter((p: any) => p.status !== "VIDE");
   const pressoirsArret = pressoirs.filter((p: any) => p.status === "VIDE");
   
-  const cuvesDebourbage = (state.containers || []).filter((c: any) => c.status !== "ARCHIVÉE" && (c.type?.includes("Débourbage") || c.type?.includes("Belon") || c.displayName?.toLowerCase().includes("cuvée") || c.displayName?.toLowerCase().includes("taille")));
+  const cuvesDebourbage = (state.containers || []).filter((c: any) => {
+    const type = String(c.type || "");
+    const name = String(c.displayName || c.name || "").toLowerCase();
+    if (c.status === "ARCHIVÉE") return false;
+    return type.includes("Débourbage") || type.includes("DEBOURBAGE") || type.includes("Belon") || name.includes("cuvée") || name.includes("cuvee") || name.includes("taille");
+  });
   
   const debourbageActifs = cuvesDebourbage.filter((c: any) => (parseFloat(c.currentVolume || c.volume) || 0) > 0);
   const debourbageVides = cuvesDebourbage.filter((c: any) => (parseFloat(c.currentVolume || c.volume) || 0) <= 0);
@@ -1392,7 +1404,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     const t = (c.type || "").toLowerCase();
     const n = ((c.displayName || c.name) || "").toLowerCase();
     
-    if (t.includes("débourbage") || t.includes("belon")) return false;
+    if (t.includes("débourbage") || t.includes("debourbage") || t.includes("belon")) return false;
     if (t.includes("bourbe") || t.includes("rebeche") || t.includes("rebêche") || t.includes("lies")) return false;
     if (n.includes("bourbe") || n.includes("rebeche") || n.includes("rebêche") || n.includes("lies")) return false;
     
@@ -1496,7 +1508,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                          nd[i] = { ...nd[i], cuveId: selectedCuveId }; 
                          
                          if (selectedCuveId) {
-                             const tCuve = options.find((c: any) => String(c.id) === String(selectedCuveId));
+                             const tCuve = rowOptions.find((c: any) => String(c.id) === String(selectedCuveId));
                              if (tCuve) {
                                  const freeSpace = Math.max(0, parseFloat(tCuve.capacityValue || tCuve.capacity || 0) - parseFloat(tCuve.currentVolume || tCuve.volume || 0));
                                  const safeSpace = freeSpace * 0.9; 
@@ -1523,13 +1535,13 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                    </div>
                  </div>
                  <div style={{ flex: 1, display:"flex", gap:4 }}>
-                   <Input type="number" step="0.1" value={d.vol} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                   <Input type="number" step="0.1" min={0} value={d.vol} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                        const nd = [...dests]; 
-                       nd[i] = { ...nd[i], vol: e.target.value }; 
+                       nd[i] = { ...nd[i], vol: sanitizeNonNegativeInput(e.target.value) }; 
                        setDests(nd);
                    }} placeholder="Vol." style={{ borderColor: isOver ? T.red : T.border }} />
                    <Btn variant="secondary" disabled={isSubmitting} onClick={() => {
-                       const tCuve = options.find((c: any) => String(c.id) === String(d.cuveId));
+                       const tCuve = rowOptions.find((c: any) => String(c.id) === String(d.cuveId));
                        const freeSpace = tCuve ? Math.max(0, parseFloat(tCuve.capacityValue || tCuve.capacity || 0) - parseFloat(tCuve.currentVolume || tCuve.volume || 0)) : 0;
                        const safeSpace = freeSpace * 0.9;
                        const otherDests = dests.filter((_: any, idx: any) => idx !== i).reduce((s: any, od: any) => s + parseToHl(od.vol), 0);
@@ -1899,8 +1911,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
       {/* --- MODALE D'ÉCOULEMENT (LA PLUS IMPORTANTE) --- */}
       {(actionModal as any)?.type === "ECOULEMENT" && (actionModal as any).press && (() => {
-        const cuvesCuvee = cuvesDebourbage.filter((c: any) => c.type.includes("Cuvée") || (c.displayName || c.name || "").toLowerCase().includes("cuvée"));
-        const cuvesTaille = cuvesDebourbage.filter((c: any) => c.type.includes("Taille") || (c.displayName || c.name || "").toLowerCase().includes("taille"));
+        const cuvesCuvee = cuvesDebourbage.filter((c: any) => c.type === "CUVE_DEBOURBAGE" || c.type.includes("Cuvée") || (c.displayName || c.name || "").toLowerCase().includes("cuvée") || (c.displayName || c.name || "").toLowerCase().includes("cuvee"));
+        const cuvesTaille = cuvesDebourbage.filter((c: any) => c.type === "CUVE_DEBOURBAGE" || c.type.includes("Taille") || (c.displayName || c.name || "").toLowerCase().includes("taille"));
         const calcVol = calculateFractions((actionModal as any).press.loadKg); 
 
         const isDestInvalid = (dests: any[], options: any[]) => dests.some((d: any) => {
