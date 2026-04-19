@@ -85,8 +85,11 @@ const unwrapApiData = (payload: any) => {
 };
 
 const extractApiErrorMessage = (payload: any, fallback = "Erreur serveur") => {
-  const fieldError = payload?.details?.fieldErrors
-    ? Object.values(payload.details.fieldErrors).flat().find(Boolean)
+  const fieldErrorEntry = payload?.details?.fieldErrors
+    ? Object.entries(payload.details.fieldErrors).find(([, messages]) => Array.isArray(messages) && messages.find(Boolean))
+    : null;
+  const fieldError = fieldErrorEntry
+    ? `${fieldErrorEntry[0]}: ${(fieldErrorEntry[1] as any[]).find(Boolean)}`
     : null;
   const formError = Array.isArray(payload?.details?.formErrors)
     ? payload.details.formErrors.find(Boolean)
@@ -1001,7 +1004,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
   const [loadWarning, setLoadWarning] = useState(null);
   const [mixWarning, setMixWarning] = useState(null); 
 
-  const [showAddCuve, setShowAddCuve] = useState(false);
+  const [showAddCuve, setShowAddCuve] = useState<any>(null);
   const [newCuve, setNewCuve] = useState({ name: "", type: "Débourbage Cuvée", capacityValue: "" });
   
   const [cuveeDests, setCuveeDests] = useState([]);
@@ -1033,6 +1036,13 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
   const safeParseFloat = (val: any) => parseFloat(String(val).replace(',', '.'));
   const parseToHl = (val: any) => parseFloat((parseFloat(String(val).replace(',', '.')) || 0).toFixed(2));
+  const sanitizeNonNegativeInput = (val: string) => {
+    const normalized = String(val).replace(',', '.').trim();
+    if (!normalized) return "";
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed)) return "";
+    return parsed < 0 ? "0" : normalized;
+  };
 
   // --- ACTIONS SIMPLES ---
   const handleAddApport = async () => {
@@ -1123,12 +1133,13 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       const res = await fetch('/api/pressoirs', { 
         method: 'PUT', 
         headers: buildApiHeaders(user),
-        body: JSON.stringify({ id, status, ...extraData }) 
+        body: JSON.stringify({ id, status, ...extraData, idempotencyKey }) 
       });
       if (!res.ok) throw new Error(extractApiErrorMessage(await res.json().catch(() => ({}))));
       
       if (refreshData) await refreshData();
       if (status === "VIDE") setActionModal(null);
+      setIdempotencyKey(crypto.randomUUID());
     } catch (e) { 
       alert(e instanceof Error ? e.message : String(e));
     } finally {
@@ -1319,12 +1330,10 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     try {
       // 1. Préparation du payload pour l'API
       const payload = {
-        pressoirId: p.id,
-        parcelle: p.parcelle,
-        cepage: p.cepage,
-        cuvees: cuveeDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
-        tailles: tailleDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
-        rebeches: rebechesDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ containerId: parseInt(d.cuveId), volume: parseToHl(d.vol) })),
+        pressId: Number(p.id),
+        cuveeDests: cuveeDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ cuveId: parseInt(d.cuveId), vol: parseToHl(d.vol) })),
+        tailleDests: tailleDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ cuveId: parseInt(d.cuveId), vol: parseToHl(d.vol) })),
+        rebechesDests: rebechesDests.filter((d: any) => d.cuveId && parseToHl(d.vol) > 0).map((d: any) => ({ cuveId: parseInt(d.cuveId), vol: parseToHl(d.vol) })),
         operator: user?.name || "Système",
         idempotencyKey: idempotencyKey || crypto.randomUUID()
       };
@@ -1336,7 +1345,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       });
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erreur lors de l'écoulement en base de données.");
+      if (!res.ok) throw new Error(extractApiErrorMessage(data, "Erreur lors de l'écoulement en base de données."));
 
       // 2. SUCCÈS
       dispatch({ type: "TOAST_ADD", payload: { msg: "Jus écoulés, lots créés et pressoir vidé !", color: T.green } });
@@ -1378,7 +1387,12 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
   const pressoirsActifs = pressoirs.filter((p: any) => p.status !== "VIDE");
   const pressoirsArret = pressoirs.filter((p: any) => p.status === "VIDE");
   
-  const cuvesDebourbage = (state.containers || []).filter((c: any) => c.status !== "ARCHIVÉE" && (c.type?.includes("Débourbage") || c.type?.includes("Belon") || c.displayName?.toLowerCase().includes("cuvée") || c.displayName?.toLowerCase().includes("taille")));
+  const cuvesDebourbage = (state.containers || []).filter((c: any) => {
+    const type = String(c.type || "");
+    const name = String(c.displayName || c.name || "").toLowerCase();
+    if (c.status === "ARCHIVÉE") return false;
+    return type.includes("Débourbage") || type.includes("DEBOURBAGE") || type.includes("Belon") || name.includes("cuvée") || name.includes("cuvee") || name.includes("taille");
+  });
   
   const debourbageActifs = cuvesDebourbage.filter((c: any) => (parseFloat(c.currentVolume || c.volume) || 0) > 0);
   const debourbageVides = cuvesDebourbage.filter((c: any) => (parseFloat(c.currentVolume || c.volume) || 0) <= 0);
@@ -1388,7 +1402,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     const t = (c.type || "").toLowerCase();
     const n = ((c.displayName || c.name) || "").toLowerCase();
     
-    if (t.includes("débourbage") || t.includes("belon")) return false;
+    if (t.includes("débourbage") || t.includes("debourbage") || t.includes("belon")) return false;
     if (t.includes("bourbe") || t.includes("rebeche") || t.includes("rebêche") || t.includes("lies")) return false;
     if (n.includes("bourbe") || n.includes("rebeche") || n.includes("rebêche") || n.includes("lies")) return false;
     
@@ -1474,52 +1488,58 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
         </div>
 
         {dests.map((d: any, i: any) => {
-           const targetCuve = options.find((c: any) => String(c.id) === String(d.cuveId));
+           const targetCuve = options.find((c: any) => String(c.id) === String(d.cuveId)) || (state.containers || []).find((c: any) => String(c.id) === String(d.cuveId));
+           const rowOptions = targetCuve && !options.some((c: any) => String(c.id) === String(targetCuve.id))
+             ? [targetCuve, ...options]
+             : options;
            const free = targetCuve ? Math.max(0, parseFloat(targetCuve.capacityValue || targetCuve.capacity || 0) - parseFloat(targetCuve.currentVolume || targetCuve.volume || 0)) : 0;
            const isOver = parseToHl(d.vol) > (free + 0.05);
 
            return (
              <div key={d.id} style={{ marginBottom: 12 }}>
                <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
-                 <div style={{ flex: 2 }}>
-                   <Select value={d.cuveId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                       const selectedCuveId = e.target.value;
-                       const nd = [...dests]; 
-                       nd[i] = { ...nd[i], cuveId: selectedCuveId }; 
-                       
-                       if (selectedCuveId) {
-                           const tCuve = options.find((c: any) => String(c.id) === String(selectedCuveId));
-                           if (tCuve) {
-                               const freeSpace = Math.max(0, parseFloat(tCuve.capacityValue || tCuve.capacity || 0) - parseFloat(tCuve.currentVolume || tCuve.volume || 0));
-                               const safeSpace = freeSpace * 0.9; 
-                               
-                               const otherDestsVol = dests.filter((_: any, idx: any) => idx !== i).reduce((s: any, od: any) => s + parseToHl(od.vol), 0);
-                               const remainingToDistribute = Math.max(0, parseFloat(theoVol) - otherDestsVol);
-                               
-                               const autoVol = Math.min(safeSpace, remainingToDistribute);
-                               nd[i] = { ...nd[i], vol: autoVol > 0 ? autoVol.toFixed(2) : "" };
-                           }
-                       } else {
-                           nd[i] = { ...nd[i], vol: "" };
-                       }
-                       setDests(nd);
-                   }} style={{ borderColor: isOver ? T.red : T.border }}>
-                      <option value="">-- Choisir cuve --</option>
-                      {options.map((c: any) => {
-                         const dispo = Math.max(0, parseFloat(c.capacityValue || c.capacity || 0) - parseFloat(c.currentVolume || c.volume || 0));
-                         const isAlreadySelected = dests.some((otherD: any, idx: any) => idx !== i && String(otherD.cuveId) === String(c.id));
-                         return <option key={c.id} value={c.id} disabled={isAlreadySelected}>{c.displayName || c.name} (Dispo: {dispo.toFixed(2)} hL)</option>
-                      })}
-                   </Select>
+               <div style={{ flex: 2 }}>
+                   <div style={{ display: "flex", gap: 8 }}>
+                     <Select value={d.cuveId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                         const selectedCuveId = e.target.value;
+                         const nd = [...dests]; 
+                         nd[i] = { ...nd[i], cuveId: selectedCuveId }; 
+                         
+                         if (selectedCuveId) {
+                             const tCuve = rowOptions.find((c: any) => String(c.id) === String(selectedCuveId));
+                             if (tCuve) {
+                                 const freeSpace = Math.max(0, parseFloat(tCuve.capacityValue || tCuve.capacity || 0) - parseFloat(tCuve.currentVolume || tCuve.volume || 0));
+                                 const safeSpace = freeSpace * 0.9; 
+                                 
+                                 const otherDestsVol = dests.filter((_: any, idx: any) => idx !== i).reduce((s: any, od: any) => s + parseToHl(od.vol), 0);
+                                 const remainingToDistribute = Math.max(0, parseFloat(theoVol) - otherDestsVol);
+                                 
+                                 const autoVol = Math.min(safeSpace, remainingToDistribute);
+                                 nd[i] = { ...nd[i], vol: autoVol > 0 ? autoVol.toFixed(2) : "" };
+                             }
+                         } else {
+                             nd[i] = { ...nd[i], vol: "" };
+                         }
+                         setDests(nd);
+                     }} style={{ borderColor: isOver ? T.red : T.border, flex: 1 }}>
+                        <option value="">-- Choisir cuve --</option>
+                        {rowOptions.map((c: any) => {
+                           const dispo = Math.max(0, parseFloat(c.capacityValue || c.capacity || 0) - parseFloat(c.currentVolume || c.volume || 0));
+                           const isAlreadySelected = dests.some((otherD: any, idx: any) => idx !== i && String(otherD.cuveId) === String(c.id));
+                           return <option key={c.id} value={c.id} disabled={isAlreadySelected}>{c.displayName || c.name} (Dispo: {dispo.toFixed(2)} hL)</option>
+                        })}
+                     </Select>
+                     <Btn variant="secondary" disabled={isSubmitting} onClick={() => setShowAddCuve({ section: title, index: i, initialType: defaultType === "CUVE_REBECHES" ? "CUVE_REBECHES" : "CUVE_DEBOURBAGE", initialCapacity: Math.max(1, Math.ceil(parseFloat(theoVol) || 1)).toString() })}>+</Btn>
+                   </div>
                  </div>
                  <div style={{ flex: 1, display:"flex", gap:4 }}>
-                   <Input type="number" step="0.1" value={d.vol} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                   <Input type="number" step="0.1" min={0} value={d.vol} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                        const nd = [...dests]; 
-                       nd[i] = { ...nd[i], vol: e.target.value }; 
+                       nd[i] = { ...nd[i], vol: sanitizeNonNegativeInput(e.target.value) }; 
                        setDests(nd);
                    }} placeholder="Vol." style={{ borderColor: isOver ? T.red : T.border }} />
                    <Btn variant="secondary" disabled={isSubmitting} onClick={() => {
-                       const tCuve = options.find((c: any) => String(c.id) === String(d.cuveId));
+                       const tCuve = rowOptions.find((c: any) => String(c.id) === String(d.cuveId));
                        const freeSpace = tCuve ? Math.max(0, parseFloat(tCuve.capacityValue || tCuve.capacity || 0) - parseFloat(tCuve.currentVolume || tCuve.volume || 0)) : 0;
                        const safeSpace = freeSpace * 0.9;
                        const otherDests = dests.filter((_: any, idx: any) => idx !== i).reduce((s: any, od: any) => s + parseToHl(od.vol), 0);
@@ -1547,6 +1567,23 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
            }}>+ Éclater dans une autre cuve</Btn>
         </div>
       </div>
+    );
+  }
+
+  if (showAddCuve) {
+    return (
+      <AddContainerModal
+        initialType={showAddCuve.initialType}
+        initialCapacity={showAddCuve.initialCapacity}
+        onClose={() => setShowAddCuve(null)}
+        onSuccess={(newId: string) => {
+          const updater = (dests: any[]) => dests.map((d: any, idx: number) => idx === showAddCuve.index ? { ...d, cuveId: newId } : d);
+          if (showAddCuve.section === "Cuvée") setCuveeDests(updater(cuveeDests as any) as any);
+          else if (showAddCuve.section === "Taille") setTailleDests(updater(tailleDests as any) as any);
+          else setRebechesDests(updater(rebechesDests as any) as any);
+          setShowAddCuve(null);
+        }}
+      />
     );
   }
 
@@ -1872,8 +1909,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
       {/* --- MODALE D'ÉCOULEMENT (LA PLUS IMPORTANTE) --- */}
       {(actionModal as any)?.type === "ECOULEMENT" && (actionModal as any).press && (() => {
-        const cuvesCuvee = cuvesDebourbage.filter((c: any) => c.type.includes("Cuvée") || (c.displayName || c.name || "").toLowerCase().includes("cuvée"));
-        const cuvesTaille = cuvesDebourbage.filter((c: any) => c.type.includes("Taille") || (c.displayName || c.name || "").toLowerCase().includes("taille"));
+        const cuvesCuvee = cuvesDebourbage.filter((c: any) => c.type === "CUVE_DEBOURBAGE" || c.type.includes("Cuvée") || (c.displayName || c.name || "").toLowerCase().includes("cuvée") || (c.displayName || c.name || "").toLowerCase().includes("cuvee"));
+        const cuvesTaille = cuvesDebourbage.filter((c: any) => c.type === "CUVE_DEBOURBAGE" || c.type.includes("Taille") || (c.displayName || c.name || "").toLowerCase().includes("taille"));
         const calcVol = calculateFractions((actionModal as any).press.loadKg); 
 
         const isDestInvalid = (dests: any[], options: any[]) => dests.some((d: any) => {
@@ -1896,8 +1933,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
            isDestInvalid(cuveeDests, cuvesCuvee) ||
            isDestInvalid(tailleDests, cuvesTaille) ||
            isDestInvalid(rebechesDests, cuvesRebeches) ||
-           totalC <= 0 ||
-           totalT <= 0 ||
+           (totalC + totalT) <= 0 ||
            totalR > parseToHl(calcVol.rebeches);
 
         return (
@@ -2149,6 +2185,7 @@ type AddContainerModalProps = {
 function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialType = "CUVE_INOX" }: AddContainerModalProps) {
   const T = useTheme(); 
   const { dispatch, refreshData } = useStore();
+  const { user } = useAuth();
   
   const [form, setForm] = useState({ name:"", type: initialType, customType:"", capacity:initialCapacity, zone:"", notes:"", status:"VIDE" });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -2177,11 +2214,11 @@ function AddContainerModal({ onClose, onSuccess, initialCapacity = "", initialTy
     try {
       const res = await fetch('/api/containers', { 
         method: 'POST', 
-        headers: buildApiHeaders(undefined), 
+        headers: buildApiHeaders(user), 
         body: JSON.stringify({ ...form, type: finalType, capacity: parseFloat(form.capacity), idempotencyKey }) 
       });
       
-      if (!res.ok) throw new Error((await res.json()).error || "Erreur serveur");
+      if (!res.ok) throw new Error(extractApiErrorMessage(await res.json().catch(() => ({}))));
       const dbC = await res.json(); 
       
       dispatch({ type:"TOAST_ADD", payload:{ msg:`${form.name} ajouté`, color:"#2d6640" } }); 
@@ -3234,8 +3271,6 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
     SOUS_PRODUITS: ["CUVE_BOURBES", "CUVE_LIES", "CUVE_REBECHES"]
   };
 
-  const isAdmin = user?.role === "Admin" || user?.role === "Chef de cave";
-  
   const uniqueZones = [...new Set((state.containers || []).map((c: any) => c.zone).filter(Boolean))].sort();
 
   const handleMainFilter = (f: string) => {
@@ -3297,7 +3332,7 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:28 }}>
         <div><h1 style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:32, color:T.textStrong, margin:0 }}>Cuverie</h1></div>
-        {isAdmin && <Btn onClick={() => setModal(true)}>+ Ajouter contenant</Btn>}
+        {user?.role !== "Lecture seule" && user?.role !== "LECTURE_SEULE" && <Btn onClick={() => setModal(true)}>+ Ajouter cuve</Btn>}
       </div>
       
       <div style={{ display:"flex", gap:10, marginBottom: mainFilter === "CUVES" || mainFilter === "BOIS" || mainFilter === "SOUS-PRODUITS" ? 10 : 20, flexWrap:"wrap" }}>
@@ -3472,7 +3507,7 @@ function CreateLotModal({ container, onClose }: { container: any; onClose: any }
         <FF label="Volume initial (hL)"><Input type="number" step="0.1" value={form.volume} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, volume:e.target.value})} disabled={isSubmitting}/></FF>
         <FF label="Statut initial">
           <Select value={form.status} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, status:e.target.value})} disabled={isSubmitting}>
-            {LOT_STATUSES.slice(0,4).map((s: any) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+            {LOT_STATUSES.map((s: any) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
           </Select>
         </FF>
       </div>
