@@ -17,11 +17,10 @@ export const SaveDegustationSchema = z.object({
 }).refine(data => {
   // Vérification croisée : La cible doit correspondre à la phase
   if (data.phase === "BAIES" && !data.parcelle) return false;
-  if (["FERMENTATION", "VINS_CLAIRS"].includes(data.phase) && !data.lotId) return false;
-  if (["DOSAGE", "CHAMPAGNE"].includes(data.phase) && !data.bottleLotId) return false;
+  if (["FERMENTATION", "VINS_CLAIRS", "DOSAGE", "CHAMPAGNE"].includes(data.phase) && !data.lotId) return false;
   return true;
 }, {
-  message: "Veuillez sélectionner l'élément ciblé (Parcelle, Cuve ou Bouteilles) correspondant à la phase.",
+  message: "Veuillez sélectionner l'élément ciblé (Parcelle/Cépage ou Lot) correspondant à la phase.",
   path: ["phase"] // L'erreur remontera sur le champ phase
 });
 
