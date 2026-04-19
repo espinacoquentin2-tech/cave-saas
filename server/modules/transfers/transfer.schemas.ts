@@ -18,6 +18,8 @@ export const createTransferSchema = z
     date: z.string().datetime(),
     idempotencyKey: z.string().uuid(),
     note: z.string().trim().max(500).nullable().optional(),
+    qualiteLot: z.string().trim().max(50).nullable().optional(),
+    notes: z.string().trim().max(500).nullable().optional(),
   })
   .superRefine((payload, ctx) => {
     const totalDestinations = decimalPrecision(

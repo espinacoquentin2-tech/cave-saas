@@ -201,7 +201,8 @@ export class TransferService {
           currentVolume: toDecimal(destination.volume),
           currentContainerId: destination.toId,
           status: targetStatus,
-          notes: `Lot issu du transfert #${event.id}.`,
+          qualiteLot: input.qualiteLot?.trim() || null,
+          notes: input.notes?.trim() || `Lot issu du transfert #${event.id}.`,
         });
 
         createdLotIds.push(targetLot.id);
