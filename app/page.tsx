@@ -1772,7 +1772,8 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                       <div><div style={{ fontSize: 18, fontWeight: "bold", color: T.textStrong, fontFamily: "monospace" }}>{p.nom}</div><div style={{ fontSize: 11, color: T.textDim }}>{p.type} • {p.capacite} kg max</div></div>
                       <Badge label="VIDE" color={T.textDim} />
                     </div>
-                    <div style={{ padding: 20, textAlign: "center", color: T.textDim, fontSize: 13 }}>
+                    <div style={{ padding: 20, textAlign: "center", color: T.textDim, fontSize: 13, display: "grid", gap: 8 }}>
+                      <Btn variant="secondary" disabled={isSubmitting} onClick={() => updatePressStatus(p.id, "VIDE", { loadKg: null, parcelle: null, cepage: null, startTime: null })} style={{ width: "100%" }}>🧼 Nettoyage</Btn>
                       <Btn disabled={isSubmitting || apportsEnAttente.length === 0} onClick={() => { 
                         setActionModal({ type: "LOAD", press: p } as any); 
                         setSelectedApport(""); 
@@ -2351,6 +2352,10 @@ function TransferModal({ container, onClose }: TransferModalProps) {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const toNum = (v: any) => {
+    const n = parseFloat(String(v ?? 0));
+    return Number.isFinite(n) ? n : 0;
+  };
 
   const isAdmin = user?.role === "Admin" || user?.role === "Chef de cave";
   
@@ -2366,12 +2371,12 @@ function TransferModal({ container, onClose }: TransferModalProps) {
   const baseAvailTargets = (state.containers || []).filter((c: any) => 
     String(c.id) !== String(container.id) && 
     c.status !== "ARCHIVÉE" && 
-    (c.currentVolume || 0) < (c.capacityValue || c.capacity || 0)
+    toNum(c.currentVolume) < toNum(c.capacityValue || c.capacity)
   );
   
   const uniqueZones = [...new Set(baseAvailTargets.map((c: any) => c.zone).filter(Boolean))].sort();
 
-  const sourceVol = Number((container.currentVolume || 0).toFixed(2));
+  const sourceVol = Number(toNum(container.currentVolume).toFixed(2));
   const totalVol = Number(dests.reduce((sum, d) => sum + (parseFloat(d.vol) || 0), 0).toFixed(2));
   
   const isVolValid = totalVol > 0 && totalVol <= sourceVol;
@@ -2381,8 +2386,8 @@ function TransferModal({ container, onClose }: TransferModalProps) {
     if (!d.toId || !d.vol) return false;
     const targetCuve = baseAvailTargets.find((c: any) => String(c.id) === String(d.toId));
     if (!targetCuve) return true;
-    const targetCap = targetCuve.capacityValue || targetCuve.capacity || 0;
-    const targetCur = targetCuve.currentVolume || 0;
+    const targetCap = toNum(targetCuve.capacityValue || targetCuve.capacity);
+    const targetCur = toNum(targetCuve.currentVolume);
     const free = Number((targetCap - targetCur).toFixed(2));
     return Number(parseFloat(d.vol).toFixed(2)) > free;
   });
@@ -2390,7 +2395,7 @@ function TransferModal({ container, onClose }: TransferModalProps) {
   const hasCepageMismatch = dests.some((d: any) => {
     if (!d.toId || !isMustTransfer) return false;
     const targetCuve = baseAvailTargets.find((c: any) => String(c.id) === String(d.toId));
-    if (!targetCuve || targetCuve.currentVolume <= 0) return false; 
+    if (!targetCuve || toNum(targetCuve.currentVolume) <= 0) return false; 
     const targetLot = (state.lots || []).find((l: any) => String(l.currentContainerId || l.containerId) === String(targetCuve.id));
     if (!targetLot) return false;
     return (targetLot.mainGrapeCode || targetLot.cepage) !== "MULTI" && (targetLot.mainGrapeCode || targetLot.cepage) !== (lotToTransfer?.mainGrapeCode || lotToTransfer?.cepage);
@@ -2409,8 +2414,8 @@ function TransferModal({ container, onClose }: TransferModalProps) {
     const availableFromSource = Math.max(0, sourceVol - otherDestsVol);
     const dest = dests.find(d => d.id === destId);
     const targetCuve = baseAvailTargets.find((c: any) => String(c.id) === String(dest?.toId));
-    const targetCap = targetCuve ? (targetCuve.capacityValue || targetCuve.capacity || 0) : Infinity;
-    const targetCur = targetCuve ? (targetCuve.currentVolume || 0) : 0;
+    const targetCap = targetCuve ? toNum(targetCuve.capacityValue || targetCuve.capacity) : Infinity;
+    const targetCur = targetCuve ? toNum(targetCuve.currentVolume) : 0;
     const freeSpaceTarget = Math.max(0, targetCap - targetCur);
     const maxVal = Math.min(availableFromSource, freeSpaceTarget);
     updateDest(destId, "vol", maxVal > 0 ? Number(maxVal.toFixed(2)).toString() : ""); 
@@ -2498,8 +2503,8 @@ function TransferModal({ container, onClose }: TransferModalProps) {
           if (d.filterType) filteredTargets = filteredTargets.filter((c: any) => c.type === d.filterType);
 
           const targetCuve = baseAvailTargets.find((c: any) => String(c.id) === String(d.toId));
-          const targetLot = targetCuve && targetCuve.currentVolume > 0 ? (state.lots || []).find((l: any) => String(l.currentContainerId || l.containerId) === String(targetCuve.id)) : null;
-          const free = targetCuve ? (targetCuve.capacityValue || targetCuve.capacity || 0) - (targetCuve.currentVolume || 0) : 0;
+          const targetLot = targetCuve && toNum(targetCuve.currentVolume) > 0 ? (state.lots || []).find((l: any) => String(l.currentContainerId || l.containerId) === String(targetCuve.id)) : null;
+          const free = targetCuve ? toNum(targetCuve.capacityValue || targetCuve.capacity) - toNum(targetCuve.currentVolume) : 0;
           
           const isError = parseFloat(d.vol) > free;
           const isRowCepageMismatch = isMustTransfer && targetLot && (targetLot.mainGrapeCode || targetLot.cepage) !== "MULTI" && (targetLot.mainGrapeCode || targetLot.cepage) !== (lotToTransfer?.mainGrapeCode || lotToTransfer?.cepage);
