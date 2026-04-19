@@ -1478,7 +1478,10 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
         </div>
 
         {dests.map((d: any, i: any) => {
-           const targetCuve = options.find((c: any) => String(c.id) === String(d.cuveId));
+           const targetCuve = options.find((c: any) => String(c.id) === String(d.cuveId)) || (state.containers || []).find((c: any) => String(c.id) === String(d.cuveId));
+           const rowOptions = targetCuve && !options.some((c: any) => String(c.id) === String(targetCuve.id))
+             ? [targetCuve, ...options]
+             : options;
            const free = targetCuve ? Math.max(0, parseFloat(targetCuve.capacityValue || targetCuve.capacity || 0) - parseFloat(targetCuve.currentVolume || targetCuve.volume || 0)) : 0;
            const isOver = parseToHl(d.vol) > (free + 0.05);
 
@@ -1510,7 +1513,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                          setDests(nd);
                      }} style={{ borderColor: isOver ? T.red : T.border, flex: 1 }}>
                         <option value="">-- Choisir cuve --</option>
-                        {options.map((c: any) => {
+                        {rowOptions.map((c: any) => {
                            const dispo = Math.max(0, parseFloat(c.capacityValue || c.capacity || 0) - parseFloat(c.currentVolume || c.volume || 0));
                            const isAlreadySelected = dests.some((otherD: any, idx: any) => idx !== i && String(otherD.cuveId) === String(c.id));
                            return <option key={c.id} value={c.id} disabled={isAlreadySelected}>{c.displayName || c.name} (Dispo: {dispo.toFixed(2)} hL)</option>
