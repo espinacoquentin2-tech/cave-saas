@@ -17,6 +17,7 @@ export interface TransferSourceSnapshot {
     id: number;
     code: string;
     displayName: string;
+    type: string;
     capacityValue: Prisma.Decimal;
     status: string;
   } | null;
@@ -28,6 +29,7 @@ const baseSourceInclude = {
       id: true,
       code: true,
       displayName: true,
+      type: true,
       capacityValue: true,
       status: true,
     },

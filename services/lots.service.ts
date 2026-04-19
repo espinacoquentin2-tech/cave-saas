@@ -56,14 +56,7 @@ export class LotsService {
         data: { eventId: event.id, lotId: lot.id, roleInEvent: "CIBLE", volumeChange: 0 }
       });
 
-      let autoStatusUpdate = false;
-      if (data.intrant === "Levures LSA" && lot.status === "MOUT_DEBOURBE") {
-        await tx.lot.update({
-          where: { id: lot.id },
-          data: { status: "FERMENTATION_ALCOOLIQUE" }
-        });
-        autoStatusUpdate = true;
-      }
+      const autoStatusUpdate = false;
 
       await tx.idempotencyRecord.create({ data: { key: data.idempotencyKey, action: "LOT_INTRANT", userId: userEmail } });
 
@@ -96,11 +89,11 @@ export class LotsService {
           }
         });
 
-        // RÈGLE MÉTIER : Passage automatique en VIN_CLAIR si la densité est basse
+        // RÈGLE MÉTIER : Fin de FA => lot inactif mais consultable (VIN_DE_BASE)
         if (r.density && parseFloat(r.density.toString()) <= 995) {
             await tx.lot.update({
                 where: { id: r.lotId },
-                data: { status: 'VIN_CLAIR' }
+                data: { status: 'VIN_DE_BASE' }
             });
         }
       }
