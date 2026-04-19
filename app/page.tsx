@@ -1004,7 +1004,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
   const [loadWarning, setLoadWarning] = useState(null);
   const [mixWarning, setMixWarning] = useState(null); 
 
-  const [showAddCuve, setShowAddCuve] = useState(false);
+  const [showAddCuve, setShowAddCuve] = useState<any>(null);
   const [newCuve, setNewCuve] = useState({ name: "", type: "Débourbage Cuvée", capacityValue: "" });
   
   const [cuveeDests, setCuveeDests] = useState([]);
@@ -1485,36 +1485,39 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
            return (
              <div key={d.id} style={{ marginBottom: 12 }}>
                <div style={{ display:"flex", gap:8, alignItems:"flex-start" }}>
-                 <div style={{ flex: 2 }}>
-                   <Select value={d.cuveId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                       const selectedCuveId = e.target.value;
-                       const nd = [...dests]; 
-                       nd[i] = { ...nd[i], cuveId: selectedCuveId }; 
-                       
-                       if (selectedCuveId) {
-                           const tCuve = options.find((c: any) => String(c.id) === String(selectedCuveId));
-                           if (tCuve) {
-                               const freeSpace = Math.max(0, parseFloat(tCuve.capacityValue || tCuve.capacity || 0) - parseFloat(tCuve.currentVolume || tCuve.volume || 0));
-                               const safeSpace = freeSpace * 0.9; 
-                               
-                               const otherDestsVol = dests.filter((_: any, idx: any) => idx !== i).reduce((s: any, od: any) => s + parseToHl(od.vol), 0);
-                               const remainingToDistribute = Math.max(0, parseFloat(theoVol) - otherDestsVol);
-                               
-                               const autoVol = Math.min(safeSpace, remainingToDistribute);
-                               nd[i] = { ...nd[i], vol: autoVol > 0 ? autoVol.toFixed(2) : "" };
-                           }
-                       } else {
-                           nd[i] = { ...nd[i], vol: "" };
-                       }
-                       setDests(nd);
-                   }} style={{ borderColor: isOver ? T.red : T.border }}>
-                      <option value="">-- Choisir cuve --</option>
-                      {options.map((c: any) => {
-                         const dispo = Math.max(0, parseFloat(c.capacityValue || c.capacity || 0) - parseFloat(c.currentVolume || c.volume || 0));
-                         const isAlreadySelected = dests.some((otherD: any, idx: any) => idx !== i && String(otherD.cuveId) === String(c.id));
-                         return <option key={c.id} value={c.id} disabled={isAlreadySelected}>{c.displayName || c.name} (Dispo: {dispo.toFixed(2)} hL)</option>
-                      })}
-                   </Select>
+               <div style={{ flex: 2 }}>
+                   <div style={{ display: "flex", gap: 8 }}>
+                     <Select value={d.cuveId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                         const selectedCuveId = e.target.value;
+                         const nd = [...dests]; 
+                         nd[i] = { ...nd[i], cuveId: selectedCuveId }; 
+                         
+                         if (selectedCuveId) {
+                             const tCuve = options.find((c: any) => String(c.id) === String(selectedCuveId));
+                             if (tCuve) {
+                                 const freeSpace = Math.max(0, parseFloat(tCuve.capacityValue || tCuve.capacity || 0) - parseFloat(tCuve.currentVolume || tCuve.volume || 0));
+                                 const safeSpace = freeSpace * 0.9; 
+                                 
+                                 const otherDestsVol = dests.filter((_: any, idx: any) => idx !== i).reduce((s: any, od: any) => s + parseToHl(od.vol), 0);
+                                 const remainingToDistribute = Math.max(0, parseFloat(theoVol) - otherDestsVol);
+                                 
+                                 const autoVol = Math.min(safeSpace, remainingToDistribute);
+                                 nd[i] = { ...nd[i], vol: autoVol > 0 ? autoVol.toFixed(2) : "" };
+                             }
+                         } else {
+                             nd[i] = { ...nd[i], vol: "" };
+                         }
+                         setDests(nd);
+                     }} style={{ borderColor: isOver ? T.red : T.border, flex: 1 }}>
+                        <option value="">-- Choisir cuve --</option>
+                        {options.map((c: any) => {
+                           const dispo = Math.max(0, parseFloat(c.capacityValue || c.capacity || 0) - parseFloat(c.currentVolume || c.volume || 0));
+                           const isAlreadySelected = dests.some((otherD: any, idx: any) => idx !== i && String(otherD.cuveId) === String(c.id));
+                           return <option key={c.id} value={c.id} disabled={isAlreadySelected}>{c.displayName || c.name} (Dispo: {dispo.toFixed(2)} hL)</option>
+                        })}
+                     </Select>
+                     <Btn variant="secondary" disabled={isSubmitting} onClick={() => setShowAddCuve({ section: title, index: i, initialType: defaultType === "CUVE_REBECHES" ? "CUVE_REBECHES" : "CUVE_DEBOURBAGE", initialCapacity: Math.max(1, Math.ceil(parseFloat(theoVol) || 1)).toString() })}>+</Btn>
+                   </div>
                  </div>
                  <div style={{ flex: 1, display:"flex", gap:4 }}>
                    <Input type="number" step="0.1" value={d.vol} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1551,6 +1554,23 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
            }}>+ Éclater dans une autre cuve</Btn>
         </div>
       </div>
+    );
+  }
+
+  if (showAddCuve) {
+    return (
+      <AddContainerModal
+        initialType={showAddCuve.initialType}
+        initialCapacity={showAddCuve.initialCapacity}
+        onClose={() => setShowAddCuve(null)}
+        onSuccess={(newId: string) => {
+          const updater = (dests: any[]) => dests.map((d: any, idx: number) => idx === showAddCuve.index ? { ...d, cuveId: newId } : d);
+          if (showAddCuve.section === "Cuvée") setCuveeDests(updater(cuveeDests as any) as any);
+          else if (showAddCuve.section === "Taille") setTailleDests(updater(tailleDests as any) as any);
+          else setRebechesDests(updater(rebechesDests as any) as any);
+          setShowAddCuve(null);
+        }}
+      />
     );
   }
 
@@ -3474,7 +3494,7 @@ function CreateLotModal({ container, onClose }: { container: any; onClose: any }
         <FF label="Volume initial (hL)"><Input type="number" step="0.1" value={form.volume} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, volume:e.target.value})} disabled={isSubmitting}/></FF>
         <FF label="Statut initial">
           <Select value={form.status} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, status:e.target.value})} disabled={isSubmitting}>
-            {LOT_STATUSES.slice(0,4).map((s: any) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
+            {LOT_STATUSES.map((s: any) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
           </Select>
         </FF>
       </div>
