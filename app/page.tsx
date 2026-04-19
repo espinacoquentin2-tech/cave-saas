@@ -3130,14 +3130,27 @@ function TourFA({ onSelectLot }: any) {
   
   const [tourDate, setTourDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [readings, setReadings] = useState<Record<string, { density: string, temperature: string }>>({});
+  const [filterCepage, setFilterCepage] = useState("");
+  const [filterMillesime, setFilterMillesime] = useState("");
+  const [filterLieu, setFilterLieu] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [archivingLotId, setArchivingLotId] = useState<string | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
-  // On ne filtre que les lots pertinents pour la FA
+  const activeFaStatuses = ["FERMENTATION_ALCOOLIQUE", "FERMENTATION_MALOLACTIQUE", "FA_ET_FML"];
+  const inactiveFaStatuses = ["VIN_DE_BASE", "VIN_ROUGE"];
+
   const faLots = (state.lots || [])
-    .filter((l: any) => l.status === "FERMENTATION_ALCOOLIQUE" || l.status === "MOUT_NON_DEBOURBE" || l.status === "MOUT_DEBOURBE")
+    .filter((l: any) => activeFaStatuses.includes(l.status) || inactiveFaStatuses.includes(l.status) || (showArchived && l.status === "ARCHIVE"))
+    .filter((l: any) => !filterCepage || (l.mainGrapeCode || l.cepage) === filterCepage)
+    .filter((l: any) => !filterMillesime || String(l.year || l.millesime) === filterMillesime)
+    .filter((l: any) => !filterLieu || (l.placeCode || l.lieu || "") === filterLieu)
     .sort((a: any, b: any) => (a.businessCode || a.code).localeCompare(b.businessCode || b.code));
+
+  const uniqueMillesimes = [...new Set((state.lots || []).map((l: any) => String(l.year || l.millesime)).filter(Boolean))].sort().reverse();
+  const uniqueLieux = [...new Set((state.lots || []).map((l: any) => l.placeCode || l.lieu).filter(Boolean))].sort();
 
   const updateReading = (lotId: string, field: 'density' | 'temperature', value: string) => {
     setReadings(prev => ({
@@ -3191,6 +3204,30 @@ function TourFA({ onSelectLot }: any) {
     }
   };
 
+  const archiveLot = async (lot: any) => {
+    setArchivingLotId(String(lot.id));
+    try {
+      const res = await fetch('/api/lots/statuts', {
+        method: 'POST',
+        headers: buildApiHeaders(user),
+        body: JSON.stringify({
+          lotId: lot.id,
+          newStatus: "ARCHIVE",
+          note: "Archivage depuis le suivi FA",
+          idempotencyKey: crypto.randomUUID()
+        })
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(extractApiErrorMessage(payload, "Erreur d'archivage"));
+      dispatch({ type: "TOAST_ADD", payload: { msg: `Lot ${lot.businessCode || lot.code} archivé`, color: T.green } });
+      if (refreshData) await refreshData();
+    } catch (e: any) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: e instanceof Error ? e.message : String(e), color: T.red } });
+    } finally {
+      setArchivingLotId(null);
+    }
+  };
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 28 }}>
@@ -3198,7 +3235,23 @@ function TourFA({ onSelectLot }: any) {
           <h1 style={{ fontFamily: "'Playfair Display', Georgia, serif", fontSize: 32, color: T.textStrong, margin: 0 }}>Tour de FA</h1>
           <div style={{ color: T.textDim, fontSize: 13, marginTop: 4 }}>Saisie rapide des densités et températures pour les lots en cours de fermentation.</div>
         </div>
-        <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+        <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+          <Select value={filterCepage} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterCepage(e.target.value)} style={{ width: 130 }}>
+            <option value="">Tous cépages</option>
+            {CEPAGES.map((c: any) => <option key={c} value={c}>{c}</option>)}
+          </Select>
+          <Select value={filterMillesime} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterMillesime(e.target.value)} style={{ width: 130 }}>
+            <option value="">Tous millésimes</option>
+            {uniqueMillesimes.map((m: any) => <option key={m} value={m}>{m}</option>)}
+          </Select>
+          <Select value={filterLieu} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setFilterLieu(e.target.value)} style={{ width: 140 }}>
+            <option value="">Toutes localisations</option>
+            {uniqueLieux.map((l: any) => <option key={l} value={l}>{l}</option>)}
+          </Select>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, color: T.textDim, fontSize: 11 }}>
+            <input type="checkbox" checked={showArchived} onChange={(e) => setShowArchived(e.target.checked)} />
+            Voir archivés
+          </label>
           <FF label="Date du relevé">
             <Input type="date" value={tourDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTourDate(e.target.value)} disabled={isSubmitting} />
           </FF>
@@ -3209,8 +3262,8 @@ function TourFA({ onSelectLot }: any) {
       </div>
 
       <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, overflow: "hidden" }}>
-        <div style={{ display: "grid", gridTemplateColumns: "150px 2fr 100px 1.5fr 1.5fr", padding: "12px 16px", borderBottom: `1px solid ${T.border}`, fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1, background: T.surfaceHigh }}>
-          <div>Code Lot</div><div>Contenant</div><div>Volume</div><div>Densité</div><div>Température (°C)</div>
+        <div style={{ display: "grid", gridTemplateColumns: "150px 2fr 100px 120px 1.5fr 1.5fr 110px", padding: "12px 16px", borderBottom: `1px solid ${T.border}`, fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1, background: T.surfaceHigh }}>
+          <div>Code Lot</div><div>Contenant</div><div>Volume</div><div>État</div><div>Densité</div><div>Température (°C)</div><div>Archivage</div>
         </div>
         
         {faLots.length === 0 ? (
@@ -3218,9 +3271,10 @@ function TourFA({ onSelectLot }: any) {
         ) : (
           faLots.map((l: any, i: number) => {
             const container = (state.containers || []).find((c: any) => String(c.id) === String(l.currentContainerId || l.containerId));
+            const isInactive = inactiveFaStatuses.includes(l.status);
             
             return (
-              <div key={l.id} style={{ display: "grid", gridTemplateColumns: "150px 2fr 100px 1.5fr 1.5fr", padding: "12px 16px", alignItems: "center", borderBottom: i < faLots.length - 1 ? `1px solid ${T.border}` : "none", transition: "background .15s" }} onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = T.surfaceHigh} onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = "transparent"}>
+              <div key={l.id} style={{ display: "grid", gridTemplateColumns: "150px 2fr 100px 120px 1.5fr 1.5fr 110px", padding: "12px 16px", alignItems: "center", borderBottom: i < faLots.length - 1 ? `1px solid ${T.border}` : "none", transition: "background .15s", opacity: isInactive ? 0.75 : 1 }} onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = T.surfaceHigh} onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = "transparent"}>
                 <div onClick={() => onSelectLot(l)} style={{ fontSize: 13, color: T.accent, fontFamily: "monospace", fontWeight: 600, cursor: "pointer", textDecoration: "underline" }}>
                   {l.businessCode || l.code}
                 </div>
@@ -3230,6 +3284,9 @@ function TourFA({ onSelectLot }: any) {
                 <div style={{ fontSize: 12, color: T.textDim, fontFamily: "monospace" }}>
                   {l.currentVolume || l.volume} hL
                 </div>
+                <div>
+                  <Badge label={isInactive ? "INACTIF" : "ACTIF"} color={isInactive ? T.textDim : T.accent} />
+                </div>
                 <div style={{ paddingRight: 16 }}>
                   <Input 
                     type="number" 
@@ -3237,7 +3294,7 @@ function TourFA({ onSelectLot }: any) {
                     placeholder="Ex: 1024" 
                     value={readings[l.id]?.density || ""} 
                     onChange={(e: any) => updateReading(l.id, 'density', e.target.value)} 
-                    disabled={isSubmitting} 
+                    disabled={isSubmitting || isInactive} 
                   />
                 </div>
                 <div style={{ paddingRight: 16 }}>
@@ -3247,8 +3304,22 @@ function TourFA({ onSelectLot }: any) {
                     placeholder="Ex: 18.5" 
                     value={readings[l.id]?.temperature || ""} 
                     onChange={(e: any) => updateReading(l.id, 'temperature', e.target.value)} 
-                    disabled={isSubmitting} 
+                    disabled={isSubmitting || isInactive} 
                   />
+                </div>
+                <div>
+                  {isInactive ? (
+                    <Btn
+                      variant="ghost"
+                      onClick={() => archiveLot(l)}
+                      disabled={archivingLotId === String(l.id)}
+                      style={{ width: "100%", padding: "7px 8px", fontSize: 10 }}
+                    >
+                      {archivingLotId === String(l.id) ? "..." : "Archiver"}
+                    </Btn>
+                  ) : (
+                    <span style={{ color: T.textDim, fontSize: 11 }}>--</span>
+                  )}
                 </div>
               </div>
             );
@@ -9268,7 +9339,7 @@ export default function App() {
       });
       fetchSafe(`/api/lots?t=${t}`).then((d: any) => {
         if (!Array.isArray(d)) return;
-        dispatch({type:"SET_LOTS", payload: safeMap(d, (l: any)=>({id:l.id.toString(),code:l.businessCode,millesime:l.year,cepage:l.mainGrapeCode,lieu:l.placeCode||"",volume:l.currentVolume,containerId:l.currentContainerId?.toString(),status:l.status==="ACTIF"?"FERMENTATION_ALCOOLIQUE":l.status,composition:[{cepage:l.mainGrapeCode,pct:100}],parentIds:[],childIds:[],notes:l.notes||""}))});
+        dispatch({type:"SET_LOTS", payload: safeMap(d, (l: any)=>({id:l.id.toString(),code:l.businessCode,millesime:l.year,cepage:l.mainGrapeCode,lieu:l.placeCode||"",volume:l.currentVolume,containerId:l.currentContainerId?.toString(),status:l.status,composition:[{cepage:l.mainGrapeCode,pct:100}],parentIds:[],childIds:[],notes:l.notes||""}))});
       });
       fetchSafe(`/api/bottles?t=${t}`).then((d: any) => {
         if (!Array.isArray(d)) return;

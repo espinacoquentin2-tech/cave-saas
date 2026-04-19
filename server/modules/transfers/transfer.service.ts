@@ -187,6 +187,11 @@ export class TransferService {
       }
 
       for (const [index, destination] of input.destinations.entries()) {
+        const targetStatus =
+          sourceLot.currentContainer?.type === 'CUVE_DEBOURBAGE' && sourceLot.status === 'MOUT_NON_DEBOURBE'
+            ? 'MOUT_DEBOURBE'
+            : sourceLot.status;
+
         const targetLot = await TransferRepository.createChildLot(tx, {
           technicalCode: `${sourceLot.technicalCode}-TR-${event.id}-${index + 1}`,
           businessCode: `${sourceLot.businessCode}-TR-${event.id}-${index + 1}`,
@@ -195,7 +200,7 @@ export class TransferService {
           sequenceNumber: sourceLot.sequenceNumber,
           currentVolume: toDecimal(destination.volume),
           currentContainerId: destination.toId,
-          status: 'ACTIF',
+          status: targetStatus,
           notes: `Lot issu du transfert #${event.id}.`,
         });
 
