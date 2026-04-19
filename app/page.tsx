@@ -8959,6 +8959,7 @@ const BAIES_DATA_PREFIX = "BAIES_DATA::";
 
 function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => void; defaultPhase?: string }) {
   const T = useTheme();
+  const { user } = useAuth();
   const { state, dispatch, refreshData } = useStore();
 
   const [form, setForm] = useState({
@@ -9047,7 +9048,7 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
 
       const res = await fetch('/api/degustations', {
         method: 'POST',
-        headers: buildApiHeaders(undefined),
+        headers: buildApiHeaders(user),
         body: JSON.stringify(payload)
       });
 
