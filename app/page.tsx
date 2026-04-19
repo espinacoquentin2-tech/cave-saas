@@ -8904,24 +8904,23 @@ const PHASES_DEGUSTATION = [
   { id: "CHAMPAGNE", label: "🥂 Produit Fini", desc: "Contrôle après vieillissement" } // 👈 Remplacé FINI par CHAMPAGNE
 ];
 
-// La taxonomie tirée de votre document Word (Arborescence V5 Fizz)
-const AROMES_TAXONOMY = {
-  "Fruités & Floraux": [
-    "Agrume", "Fruit blanc/jaune", "Fruit Exotique", "Fruit rouge/noir", "Floral"
-  ],
-  "Végétaux & Épicés": [
-    "Pl. arom. / Résineux", "Végétal sec", "Végétal frais", "Epice"
-  ],
-  "Évolués & Pâtissiers": [
-    "Lactique", "Boulangerie", "Empyreumatique", "Fruit mûr/cuit confit", "Fruit sec/à coque", "Miellé", "Boisé"
-  ],
-  "Défauts & Atypiques": [
-    "Animal", "Composé Minéral", "Acescence / Solvant", "Acétique", "Carton", "Sous-bois / Champignon", "Moisi", "Terreux", "SO2"
-  ]
-};
+const VISUEL_TAGS = ["Couleur", "Reflets", "Effervescence"];
 
-// Descripteurs de Bouche / Saveurs (Inspiré de votre document)
-const SAVEURS_TAXONOMY = ["Acide", "Amer", "Sucré", "Salé", "Umami", "Rond", "Astringent", "Huileux"];
+const OLFACTIF_TAXONOMY = [
+  "Fruit frais", "Floral", "Végétal", "Épice", "Lactique", "Boulangerie", "Empyreumatique",
+  "Évolution oxydative", "Réduction", "Animal", "Minéral / SO2", "Amylique", "Acescence / solvant",
+  "Acétique", "Boisé", "Carton", "Champignon / moisi / terreux"
+];
+
+const GUSTATIF_TAXONOMY = [
+  "Acide", "Amer", "Sucré", "Salé", "Rond", "Astringent / asséchant", "Huileux",
+  "Très effervescent", "Plus intense", "Maigre / dilué", "Lourd", "Déséquilibré"
+];
+
+const BAIES_ECRASEMENT = ["Faible", "Moyenne", "Bonne", "Très bonne"];
+const BAIES_NATURE_CITRONNEE = ["Absente", "Légère", "Marquée"];
+const BAIES_VENDANGE = ["À attendre", "Dans 3-5 jours", "Vendange immédiate"];
+const BAIES_DATA_PREFIX = "BAIES_DATA::";
 
 function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => void; defaultPhase?: string }) {
   const T = useTheme();
@@ -8939,6 +8938,18 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
     notes: ""
   });
 
+  const [baiesForm, setBaiesForm] = useState({
+    aptitudeEcrasement: "",
+    sucrosite: "",
+    acidite: "",
+    vegetal: "",
+    fruite: "",
+    natureCitronnee: "",
+    aromePellicule: "",
+    astringencePellicule: "",
+    dateVendange: "",
+  });
+
   // Gestion des tags cliquables
   const [selectedNez, setSelectedNez] = useState<string[]>([]);
   const [selectedBouche, setSelectedBouche] = useState<string[]>([]);
@@ -8953,13 +8964,14 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
 
   const getTargetOptions = () => {
     if (form.phase === "BAIES") {
-      return (state.parcelles || []).map((p: any) => <option key={p.id} value={p.nom}>{p.nom}</option>);
+      const options = Array.from(
+        new Set((state.maturations || []).map((m: any) => `${m.parcelle} • ${m.cepage}`).filter(Boolean))
+      ) as string[];
+      options.sort((a: string, b: string) => a.localeCompare(b));
+      return options.map((label: string) => <option key={label} value={label}>{label}</option>);
     }
-    if (["FERMENTATION", "VINS_CLAIRS"].includes(form.phase)) {
+    if (["FERMENTATION", "VINS_CLAIRS", "DOSAGE", "CHAMPAGNE"].includes(form.phase)) {
       return (state.lots || []).filter((l: any) => l.volume > 0).map((l: any) => <option key={l.id} value={l.id}>{l.code} ({l.volume} hL)</option>);
-    }
-    if (["DOSAGE", "CHAMPAGNE"].includes(form.phase)) {
-      return (state.bottleLots || []).map((b: any) => <option key={b.id} value={b.id}>{b.code} ({b.currentCount} btl)</option>);
     }
     return null;
   };
@@ -8967,18 +8979,34 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
   const submit = async () => {
     // Validation frontend basique avant d'envoyer au backend
     if (form.phase === "BAIES" && !form.parcelle) return alert("Veuillez sélectionner une parcelle.");
-    if (["FERMENTATION", "VINS_CLAIRS"].includes(form.phase) && !form.lotId) return alert("Veuillez sélectionner un lot de vin.");
-    if (["DOSAGE", "CHAMPAGNE"].includes(form.phase) && !form.bottleLotId) return alert("Veuillez sélectionner un lot de bouteilles.");
+    if (["FERMENTATION", "VINS_CLAIRS", "DOSAGE", "CHAMPAGNE"].includes(form.phase) && !form.lotId) return alert("Veuillez sélectionner un lot.");
 
     setIsSubmitting(true);
     
     try {
+      const baiesData = form.phase === "BAIES" ? {
+        aptitudeEcrasement: baiesForm.aptitudeEcrasement,
+        sucrosite: baiesForm.sucrosite,
+        acidite: baiesForm.acidite,
+        vegetal: baiesForm.vegetal,
+        fruite: baiesForm.fruite,
+        natureCitronnee: baiesForm.natureCitronnee,
+        aromePellicule: baiesForm.aromePellicule,
+        astringencePellicule: baiesForm.astringencePellicule,
+        dateVendange: baiesForm.dateVendange,
+      } : null;
+
       const payload = {
         ...form,
-        nez: selectedNez.length > 0 ? selectedNez.join(', ') : undefined,     // On envoie une string propre au backend
-        bouche: selectedBouche.length > 0 ? selectedBouche.join(', ') : undefined,
+        bottleLotId: undefined,
+        nez: form.phase === "BAIES" ? undefined : (selectedNez.length > 0 ? selectedNez.join(', ') : undefined),
+        bouche: form.phase === "BAIES" ? undefined : (selectedBouche.length > 0 ? selectedBouche.join(', ') : undefined),
+        robe: form.phase === "BAIES" ? undefined : form.robe,
         noteGlobale: form.noteGlobale ? parseFloat(form.noteGlobale) : undefined,
         sucreTest: form.sucreTest ? parseFloat(form.sucreTest) : undefined,
+        notes: form.phase === "BAIES"
+          ? `${BAIES_DATA_PREFIX}${JSON.stringify(baiesData)}${form.notes ? `\n${form.notes}` : ''}`
+          : form.notes,
         idempotencyKey
       };
 
@@ -9012,7 +9040,7 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
           <Input type="date" value={form.date} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, date: e.target.value})} disabled={isSubmitting} />
         </FF>
         <FF label="Phase d'élaboration">
-          <Select value={form.phase} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, phase: e.target.value, parcelle: "", lotId: "", bottleLotId: ""})} disabled={isSubmitting}>
+          <Select value={form.phase} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, phase: e.target.value, parcelle: "", lotId: "", bottleLotId: "", robe: "", sucreTest: ""})} disabled={isSubmitting}>
             {PHASES_DEGUSTATION.map((p: any) => <option key={p.id} value={p.id}>{p.label}</option>)}
           </Select>
         </FF>
@@ -9020,11 +9048,10 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
 
       <div style={{ background: T.surfaceHigh, padding: 16, borderRadius: 6, border: `1px solid ${T.border}`, marginBottom: 20 }}>
         <FF label="Élément dégusté (Cible obligatoire)">
-          <Select value={form.phase === "BAIES" ? form.parcelle : (form.phase === "DOSAGE" || form.phase === "CHAMPAGNE" ? form.bottleLotId : form.lotId)} 
+          <Select value={form.phase === "BAIES" ? form.parcelle : form.lotId}
                   onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                     const val = e.target.value;
                     if (form.phase === "BAIES") setForm({...form, parcelle: val});
-                    else if (["DOSAGE", "CHAMPAGNE"].includes(form.phase)) setForm({...form, bottleLotId: val});
                     else setForm({...form, lotId: val});
                   }} disabled={isSubmitting}>
             <option value="">-- Sélectionner l'élément --</option>
@@ -9033,8 +9060,63 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
         </FF>
       </div>
 
+      {form.phase === "BAIES" ? (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+            <FF label="Aptitude à l'écrasement">
+              <Select value={baiesForm.aptitudeEcrasement} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setBaiesForm({ ...baiesForm, aptitudeEcrasement: e.target.value })} disabled={isSubmitting}>
+                <option value="">-- Choisir --</option>
+                {BAIES_ECRASEMENT.map((v: string) => <option key={v} value={v}>{v}</option>)}
+              </Select>
+            </FF>
+            <FF label="Nature citronnée">
+              <Select value={baiesForm.natureCitronnee} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setBaiesForm({ ...baiesForm, natureCitronnee: e.target.value })} disabled={isSubmitting}>
+                <option value="">-- Choisir --</option>
+                {BAIES_NATURE_CITRONNEE.map((v: string) => <option key={v} value={v}>{v}</option>)}
+              </Select>
+            </FF>
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 20 }}>
+            {[
+              ["Sucrosité", "sucrosite"],
+              ["Acidité", "acidite"],
+              ["Végétal", "vegetal"],
+              ["Fruité", "fruite"],
+              ["Arôme pellicule", "aromePellicule"],
+              ["Astringence pellicule", "astringencePellicule"],
+            ].map(([label, key]) => (
+              <FF key={key} label={`${label} (0-10)`}>
+                <Input
+                  type="number"
+                  min="0"
+                  max="10"
+                  step="1"
+                  value={(baiesForm as any)[key]}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBaiesForm({ ...baiesForm, [key]: e.target.value })}
+                  disabled={isSubmitting}
+                />
+              </FF>
+            ))}
+          </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
+            <FF label="Date de vendange">
+              <Input type="date" value={baiesForm.dateVendange} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBaiesForm({ ...baiesForm, dateVendange: e.target.value })} disabled={isSubmitting} />
+            </FF>
+            <FF label="Recommandation vendange">
+              <Select value={baiesForm.dateVendange ? "Vendange immédiate" : ""} onChange={() => {}} disabled>
+                <option value="">Suivre la date de vendange renseignée</option>
+                {BAIES_VENDANGE.map((v: string) => <option key={v} value={v}>{v}</option>)}
+              </Select>
+            </FF>
+          </div>
+        </>
+      ) : (
+      <>
+
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
-        <FF label="👁️ Robe / Visuel (Optionnel)">
+        <FF label="👁️ Visuel (Optionnel)">
           <Input value={form.robe} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, robe: e.target.value})} disabled={isSubmitting} placeholder="Ex: Or pâle, reflets verts..." />
         </FF>
         {form.phase === "DOSAGE" && (
@@ -9046,32 +9128,39 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
 
       <div style={{ borderTop: `1px dashed ${T.border}`, margin: "20px 0" }} />
 
-      <div style={{ fontSize: 13, fontWeight: "bold", color: T.accentLight, marginBottom: 12, textTransform: "uppercase" }}>👃 Analyse Olfactive (Nez)</div>
-      {Object.entries(AROMES_TAXONOMY).map(([category, tags]) => (
-        <div key={category} style={{ marginBottom: 12 }}>
-          <div style={{ fontSize: 11, color: T.textDim, marginBottom: 6 }}>{category}</div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {tags.map((tag: any) => {
-              const isActive = selectedNez.includes(tag);
-              return (
-                <button key={tag} onClick={() => toggleTag(selectedNez, setSelectedNez, tag)} disabled={isSubmitting}
-                  style={{ padding: "4px 10px", fontSize: 11, borderRadius: 20, cursor: "pointer", transition: "all 0.2s",
-                           border: `1px solid ${isActive ? T.accent : T.border}`,
-                           background: isActive ? T.accent+"22" : "transparent",
-                           color: isActive ? T.accent : T.textDim }}>
-                  {tag}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+      <div style={{ fontSize: 13, fontWeight: "bold", color: T.accentLight, marginBottom: 12, textTransform: "uppercase" }}>👁️ Visuel</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
+        {VISUEL_TAGS.map((tag: string) => {
+          const isActive = (form.robe || '').toLowerCase().includes(tag.toLowerCase());
+          return (
+            <span key={tag} style={{ padding: "4px 10px", fontSize: 11, borderRadius: 20, border: `1px solid ${isActive ? T.accent : T.border}`, color: isActive ? T.accent : T.textDim }}>
+              {tag}
+            </span>
+          );
+        })}
+      </div>
+
+      <div style={{ fontSize: 13, fontWeight: "bold", color: T.accentLight, marginBottom: 12, textTransform: "uppercase" }}>👃 Analyse Olfactive</div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+        {OLFACTIF_TAXONOMY.map((tag: any) => {
+          const isActive = selectedNez.includes(tag);
+          return (
+            <button key={tag} onClick={() => toggleTag(selectedNez, setSelectedNez, tag)} disabled={isSubmitting}
+              style={{ padding: "4px 10px", fontSize: 11, borderRadius: 20, cursor: "pointer", transition: "all 0.2s",
+                        border: `1px solid ${isActive ? T.accent : T.border}`,
+                        background: isActive ? T.accent+"22" : "transparent",
+                        color: isActive ? T.accent : T.textDim }}>
+              {tag}
+            </button>
+          );
+        })}
+      </div>
 
       <div style={{ borderTop: `1px dashed ${T.border}`, margin: "20px 0" }} />
 
-      <div style={{ fontSize: 13, fontWeight: "bold", color: T.accentLight, marginBottom: 12, textTransform: "uppercase" }}>👄 Analyse Gustative (Bouche)</div>
+      <div style={{ fontSize: 13, fontWeight: "bold", color: T.accentLight, marginBottom: 12, textTransform: "uppercase" }}>👄 Analyse Gustative</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 20 }}>
-        {SAVEURS_TAXONOMY.map((tag: any) => {
+        {GUSTATIF_TAXONOMY.map((tag: any) => {
           const isActive = selectedBouche.includes(tag);
           return (
             <button key={tag} onClick={() => toggleTag(selectedBouche, setSelectedBouche, tag)} disabled={isSubmitting}
@@ -9084,6 +9173,8 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
           );
         })}
       </div>
+      </>
+      )}
 
       <div style={{ display:"grid", gridTemplateColumns:"120px 1fr", gap:16, alignItems:"start" }}>
         <FF label="Note Globale (/20)">
@@ -9138,6 +9229,17 @@ function Degustation() {
       return b ? b.code : `Bouteilles #${d.bottleLotId}`;
     }
     return "Cible inconnue";
+  };
+
+  const parseBaiesData = (notes?: string | null) => {
+    if (!notes || !notes.startsWith(BAIES_DATA_PREFIX)) return null;
+    const [jsonPart, ...rest] = notes.slice(BAIES_DATA_PREFIX.length).split('\n');
+    try {
+      const parsed = JSON.parse(jsonPart);
+      return { data: parsed, freeNote: rest.join('\n') };
+    } catch {
+      return null;
+    }
   };
 
   return (
@@ -9200,7 +9302,13 @@ function Degustation() {
                   </div>
                 )}
 
-                {/* Critères Aromatiques (Les Tags) */}
+                {d.phase === "BAIES" && parseBaiesData(d.notes) ? (
+                  <div style={{ fontSize: 12, color: T.textStrong, lineHeight: 1.6 }}>
+                    {Object.entries(parseBaiesData(d.notes)?.data || {}).map(([k, v]: [string, any]) => (
+                      <div key={k}><span style={{ color: T.textDim }}>{k} :</span> {String(v || '-')}</div>
+                    ))}
+                  </div>
+                ) : (
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
                   <div>
                     <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>👃 Nez</div>
@@ -9219,11 +9327,12 @@ function Degustation() {
                     </div>
                   </div>
                 </div>
+                )}
 
                 {/* Conclusion */}
                 {d.notes && (
                   <div style={{ marginTop: "auto", paddingTop: 16, borderTop: `1px solid ${T.border}`, fontSize: 12, color: T.text, fontStyle: "italic", lineHeight: 1.5 }}>
-                    « {d.notes} »
+                    « {(parseBaiesData(d.notes)?.freeNote || d.notes).trim()} »
                   </div>
                 )}
                 
