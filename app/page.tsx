@@ -85,8 +85,11 @@ const unwrapApiData = (payload: any) => {
 };
 
 const extractApiErrorMessage = (payload: any, fallback = "Erreur serveur") => {
-  const fieldError = payload?.details?.fieldErrors
-    ? Object.values(payload.details.fieldErrors).flat().find(Boolean)
+  const fieldErrorEntry = payload?.details?.fieldErrors
+    ? Object.entries(payload.details.fieldErrors).find(([, messages]) => Array.isArray(messages) && messages.find(Boolean))
+    : null;
+  const fieldError = fieldErrorEntry
+    ? `${fieldErrorEntry[0]}: ${(fieldErrorEntry[1] as any[]).find(Boolean)}`
     : null;
   const formError = Array.isArray(payload?.details?.formErrors)
     ? payload.details.formErrors.find(Boolean)
@@ -1123,12 +1126,13 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
       const res = await fetch('/api/pressoirs', { 
         method: 'PUT', 
         headers: buildApiHeaders(user),
-        body: JSON.stringify({ id, status, ...extraData }) 
+        body: JSON.stringify({ id, status, ...extraData, idempotencyKey }) 
       });
       if (!res.ok) throw new Error(extractApiErrorMessage(await res.json().catch(() => ({}))));
       
       if (refreshData) await refreshData();
       if (status === "VIDE") setActionModal(null);
+      setIdempotencyKey(crypto.randomUUID());
     } catch (e) { 
       alert(e instanceof Error ? e.message : String(e));
     } finally {
@@ -3234,8 +3238,6 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
     SOUS_PRODUITS: ["CUVE_BOURBES", "CUVE_LIES", "CUVE_REBECHES"]
   };
 
-  const isAdmin = user?.role === "Admin" || user?.role === "Chef de cave";
-  
   const uniqueZones = [...new Set((state.containers || []).map((c: any) => c.zone).filter(Boolean))].sort();
 
   const handleMainFilter = (f: string) => {
@@ -3297,7 +3299,7 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:28 }}>
         <div><h1 style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:32, color:T.textStrong, margin:0 }}>Cuverie</h1></div>
-        {isAdmin && <Btn onClick={() => setModal(true)}>+ Ajouter contenant</Btn>}
+        {user?.role !== "Lecture seule" && user?.role !== "LECTURE_SEULE" && <Btn onClick={() => setModal(true)}>+ Ajouter cuve</Btn>}
       </div>
       
       <div style={{ display:"flex", gap:10, marginBottom: mainFilter === "CUVES" || mainFilter === "BOIS" || mainFilter === "SOUS-PRODUITS" ? 10 : 20, flexWrap:"wrap" }}>
