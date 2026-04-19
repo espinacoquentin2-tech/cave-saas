@@ -1923,8 +1923,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
            isDestInvalid(cuveeDests, cuvesCuvee) ||
            isDestInvalid(tailleDests, cuvesTaille) ||
            isDestInvalid(rebechesDests, cuvesRebeches) ||
-           totalC <= 0 ||
-           totalT <= 0 ||
+           (totalC + totalT) <= 0 ||
            totalR > parseToHl(calcVol.rebeches);
 
         return (
