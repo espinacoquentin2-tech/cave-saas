@@ -9020,6 +9020,12 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
     setIsSubmitting(true);
     
     try {
+      const session = await supabase.auth.getSession();
+      const runtimeToken = session.data.session?.access_token ?? user?.accessToken;
+      const authUser = runtimeToken ? { ...user, accessToken: runtimeToken } : user;
+      const headers = buildApiHeaders(authUser);
+      const hasAuthorization = Boolean((headers as Record<string, string>).Authorization);
+
       const baiesData = form.phase === "BAIES" ? {
         aptitudeEcrasement: baiesForm.aptitudeEcrasement,
         sucrosite: baiesForm.sucrosite,
@@ -9048,14 +9054,15 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
 
       const res = await fetch('/api/degustations', {
         method: 'POST',
-        headers: buildApiHeaders(user),
+        headers,
         body: JSON.stringify(payload)
       });
 
       const data = await res.json();
       
       if (!res.ok) {
-        throw new Error(data.error || "Erreur lors de la sauvegarde.");
+        const apiError = data?.error || data?.message || "Erreur lors de la sauvegarde.";
+        throw new Error(`${apiError} (route=/api/degustations, phase=${form.phase}, auth=${hasAuthorization ? "present" : "missing"})`);
       }
 
       dispatch({ type: "TOAST_ADD", payload: { msg: "Dégustation enregistrée avec succès !", color: T.green } });
