@@ -8959,6 +8959,7 @@ const BAIES_DATA_PREFIX = "BAIES_DATA::";
 
 function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => void; defaultPhase?: string }) {
   const T = useTheme();
+  const { user } = useAuth();
   const { state, dispatch, refreshData } = useStore();
 
   const [form, setForm] = useState({
@@ -9019,6 +9020,12 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
     setIsSubmitting(true);
     
     try {
+      const session = await supabase.auth.getSession();
+      const runtimeToken = session.data.session?.access_token ?? user?.accessToken;
+      const authUser = runtimeToken ? { ...user, accessToken: runtimeToken } : user;
+      const headers = buildApiHeaders(authUser);
+      const hasAuthorization = Boolean((headers as Record<string, string>).Authorization);
+
       const baiesData = form.phase === "BAIES" ? {
         aptitudeEcrasement: baiesForm.aptitudeEcrasement,
         sucrosite: baiesForm.sucrosite,
@@ -9047,14 +9054,15 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
 
       const res = await fetch('/api/degustations', {
         method: 'POST',
-        headers: buildApiHeaders(undefined),
+        headers,
         body: JSON.stringify(payload)
       });
 
       const data = await res.json();
       
       if (!res.ok) {
-        throw new Error(data.error || "Erreur lors de la sauvegarde.");
+        const apiError = data?.error || data?.message || "Erreur lors de la sauvegarde.";
+        throw new Error(`${apiError} (route=/api/degustations, phase=${form.phase}, auth=${hasAuthorization ? "present" : "missing"})`);
       }
 
       dispatch({ type: "TOAST_ADD", payload: { msg: "Dégustation enregistrée avec succès !", color: T.green } });
@@ -9164,9 +9172,6 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
       <>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
-        <FF label="👁️ Visuel (Optionnel)">
-          <Input value={form.robe} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, robe: e.target.value})} disabled={isSubmitting} placeholder="Ex: Or pâle, reflets verts..." />
-        </FF>
         {form.phase === "DOSAGE" && (
           <FF label="Dosage testé (g/L)">
             <Input type="number" step="0.5" value={form.sucreTest} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, sucreTest: e.target.value})} disabled={isSubmitting} placeholder="Ex: 5.5" />
@@ -9179,11 +9184,15 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
       <div style={{ fontSize: 13, fontWeight: "bold", color: T.accentLight, marginBottom: 12, textTransform: "uppercase" }}>👁️ Visuel</div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
         {VISUEL_TAGS.map((tag: string) => {
-          const isActive = (form.robe || '').toLowerCase().includes(tag.toLowerCase());
+          const currentTags = (form.robe || '').split(',').map((t: string) => t.trim()).filter(Boolean);
+          const isActive = currentTags.includes(tag);
           return (
-            <span key={tag} style={{ padding: "4px 10px", fontSize: 11, borderRadius: 20, border: `1px solid ${isActive ? T.accent : T.border}`, color: isActive ? T.accent : T.textDim }}>
+            <button key={tag} type="button" onClick={() => {
+              const nextTags = isActive ? currentTags.filter((t: string) => t !== tag) : [...currentTags, tag];
+              setForm({ ...form, robe: nextTags.join(', ') });
+            }} disabled={isSubmitting} style={{ padding: "4px 10px", fontSize: 11, borderRadius: 20, cursor: isSubmitting ? "not-allowed" : "pointer", border: `1px solid ${isActive ? T.accent : T.border}`, background: isActive ? `${T.accent}22` : "transparent", color: isActive ? T.accent : T.textDim }}>
               {tag}
-            </span>
+            </button>
           );
         })}
       </div>
@@ -9258,6 +9267,7 @@ function Degustation() {
   const { state } = useStore();
   const [modal, setModal] = useState(false);
   const [activePhase, setActivePhase] = useState("BAIES");
+  const [selectedDegustation, setSelectedDegustation] = useState<any | null>(null);
 
   const degustations = state.degustations || [];
   
@@ -9301,6 +9311,60 @@ function Degustation() {
     return legacyMap[String(v)] || String(v);
   };
 
+  const exportDegustationCsv = (d: any) => {
+    const baies = d.phase === "BAIES" ? parseBaiesData(d.notes) : null;
+    const rows = [
+      ["id", d.id],
+      ["date", new Date(d.date).toISOString().slice(0, 10)],
+      ["phase", d.phase],
+      ["element", getTargetName(d)],
+      ["noteGlobale", d.noteGlobale ?? ""],
+      ["robe", d.robe ?? ""],
+      ["nez", d.nez ?? ""],
+      ["bouche", d.bouche ?? ""],
+      ["sucreTest", d.sucreTest ?? ""],
+      ["notes", (baies?.freeNote || d.notes || "").trim()],
+      ["operator", d.operator ?? ""],
+    ];
+    Object.entries(baies?.data || {}).forEach(([k, v]) => rows.push([`baies_${k}`, String(v ?? "")]));
+    const csv = rows.map(([k, v]) => `"${String(k).replaceAll('"', '""')}","${String(v ?? "").replaceAll('"', '""')}"`).join('\n');
+    const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `degustation-${d.id}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const printDegustationPdf = (d: any) => {
+    const baies = d.phase === "BAIES" ? parseBaiesData(d.notes) : null;
+    const win = window.open('', '_blank');
+    if (!win) return;
+    const details = d.phase === "BAIES"
+      ? Object.entries(baies?.data || {}).map(([k, v]) => `<li><strong>${k}</strong>: ${formatBaiesValue(k, v)}</li>`).join('')
+      : `
+        <li><strong>Visuel</strong>: ${d.robe || '-'}</li>
+        <li><strong>Nez</strong>: ${d.nez || '-'}</li>
+        <li><strong>Bouche</strong>: ${d.bouche || '-'}</li>
+      `;
+    win.document.write(`
+      <html><head><title>Fiche dégustation</title></head><body style="font-family: Arial, sans-serif; padding:24px;">
+      <h2>Fiche dégustation</h2>
+      <p><strong>Élément</strong>: ${getTargetName(d)}</p>
+      <p><strong>Date</strong>: ${new Date(d.date).toLocaleDateString('fr-FR')}</p>
+      <p><strong>Phase</strong>: ${d.phase}</p>
+      <p><strong>Note</strong>: ${d.noteGlobale ?? '-'}/20</p>
+      <ul>${details}</ul>
+      <p><strong>Conclusion</strong>: ${(baies?.freeNote || d.notes || '').trim() || '-'}</p>
+      <p><strong>Opérateur</strong>: ${d.operator || '-'}</p>
+      </body></html>
+    `);
+    win.document.close();
+    win.focus();
+    win.print();
+  };
+
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:28 }}>
@@ -9333,77 +9397,56 @@ function Degustation() {
           Aucune dégustation enregistrée pour cette phase.
         </div>
       ) : (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(350px, 1fr))", gap: 16 }}>
-          {filteredData.map((d: any) => {
-            const targetName = getTargetName(d);
-            return (
-              <div key={d.id} style={{ background: T.surfaceHigh, border: `1px solid ${T.border}`, borderRadius: 8, padding: 20, display: "flex", flexDirection: "column", gap: 16 }}>
-                
-                {/* En-tête Carte */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", borderBottom: `1px dashed ${T.border}`, paddingBottom: 16 }}>
-                  <div>
-                    <div style={{ fontSize: 16, fontWeight: "bold", color: T.accentLight, fontFamily: "monospace" }}>{targetName}</div>
-                    <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>Le {new Date(d.date).toLocaleDateString('fr-FR')}</div>
-                    {d.sucreTest && <Badge label={`Dosage : ${d.sucreTest} g/L`} color="#d98b2b" style={{ marginTop: 8 }} />}
-                  </div>
-                  {d.noteGlobale && (
-                    <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: "50%", width: 44, height: 44, display: "flex", alignItems: "center", justifyContent: "center", fontWeight: "bold", color: parseFloat(d.noteGlobale) >= 14 ? T.green : T.accentLight, fontSize: 16, fontFamily: "monospace" }}>
-                      {d.noteGlobale}
-                    </div>
-                  )}
-                </div>
-
-                {/* Critères Visuels */}
-                {d.robe && (
-                  <div style={{ fontSize: 12 }}>
-                    <span style={{ color: T.textDim, textTransform: "uppercase", letterSpacing: 1, fontSize: 10 }}>👁️ Robe : </span>
-                    <span style={{ color: T.textStrong }}>{d.robe}</span>
-                  </div>
-                )}
-
-                {d.phase === "BAIES" && parseBaiesData(d.notes) ? (
-                  <div style={{ fontSize: 12, color: T.textStrong, lineHeight: 1.6 }}>
-                    {Object.entries(parseBaiesData(d.notes)?.data || {}).map(([k, v]: [string, any]) => (
-                      <div key={k}><span style={{ color: T.textDim }}>{k} :</span> {formatBaiesValue(k, v)}</div>
-                    ))}
-                  </div>
-                ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
-                  <div>
-                    <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>👃 Nez</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {d.nez ? d.nez.split(',').map((tag: any, i: number) => (
-                        <span key={i} style={{ background: T.accent+"15", color: T.accent, border: `1px solid ${T.accent}33`, padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: "bold" }}>{tag.trim()}</span>
-                      )) : <span style={{ color: T.textDim, fontStyle: "italic", fontSize: 11 }}>Non renseigné</span>}
-                    </div>
-                  </div>
-                  <div>
-                    <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1, marginBottom: 8 }}>👄 Bouche</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                      {d.bouche ? d.bouche.split(',').map((tag: any, i: number) => (
-                        <span key={i} style={{ background: "#d98b2b15", color: "#d98b2b", border: "1px solid #d98b2b33", padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: "bold" }}>{tag.trim()}</span>
-                      )) : <span style={{ color: T.textDim, fontStyle: "italic", fontSize: 11 }}>Non renseigné</span>}
-                    </div>
-                  </div>
-                </div>
-                )}
-
-                {/* Conclusion */}
-                {d.notes && (
-                  <div style={{ marginTop: "auto", paddingTop: 16, borderTop: `1px solid ${T.border}`, fontSize: 12, color: T.text, fontStyle: "italic", lineHeight: 1.5 }}>
-                    « {(parseBaiesData(d.notes)?.freeNote || d.notes).trim()} »
-                  </div>
-                )}
-                
-                {/* Opérateur */}
-                <div style={{ fontSize: 10, color: T.textDim, textAlign: "right", marginTop: d.notes ? 0 : "auto" }}>
-                  Saisi par {d.operator}
-                </div>
-                
+        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 120px", gap: 12, padding: "10px 14px", fontSize: 11, textTransform: "uppercase", fontWeight: "bold", color: T.textDim, borderBottom: `1px solid ${T.border}` }}>
+            <div>Élément</div><div>Date</div><div>Phase</div><div style={{ textAlign: "right" }}>Note</div>
+          </div>
+          {filteredData.map((d: any, i: number) => (
+            <button key={d.id} type="button" onClick={() => setSelectedDegustation(d)} style={{ width: "100%", textAlign: "left", border: "none", background: i % 2 === 0 ? "transparent" : `${T.surfaceHigh}`, borderBottom: i < filteredData.length - 1 ? `1px solid ${T.border}` : "none", padding: "12px 14px", cursor: "pointer" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 120px", gap: 12, alignItems: "center" }}>
+                <div style={{ color: T.textStrong, fontWeight: "bold" }}>{getTargetName(d)}</div>
+                <div style={{ color: T.textDim, fontSize: 12 }}>{new Date(d.date).toLocaleDateString('fr-FR')}</div>
+                <div><Badge label={d.phase} color={T.accent} /></div>
+                <div style={{ textAlign: "right", color: T.textStrong, fontFamily: "monospace", fontWeight: "bold" }}>{d.noteGlobale ? `${d.noteGlobale}/20` : "-"}</div>
               </div>
-            );
-          })}
+            </button>
+          ))}
         </div>
+      )}
+
+      {selectedDegustation && (
+        <Modal title="Fiche dégustation" onClose={() => setSelectedDegustation(null)}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10, marginBottom: 14 }}>
+            <div>
+              <div style={{ fontWeight: "bold", color: T.textStrong }}>{getTargetName(selectedDegustation)}</div>
+              <div style={{ fontSize: 12, color: T.textDim }}>
+                {new Date(selectedDegustation.date).toLocaleDateString('fr-FR')} • {selectedDegustation.phase}
+              </div>
+            </div>
+            <div style={{ fontSize: 18, fontWeight: "bold", color: T.accentLight }}>{selectedDegustation.noteGlobale ?? "-"} /20</div>
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginBottom: 12 }}>
+            <Btn variant="secondary" onClick={() => exportDegustationCsv(selectedDegustation)}>Exporter CSV</Btn>
+            <Btn variant="secondary" onClick={() => printDegustationPdf(selectedDegustation)}>Exporter / Imprimer PDF</Btn>
+          </div>
+          {selectedDegustation.phase === "BAIES" && parseBaiesData(selectedDegustation.notes) ? (
+            <div style={{ fontSize: 12, color: T.textStrong, lineHeight: 1.7, marginBottom: 14 }}>
+              {Object.entries(parseBaiesData(selectedDegustation.notes)?.data || {}).map(([k, v]: [string, any]) => (
+                <div key={k}><span style={{ color: T.textDim }}>{k} :</span> {formatBaiesValue(k, v)}</div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14, fontSize: 12 }}>
+              <div><strong>Visuel :</strong> {selectedDegustation.robe || "-"}</div>
+              <div><strong>Dosage :</strong> {selectedDegustation.sucreTest ? `${selectedDegustation.sucreTest} g/L` : "-"}</div>
+              <div><strong>Nez :</strong> {selectedDegustation.nez || "-"}</div>
+              <div><strong>Bouche :</strong> {selectedDegustation.bouche || "-"}</div>
+            </div>
+          )}
+          <div style={{ fontSize: 12, color: T.text }}>
+            <strong>Conclusion :</strong> {(parseBaiesData(selectedDegustation.notes)?.freeNote || selectedDegustation.notes || "").trim() || "-"}
+          </div>
+        </Modal>
       )}
 
       {modal && <DegustationModal onClose={() => setModal(false)} defaultPhase={activePhase} />}
