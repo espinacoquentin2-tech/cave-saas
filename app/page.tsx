@@ -8982,7 +8982,6 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
     natureCitronnee: "",
     aromePellicule: "",
     astringencePellicule: "",
-    dateVendange: "",
     vendange: "",
   });
 
@@ -9029,7 +9028,6 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
         natureCitronnee: baiesForm.natureCitronnee,
         aromePellicule: baiesForm.aromePellicule,
         astringencePellicule: baiesForm.astringencePellicule,
-        dateVendange: baiesForm.dateVendange,
         vendange: baiesForm.vendange,
       } : null;
 
@@ -9114,7 +9112,7 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
             </FF>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 16, marginBottom: 20 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16, marginBottom: 20 }}>
             {[
               ["Sucrosité", "sucrosite"],
               ["Acidité", "acidite"],
@@ -9123,7 +9121,7 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
               ["Arôme pellicule", "aromePellicule"],
               ["Astringence pellicule", "astringencePellicule"],
             ].map(([label, key]) => (
-              <FF key={key} label={`${label} (0-10)`}>
+              <FF key={key} label={label}>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(11, minmax(0, 1fr))", gap: 4 }}>
                   {Array.from({ length: 11 }, (_, i) => {
                     const active = String((baiesForm as any)[key]) === String(i);
@@ -9154,9 +9152,6 @@ function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => 
           </div>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 20 }}>
-            <FF label="Date de vendange">
-              <Input type="date" value={baiesForm.dateVendange} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setBaiesForm({ ...baiesForm, dateVendange: e.target.value })} disabled={isSubmitting} />
-            </FF>
             <FF label="Vendange">
               <Select value={baiesForm.vendange} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setBaiesForm({ ...baiesForm, vendange: e.target.value })} disabled={isSubmitting}>
                 <option value="">-- Choisir --</option>
