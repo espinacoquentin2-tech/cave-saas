@@ -125,6 +125,7 @@ export class TransferRepository {
       currentVolume: Prisma.Decimal;
       currentContainerId: number;
       status: string;
+      qualiteLot?: string | null;
       notes: string;
     },
   ) {

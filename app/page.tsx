@@ -2353,6 +2353,8 @@ function TransferModal({ container, onClose }: TransferModalProps) {
   const [ph, setPh] = useState("");
   const [at, setAt] = useState("");
   const [tavp, setTavp] = useState("");
+  const [qualiteLot, setQualiteLot] = useState("");
+  const [labNotes, setLabNotes] = useState("");
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
@@ -2447,6 +2449,8 @@ function TransferModal({ container, onClose }: TransferModalProps) {
           ph: ph ? parseFloat(ph) : null,
           at: at ? parseFloat(at) : null,
           tavp: tavp ? parseFloat(tavp) : null,
+          qualiteLot: qualiteLot.trim() || null,
+          notes: labNotes.trim() || null,
           idempotencyKey
         }) 
       });
@@ -2571,9 +2575,11 @@ function TransferModal({ container, onClose }: TransferModalProps) {
         <div style={{ marginTop: 16, borderTop: `1px solid ${T.border}`, paddingTop: 16 }}>
           <div style={{ fontSize: 11, color: T.accent, textTransform: "uppercase", letterSpacing: 1, marginBottom: 12 }}>🔬 Résultats Labo (Moût clair)</div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12, background: T.surfaceHigh, padding: "12px", borderRadius: 4 }}>
+	            <FF label="TAVP"><Input type="number" step="0.1" value={tavp} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTavp(e.target.value)} disabled={isSubmitting} /></FF>
 	            <FF label="pH"><Input type="number" step="0.01" value={ph} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPh(e.target.value)} disabled={isSubmitting} /></FF>
 	            <FF label="AT"><Input type="number" step="0.1" value={at} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAt(e.target.value)} disabled={isSubmitting} /></FF>
-	            <FF label="TAVP"><Input type="number" step="0.1" value={tavp} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTavp(e.target.value)} disabled={isSubmitting} /></FF>
+	            <FF label="Qualité du lot"><Input value={qualiteLot} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQualiteLot(e.target.value)} disabled={isSubmitting} placeholder="Ex: A, B, A+, 1, FA..." /></FF>
+	            <FF label="Notes"><Input value={labNotes} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLabNotes(e.target.value)} disabled={isSubmitting} placeholder="Commentaire libre" /></FF>
           </div>
         </div>
       )}
@@ -2773,7 +2779,10 @@ function ContainerTile({ c, onClick }: ContainerTileProps) {
         </div>
       </div>
       {lot ? (
-        <div style={{ fontSize:11, color:T.accentLight, fontFamily:"monospace", marginBottom:10, fontWeight: "bold" }}>{lot.businessCode || lot.code} {enfants.length > 0 && "+ autres"}</div>
+        <div style={{ marginBottom:10 }}>
+          <div style={{ fontSize:11, color:T.accentLight, fontFamily:"monospace", fontWeight: "bold" }}>{lot.businessCode || lot.code} {enfants.length > 0 && "+ autres"}</div>
+          {lot.qualiteLot && <div style={{ fontSize:10, color:T.textDim, marginTop:3 }}>Qualité: {lot.qualiteLot}</div>}
+        </div>
       ) : (
         <div style={{ fontSize:11, color:T.textDim, marginBottom:10, fontStyle:"italic" }}>Vide</div>
       )}
@@ -3343,6 +3352,7 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
   const [search, setSearch] = useState(""); 
   
   const [filterZones, setFilterZones] = useState<string[]>([]); 
+  const [filterQualites, setFilterQualites] = useState<string[]>([]);
   const [modal, setModal] = useState(false);
   
   const GROUPS = {
@@ -3352,6 +3362,7 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
   };
 
   const uniqueZones = [...new Set((state.containers || []).map((c: any) => c.zone).filter(Boolean))].sort();
+  const uniqueQualites = [...new Set((state.lots || []).map((l: any) => (l.qualiteLot || "").trim()).filter(Boolean))].sort();
 
   const handleMainFilter = (f: string) => {
     setMainFilter(f);
@@ -3373,6 +3384,10 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
 
     const matchSearch = !search || (c.displayName || c.name).toLowerCase().includes(search.toLowerCase());
     const matchZone = filterZones.length === 0 || filterZones.includes(c.zone);
+    const lotInContainer = (state.lots || []).find((l: any) =>
+      String(l.id) === String(c.lotId) || String(l.currentContainerId || l.containerId) === String(c.id),
+    );
+    const matchQualite = filterQualites.length === 0 || (lotInContainer?.qualiteLot && filterQualites.includes(lotInContainer.qualiteLot));
     
     let matchFilter = false;
 
@@ -3402,11 +3417,19 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
       matchFilter = c.type === "AUTRE" || (!GROUPS.CUVES.includes(c.type) && !GROUPS.BOIS.includes(c.type) && c.type !== "CITERNE" && !isSousProduit);
     }
     
-    return matchFilter && matchSearch && matchZone;
+    return matchFilter && matchSearch && matchZone && matchQualite;
   });
 
   const cuvesActives = filtered.filter((c: any) => (parseFloat(c.currentVolume || 0)) > 0);
   const cuvesVides = filtered.filter((c: any) => (parseFloat(c.currentVolume || 0)) <= 0);
+  const volumesByQualite = cuvesActives.reduce((acc: Record<string, number>, c: any) => {
+    const lotInContainer = (state.lots || []).find((l: any) =>
+      String(l.id) === String(c.lotId) || String(l.currentContainerId || l.containerId) === String(c.id),
+    );
+    const key = lotInContainer?.qualiteLot?.trim() || "Non renseignée";
+    acc[key] = (acc[key] || 0) + (parseFloat(c.currentVolume || 0) || 0);
+    return acc;
+  }, {});
 
   return (
     <div>
@@ -3421,6 +3444,9 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
         {uniqueZones.length > 0 && (
           <MultiSelectDrop label="Toutes les zones" options={uniqueZones} selected={filterZones} onChange={setFilterZones} width={160} />
         )}
+        {uniqueQualites.length > 0 && (
+          <MultiSelectDrop label="Toutes les qualités" options={uniqueQualites} selected={filterQualites} onChange={setFilterQualites} width={180} />
+        )}
 
         {["TOUS", "CUVES", "BOIS", "CITERNE", "RÉSERVES", "SOUS-PRODUITS", "AUTRE"].map(t => (
           <button key={t} onClick={() => handleMainFilter(t)} style={{ background: mainFilter===t ? T.accent+"22" : "none", border:`1px solid ${mainFilter===t ? T.accent : T.border}`, color: mainFilter===t ? T.accent : T.textDim, padding:"7px 16px", borderRadius:4, cursor:"pointer", fontSize:11, fontFamily:"monospace", fontWeight: t === "RÉSERVES" ? "bold" : "normal", transition:"all 0.2s" }}>
@@ -3428,10 +3454,18 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
           </button>
         ))}
         
-        {(search || filterZones.length > 0) && (
-          <Btn variant="ghost" onClick={() => { setSearch(""); setFilterZones([]); }}>Effacer filtres</Btn>
+        {(search || filterZones.length > 0 || filterQualites.length > 0) && (
+          <Btn variant="ghost" onClick={() => { setSearch(""); setFilterZones([]); setFilterQualites([]); }}>Effacer filtres</Btn>
         )}
       </div>
+      {Object.keys(volumesByQualite).length > 0 && (
+        <div style={{ display:"flex", flexWrap:"wrap", gap:8, marginBottom:20, background:T.surfaceHigh, padding:10, borderRadius:6, border:`1px solid ${T.border}` }}>
+          <span style={{ fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>Volumes par qualité :</span>
+          {Object.entries(volumesByQualite).sort((a, b) => a[0].localeCompare(b[0])).map(([qualite, volume]) => (
+            <Badge key={qualite} label={`${qualite}: ${Number((volume as number).toFixed(2))} hL`} color={T.accentLight} />
+          ))}
+        </div>
+      )}
 
       {(mainFilter === "CUVES" || mainFilter === "BOIS" || mainFilter === "SOUS-PRODUITS") && (
         <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap", background:T.surfaceHigh, padding:10, borderRadius:6, border:`1px solid ${T.border}` }}>
@@ -5538,6 +5572,7 @@ const submitTirage = async () => {
               <Badge label={formatStatus(lot.status)} color={isDeadBulk ? T.textDim : statusC} />
               <Badge label={`Millésime ${lot.year || lot.millesime}`} color={T.textDim} />
               <Badge label={compoBadge} color={isDeadBulk ? T.textDim : T.accent} />
+              {lot.qualiteLot && <Badge label={`Qualité ${lot.qualiteLot}`} color={isDeadBulk ? T.textDim : T.accentLight} />}
             </div>
           </div>
           <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
@@ -9472,7 +9507,7 @@ export default function App() {
       });
       fetchSafe(`/api/lots?t=${t}`).then((d: any) => {
         if (!Array.isArray(d)) return;
-        dispatch({type:"SET_LOTS", payload: safeMap(d, (l: any)=>({id:l.id.toString(),code:l.businessCode,millesime:l.year,cepage:l.mainGrapeCode,lieu:l.placeCode||"",volume:l.currentVolume,containerId:l.currentContainerId?.toString(),status:l.status,composition:[{cepage:l.mainGrapeCode,pct:100}],parentIds:[],childIds:[],notes:l.notes||""}))});
+        dispatch({type:"SET_LOTS", payload: safeMap(d, (l: any)=>({id:l.id.toString(),code:l.businessCode,millesime:l.year,cepage:l.mainGrapeCode,lieu:l.placeCode||"",volume:l.currentVolume,containerId:l.currentContainerId?.toString(),status:l.status,composition:[{cepage:l.mainGrapeCode,pct:100}],parentIds:[],childIds:[],qualiteLot:l.qualiteLot||"",notes:l.notes||""}))});
       });
       fetchSafe(`/api/bottles?t=${t}`).then((d: any) => {
         if (!Array.isArray(d)) return;
