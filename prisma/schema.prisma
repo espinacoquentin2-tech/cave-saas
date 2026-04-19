@@ -94,6 +94,7 @@ model Lot {
   currentContainerId Int?      @map("current_container_id")
   createdAt          DateTime  @default(now()) @map("created_at")  
 // LA NOUVELLE COLONNE INDISPENSABLE 👇
+  qualiteLot         String?   @map("qualite_lot")
   notes              String?
 
   currentContainer  Container?     @relation(fields: [currentContainerId], references: [id])
@@ -102,6 +103,7 @@ model Lot {
   lotEventLots      LotEventLot[]
   bottleLots        BottleLot[]
   faReadings        FaReading[]
+  @@index([qualiteLot])
   @@map("lots")
 }
 
