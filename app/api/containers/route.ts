@@ -85,11 +85,13 @@ export async function POST(request: Request) {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
     const payload = createContainerSchema.parse(await request.json());
+    const normalizedName = payload.name?.trim() || payload.displayName?.trim() || 'Nouvelle Cuve';
+    const normalizedCode = payload.code?.trim() || `${normalizedName.toUpperCase().replace(/\s+/g, '-')}-${Date.now()}`;
 
     const container = await prisma.container.create({
       data: {
-        code: payload.code ?? payload.name ?? payload.displayName ?? 'CUVE-X',
-        displayName: payload.displayName ?? payload.name ?? 'Nouvelle Cuve',
+        code: normalizedCode,
+        displayName: normalizedName,
         type: payload.type ?? 'Cuve',
         capacityValue: payload.capacityValue ?? payload.capacity ?? 0,
         capacityUnit: 'hL',
@@ -131,6 +133,18 @@ export async function POST(request: Request) {
     if (error instanceof ZodError) {
       logger.warn({ action: 'containers.post.validation_failed', requestId, details: { issues: error.flatten() } });
       return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });
+    }
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      logger.warn({
+        action: 'containers.post.duplicate_conflict',
+        requestId,
+        details: { message: error.message },
+      });
+      return NextResponse.json(
+        { error: 'BUSINESS_RULE_VIOLATION', message: 'Un contenant avec ce code existe déjà.' },
+        { status: 409, headers: { 'x-request-id': requestId } },
+      );
     }
 
     logger.error({ action: 'containers.post.unhandled_error', requestId, details: { error: error instanceof Error ? error.message : 'unknown_error' } });
@@ -261,4 +275,3 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
   }
 }
-
