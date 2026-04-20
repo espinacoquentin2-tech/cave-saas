@@ -9505,7 +9505,7 @@ function Degustation() {
             </button>
           </div>
           {selectedDegustation.phase === "BAIES" && parseBaiesData(selectedDegustation.notes) ? (
-            <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 14, alignItems: "start", marginBottom: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "0.95fr 1.05fr", gap: 14, alignItems: "start", marginBottom: 14 }}>
               <div style={{ fontSize: 12, color: T.textStrong, lineHeight: 1.7 }}>
                 {(() => {
                   const baiesData = parseBaiesData(selectedDegustation.notes)?.data || {};
@@ -9516,7 +9516,7 @@ function Degustation() {
                   ));
                 })()}
               </div>
-              <div style={{ border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, background: T.surfaceHigh }}>
+              <div style={{ border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, background: T.surfaceHigh, minWidth: 370 }}>
                 <div style={{ fontSize: 11, color: T.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Radar BAIES</div>
                 <svg viewBox="0 0 220 220" width="100%" height="200" role="img" aria-label="Graphique radar BAIES">
                   {[0.2, 0.4, 0.6, 0.8, 1].map((scale, i) => {
