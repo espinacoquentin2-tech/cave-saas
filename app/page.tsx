@@ -8956,6 +8956,17 @@ const BAIES_ECRASEMENT = ["Faible", "Moyenne", "Bonne", "Très bonne"];
 const BAIES_NATURE_CITRONNEE = ["Absente", "Légère", "Marquée"];
 const BAIES_VENDANGE = ["Plus d’une semaine", "Dans quelques jours", "Prêt à vendanger"];
 const BAIES_DATA_PREFIX = "BAIES_DATA::";
+const BAIES_LABELS: Record<string, string> = {
+  aptitudeEcrasement: "Aptitude écrasement",
+  sucrosite: "Sucrosité",
+  acidite: "Acidité",
+  vegetal: "Végétal",
+  fruite: "Fruité",
+  natureCitronnee: "Nature citronnée",
+  aromePellicule: "Arôme pellicule",
+  astringencePellicule: "Astringence pellicule",
+  vendange: "Vendange",
+};
 
 function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => void; defaultPhase?: string }) {
   const T = useTheme();
@@ -9311,6 +9322,30 @@ function Degustation() {
     return legacyMap[String(v)] || String(v);
   };
 
+  const getBaiesLabel = (key: string) => BAIES_LABELS[key] || key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
+
+  const getConclusion = (d: any) => {
+    if (d.phase === "BAIES") {
+      const parsed = parseBaiesData(d.notes);
+      return (parsed?.freeNote || '').trim() || '-';
+    }
+    return String(d.notes || '').trim() || '-';
+  };
+
+  const getBaiesRadarPoints = (data: Record<string, any>) => {
+    const keys = ["sucrosite", "acidite", "vegetal", "fruite", "aromePellicule", "astringencePellicule"];
+    const cx = 110;
+    const cy = 110;
+    const radius = 76;
+    return keys.map((key, index) => {
+      const raw = Number(data?.[key]);
+      const normalized = Number.isFinite(raw) ? Math.max(0, Math.min(raw, 10)) / 10 : 0;
+      const angle = (Math.PI * 2 * index) / keys.length - Math.PI / 2;
+      const r = radius * normalized;
+      return `${cx + r * Math.cos(angle)},${cy + r * Math.sin(angle)}`;
+    }).join(' ');
+  };
+
   const exportDegustationCsv = (d: any) => {
     const baies = d.phase === "BAIES" ? parseBaiesData(d.notes) : null;
     const rows = [
@@ -9323,7 +9358,7 @@ function Degustation() {
       ["nez", d.nez ?? ""],
       ["bouche", d.bouche ?? ""],
       ["sucreTest", d.sucreTest ?? ""],
-      ["notes", (baies?.freeNote || d.notes || "").trim()],
+      ["notes", getConclusion(d)],
       ["operator", d.operator ?? ""],
     ];
     Object.entries(baies?.data || {}).forEach(([k, v]) => rows.push([`baies_${k}`, String(v ?? "")]));
@@ -9342,7 +9377,7 @@ function Degustation() {
     const win = window.open('', '_blank');
     if (!win) return;
     const details = d.phase === "BAIES"
-      ? Object.entries(baies?.data || {}).map(([k, v]) => `<li><strong>${k}</strong>: ${formatBaiesValue(k, v)}</li>`).join('')
+      ? Object.entries(baies?.data || {}).map(([k, v]) => `<li><strong>${getBaiesLabel(k)}</strong>: ${formatBaiesValue(k, v)}</li>`).join('')
       : `
         <li><strong>Visuel</strong>: ${d.robe || '-'}</li>
         <li><strong>Nez</strong>: ${d.nez || '-'}</li>
@@ -9356,7 +9391,7 @@ function Degustation() {
       <p><strong>Phase</strong>: ${d.phase}</p>
       <p><strong>Note</strong>: ${d.noteGlobale ?? '-'}/20</p>
       <ul>${details}</ul>
-      <p><strong>Conclusion</strong>: ${(baies?.freeNote || d.notes || '').trim() || '-'}</p>
+      <p><strong>Conclusion</strong>: ${getConclusion(d)}</p>
       <p><strong>Opérateur</strong>: ${d.operator || '-'}</p>
       </body></html>
     `);
@@ -9425,15 +9460,68 @@ function Degustation() {
             </div>
             <div style={{ fontSize: 18, fontWeight: "bold", color: T.accentLight }}>{selectedDegustation.noteGlobale ?? "-"} /20</div>
           </div>
-          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginBottom: 12 }}>
-            <Btn variant="secondary" onClick={() => exportDegustationCsv(selectedDegustation)}>Exporter CSV</Btn>
-            <Btn variant="secondary" onClick={() => printDegustationPdf(selectedDegustation)}>Exporter / Imprimer PDF</Btn>
+          <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginBottom: 14, flexWrap: "wrap" }}>
+            <button
+              type="button"
+              onClick={() => exportDegustationCsv(selectedDegustation)}
+              style={{
+                border: `1px solid ${T.accent}55`,
+                background: T.surfaceHigh,
+                color: T.accentLight,
+                borderRadius: 6,
+                padding: "10px 18px",
+                fontSize: 11,
+                letterSpacing: 2,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                cursor: "pointer",
+              }}
+            >
+              🗃️&nbsp; Exporter CSV
+            </button>
+            <button
+              type="button"
+              onClick={() => printDegustationPdf(selectedDegustation)}
+              style={{
+                border: `1px solid ${T.accent}55`,
+                background: T.surfaceHigh,
+                color: T.accentLight,
+                borderRadius: 6,
+                padding: "10px 18px",
+                fontSize: 11,
+                letterSpacing: 2,
+                fontWeight: 700,
+                textTransform: "uppercase",
+                cursor: "pointer",
+              }}
+            >
+              📄&nbsp; Imprimer PDF
+            </button>
           </div>
           {selectedDegustation.phase === "BAIES" && parseBaiesData(selectedDegustation.notes) ? (
-            <div style={{ fontSize: 12, color: T.textStrong, lineHeight: 1.7, marginBottom: 14 }}>
-              {Object.entries(parseBaiesData(selectedDegustation.notes)?.data || {}).map(([k, v]: [string, any]) => (
-                <div key={k}><span style={{ color: T.textDim }}>{k} :</span> {formatBaiesValue(k, v)}</div>
-              ))}
+            <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 14, alignItems: "start", marginBottom: 14 }}>
+              <div style={{ fontSize: 12, color: T.textStrong, lineHeight: 1.7 }}>
+                {Object.entries(parseBaiesData(selectedDegustation.notes)?.data || {}).map(([k, v]: [string, any]) => (
+                  <div key={k}><span style={{ color: T.textDim }}>{getBaiesLabel(k)} :</span> {formatBaiesValue(k, v)}</div>
+                ))}
+              </div>
+              <div style={{ border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, background: T.surfaceHigh }}>
+                <div style={{ fontSize: 11, color: T.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Radar BAIES</div>
+                <svg viewBox="0 0 220 220" width="100%" height="180" role="img" aria-label="Graphique radar BAIES">
+                  {[0.25, 0.5, 0.75, 1].map((scale) => {
+                    const keys = ["sucrosite", "acidite", "vegetal", "fruite", "aromePellicule", "astringencePellicule"];
+                    const cx = 110;
+                    const cy = 110;
+                    const radius = 76 * scale;
+                    const points = keys.map((_, index) => {
+                      const angle = (Math.PI * 2 * index) / keys.length - Math.PI / 2;
+                      return `${cx + radius * Math.cos(angle)},${cy + radius * Math.sin(angle)}`;
+                    }).join(' ');
+                    return <polygon key={scale} points={points} fill="none" stroke={T.border} strokeWidth="1" />;
+                  })}
+                  <polygon points={getBaiesRadarPoints(parseBaiesData(selectedDegustation.notes)?.data || {})} fill={`${T.accent}55`} stroke={T.accentLight} strokeWidth="2" />
+                </svg>
+              </div>
             </div>
           ) : (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14, fontSize: 12 }}>
@@ -9444,7 +9532,7 @@ function Degustation() {
             </div>
           )}
           <div style={{ fontSize: 12, color: T.text }}>
-            <strong>Conclusion :</strong> {(parseBaiesData(selectedDegustation.notes)?.freeNote || selectedDegustation.notes || "").trim() || "-"}
+            <strong>Conclusion :</strong> {getConclusion(selectedDegustation)}
           </div>
         </Modal>
       )}
