@@ -9521,40 +9521,42 @@ function Degustation() {
                   ));
                 })()}
               </div>
-              <div style={{ border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, background: T.surfaceHigh, maxWidth: 420 }}>
+              <div style={{ border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, background: T.surfaceHigh, width: "100%" }}>
                 <div style={{ fontSize: 11, color: T.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Radar BAIES</div>
-                <svg viewBox="0 0 220 220" width="100%" height="200" role="img" aria-label="Graphique radar BAIES">
-                  {[0.2, 0.4, 0.6, 0.8, 1].map((scale, i) => {
-                    const cx = 110;
-                    const cy = 110;
-                    const radius = 82 * scale;
-                    const points = BAIES_RADAR_AXES.map((_, index) => {
-                      const angle = (Math.PI * 2 * index) / BAIES_RADAR_AXES.length - Math.PI / 2;
-                      return `${cx + radius * Math.cos(angle)},${cy + radius * Math.sin(angle)}`;
-                    }).join(' ');
-                    return <polygon key={scale} points={points} fill="none" stroke={i === 4 ? `${T.border}CC` : `${T.border}88`} strokeWidth={i === 4 ? "1.2" : "1"} />;
-                  })}
-                  {[2, 4, 6, 8, 10].map((value) => (
-                    <text key={value} x={113} y={110 - (82 * value / 10)} fontSize="8" fill={T.textDim} textAnchor="start" dominantBaseline="central">
-                      {value}
-                    </text>
-                  ))}
-                  {BAIES_RADAR_AXES.map((key, index) => {
-                    const cx = 110;
-                    const cy = 110;
-                    const radius = 100;
-                    const angle = (Math.PI * 2 * index) / BAIES_RADAR_AXES.length - Math.PI / 2;
-                    const x = cx + radius * Math.cos(angle);
-                    const y = cy + radius * Math.sin(angle);
-                    const anchor = Math.cos(angle) > 0.3 ? "start" : Math.cos(angle) < -0.3 ? "end" : "middle";
-                    return (
-                      <text key={key} x={x} y={y} fontSize="9" fill={T.textDim} textAnchor={anchor} dominantBaseline="central">
-                        {getBaiesRadarLabel(key)}
+                <div style={{ maxWidth: 420, margin: "0 auto" }}>
+                  <svg viewBox="0 0 220 220" width="100%" height="200" role="img" aria-label="Graphique radar BAIES">
+                    {[0.2, 0.4, 0.6, 0.8, 1].map((scale, i) => {
+                      const cx = 110;
+                      const cy = 110;
+                      const radius = 82 * scale;
+                      const points = BAIES_RADAR_AXES.map((_, index) => {
+                        const angle = (Math.PI * 2 * index) / BAIES_RADAR_AXES.length - Math.PI / 2;
+                        return `${cx + radius * Math.cos(angle)},${cy + radius * Math.sin(angle)}`;
+                      }).join(' ');
+                      return <polygon key={scale} points={points} fill="none" stroke={i === 4 ? `${T.border}CC` : `${T.border}88`} strokeWidth={i === 4 ? "1.2" : "1"} />;
+                    })}
+                    {[2, 4, 6, 8, 10].map((value) => (
+                      <text key={value} x={113} y={110 - (82 * value / 10)} fontSize="8" fill={T.textDim} textAnchor="start" dominantBaseline="central">
+                        {value}
                       </text>
-                    );
-                  })}
-                  <polygon points={getBaiesRadarPoints(parseBaiesData(selectedDegustation.notes)?.data || {})} fill={`${T.accent}55`} stroke={T.accentLight} strokeWidth="2" />
-                </svg>
+                    ))}
+                    {BAIES_RADAR_AXES.map((key, index) => {
+                      const cx = 110;
+                      const cy = 110;
+                      const radius = 100;
+                      const angle = (Math.PI * 2 * index) / BAIES_RADAR_AXES.length - Math.PI / 2;
+                      const x = cx + radius * Math.cos(angle);
+                      const y = cy + radius * Math.sin(angle);
+                      const anchor = Math.cos(angle) > 0.3 ? "start" : Math.cos(angle) < -0.3 ? "end" : "middle";
+                      return (
+                        <text key={key} x={x} y={y} fontSize="9" fill={T.textDim} textAnchor={anchor} dominantBaseline="central">
+                          {getBaiesRadarLabel(key)}
+                        </text>
+                      );
+                    })}
+                    <polygon points={getBaiesRadarPoints(parseBaiesData(selectedDegustation.notes)?.data || {})} fill={`${T.accent}55`} stroke={T.accentLight} strokeWidth="2" />
+                  </svg>
+                </div>
               </div>
             </div>
           ) : (
