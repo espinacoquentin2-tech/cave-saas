@@ -8967,6 +8967,7 @@ const BAIES_LABELS: Record<string, string> = {
   astringencePellicule: "Astringence pellicule",
   vendange: "Vendange",
 };
+const BAIES_RADAR_AXES = ["sucrosite", "acidite", "vegetal", "fruite", "aromePellicule", "astringencePellicule"];
 
 function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => void; defaultPhase?: string }) {
   const T = useTheme();
@@ -9333,14 +9334,13 @@ function Degustation() {
   };
 
   const getBaiesRadarPoints = (data: Record<string, any>) => {
-    const keys = ["sucrosite", "acidite", "vegetal", "fruite", "aromePellicule", "astringencePellicule"];
     const cx = 110;
     const cy = 110;
     const radius = 76;
-    return keys.map((key, index) => {
+    return BAIES_RADAR_AXES.map((key, index) => {
       const raw = Number(data?.[key]);
       const normalized = Number.isFinite(raw) ? Math.max(0, Math.min(raw, 10)) / 10 : 0;
-      const angle = (Math.PI * 2 * index) / keys.length - Math.PI / 2;
+      const angle = (Math.PI * 2 * index) / BAIES_RADAR_AXES.length - Math.PI / 2;
       const r = radius * normalized;
       return `${cx + r * Math.cos(angle)},${cy + r * Math.sin(angle)}`;
     }).join(' ');
@@ -9477,7 +9477,7 @@ function Degustation() {
                 cursor: "pointer",
               }}
             >
-              🗃️&nbsp; Exporter CSV
+              📥&nbsp; Exporter CSV
             </button>
             <button
               type="button"
@@ -9495,7 +9495,7 @@ function Degustation() {
                 cursor: "pointer",
               }}
             >
-              📄&nbsp; Imprimer PDF
+              🖨️&nbsp; Imprimer PDF
             </button>
           </div>
           {selectedDegustation.phase === "BAIES" && parseBaiesData(selectedDegustation.notes) ? (
@@ -9509,15 +9509,28 @@ function Degustation() {
                 <div style={{ fontSize: 11, color: T.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Radar BAIES</div>
                 <svg viewBox="0 0 220 220" width="100%" height="180" role="img" aria-label="Graphique radar BAIES">
                   {[0.25, 0.5, 0.75, 1].map((scale) => {
-                    const keys = ["sucrosite", "acidite", "vegetal", "fruite", "aromePellicule", "astringencePellicule"];
                     const cx = 110;
                     const cy = 110;
                     const radius = 76 * scale;
-                    const points = keys.map((_, index) => {
-                      const angle = (Math.PI * 2 * index) / keys.length - Math.PI / 2;
+                    const points = BAIES_RADAR_AXES.map((_, index) => {
+                      const angle = (Math.PI * 2 * index) / BAIES_RADAR_AXES.length - Math.PI / 2;
                       return `${cx + radius * Math.cos(angle)},${cy + radius * Math.sin(angle)}`;
                     }).join(' ');
                     return <polygon key={scale} points={points} fill="none" stroke={T.border} strokeWidth="1" />;
+                  })}
+                  {BAIES_RADAR_AXES.map((key, index) => {
+                    const cx = 110;
+                    const cy = 110;
+                    const radius = 92;
+                    const angle = (Math.PI * 2 * index) / BAIES_RADAR_AXES.length - Math.PI / 2;
+                    const x = cx + radius * Math.cos(angle);
+                    const y = cy + radius * Math.sin(angle);
+                    const anchor = Math.cos(angle) > 0.3 ? "start" : Math.cos(angle) < -0.3 ? "end" : "middle";
+                    return (
+                      <text key={key} x={x} y={y} fontSize="9" fill={T.textDim} textAnchor={anchor} dominantBaseline="central">
+                        {getBaiesLabel(key)}
+                      </text>
+                    );
                   })}
                   <polygon points={getBaiesRadarPoints(parseBaiesData(selectedDegustation.notes)?.data || {})} fill={`${T.accent}55`} stroke={T.accentLight} strokeWidth="2" />
                 </svg>
