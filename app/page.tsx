@@ -8968,6 +8968,7 @@ const BAIES_LABELS: Record<string, string> = {
   vendange: "Vendange",
 };
 const BAIES_RADAR_AXES = ["sucrosite", "acidite", "vegetal", "fruite", "aromePellicule", "astringencePellicule"];
+const BAIES_TEXT_ORDER = ["aptitudeEcrasement", "natureCitronnee", ...BAIES_RADAR_AXES, "vendange"];
 
 function DegustationModal({ onClose, defaultPhase = "BAIES" }: { onClose: () => void; defaultPhase?: string }) {
   const T = useTheme();
@@ -9324,6 +9325,11 @@ function Degustation() {
   };
 
   const getBaiesLabel = (key: string) => BAIES_LABELS[key] || key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase());
+  const getBaiesRadarLabel = (key: string) => {
+    if (key === "aromePellicule") return "Arômes pel.";
+    if (key === "astringencePellicule") return "Astringence pel.";
+    return getBaiesLabel(key);
+  };
 
   const getConclusion = (d: any) => {
     if (d.phase === "BAIES") {
@@ -9336,7 +9342,7 @@ function Degustation() {
   const getBaiesRadarPoints = (data: Record<string, any>) => {
     const cx = 110;
     const cy = 110;
-    const radius = 76;
+    const radius = 82;
     return BAIES_RADAR_AXES.map((key, index) => {
       const raw = Number(data?.[key]);
       const normalized = Number.isFinite(raw) ? Math.max(0, Math.min(raw, 10)) / 10 : 0;
@@ -9501,34 +9507,44 @@ function Degustation() {
           {selectedDegustation.phase === "BAIES" && parseBaiesData(selectedDegustation.notes) ? (
             <div style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 14, alignItems: "start", marginBottom: 14 }}>
               <div style={{ fontSize: 12, color: T.textStrong, lineHeight: 1.7 }}>
-                {Object.entries(parseBaiesData(selectedDegustation.notes)?.data || {}).map(([k, v]: [string, any]) => (
-                  <div key={k}><span style={{ color: T.textDim }}>{getBaiesLabel(k)} :</span> {formatBaiesValue(k, v)}</div>
-                ))}
+                {(() => {
+                  const baiesData = parseBaiesData(selectedDegustation.notes)?.data || {};
+                  return BAIES_TEXT_ORDER.filter((k) => k in baiesData).map((k) => (
+                    <div key={k}>
+                      <span style={{ color: T.textDim }}>{getBaiesLabel(k)} :</span> {formatBaiesValue(k, baiesData[k])}
+                    </div>
+                  ));
+                })()}
               </div>
               <div style={{ border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, background: T.surfaceHigh }}>
                 <div style={{ fontSize: 11, color: T.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Radar BAIES</div>
-                <svg viewBox="0 0 220 220" width="100%" height="180" role="img" aria-label="Graphique radar BAIES">
-                  {[0.25, 0.5, 0.75, 1].map((scale) => {
+                <svg viewBox="0 0 220 220" width="100%" height="200" role="img" aria-label="Graphique radar BAIES">
+                  {[0.2, 0.4, 0.6, 0.8, 1].map((scale, i) => {
                     const cx = 110;
                     const cy = 110;
-                    const radius = 76 * scale;
+                    const radius = 82 * scale;
                     const points = BAIES_RADAR_AXES.map((_, index) => {
                       const angle = (Math.PI * 2 * index) / BAIES_RADAR_AXES.length - Math.PI / 2;
                       return `${cx + radius * Math.cos(angle)},${cy + radius * Math.sin(angle)}`;
                     }).join(' ');
-                    return <polygon key={scale} points={points} fill="none" stroke={T.border} strokeWidth="1" />;
+                    return <polygon key={scale} points={points} fill="none" stroke={i === 4 ? `${T.border}CC` : `${T.border}88`} strokeWidth={i === 4 ? "1.2" : "1"} />;
                   })}
+                  {[2, 4, 6, 8, 10].map((value) => (
+                    <text key={value} x={113} y={110 - (82 * value / 10)} fontSize="8" fill={T.textDim} textAnchor="start" dominantBaseline="central">
+                      {value}
+                    </text>
+                  ))}
                   {BAIES_RADAR_AXES.map((key, index) => {
                     const cx = 110;
                     const cy = 110;
-                    const radius = 92;
+                    const radius = 100;
                     const angle = (Math.PI * 2 * index) / BAIES_RADAR_AXES.length - Math.PI / 2;
                     const x = cx + radius * Math.cos(angle);
                     const y = cy + radius * Math.sin(angle);
                     const anchor = Math.cos(angle) > 0.3 ? "start" : Math.cos(angle) < -0.3 ? "end" : "middle";
                     return (
                       <text key={key} x={x} y={y} fontSize="9" fill={T.textDim} textAnchor={anchor} dominantBaseline="central">
-                        {getBaiesLabel(key)}
+                        {getBaiesRadarLabel(key)}
                       </text>
                     );
                   })}
