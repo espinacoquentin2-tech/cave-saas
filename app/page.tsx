@@ -9505,18 +9505,23 @@ function Degustation() {
             </button>
           </div>
           {selectedDegustation.phase === "BAIES" && parseBaiesData(selectedDegustation.notes) ? (
-            <div style={{ display: "grid", gridTemplateColumns: "0.95fr 1.05fr", gap: 14, alignItems: "start", marginBottom: 14 }}>
-              <div style={{ fontSize: 12, color: T.textStrong, lineHeight: 1.7 }}>
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ border: `1px solid ${T.border}`, borderRadius: 8, overflow: "hidden", marginBottom: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", background: T.surfaceHigh, borderBottom: `1px solid ${T.border}` }}>
+                  <div style={{ padding: "8px 10px", fontSize: 11, color: T.textDim, textTransform: "uppercase", letterSpacing: 1 }}>Critère</div>
+                  <div style={{ padding: "8px 10px", fontSize: 11, color: T.textDim, textTransform: "uppercase", letterSpacing: 1, borderLeft: `1px solid ${T.border}` }}>Valeur</div>
+                </div>
                 {(() => {
                   const baiesData = parseBaiesData(selectedDegustation.notes)?.data || {};
-                  return BAIES_TEXT_ORDER.filter((k) => k in baiesData).map((k) => (
-                    <div key={k}>
-                      <span style={{ color: T.textDim }}>{getBaiesLabel(k)} :</span> {formatBaiesValue(k, baiesData[k])}
+                  return BAIES_TEXT_ORDER.filter((k) => k in baiesData).map((k, idx) => (
+                    <div key={k} style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr", background: idx % 2 ? T.surfaceHigh : "transparent", borderBottom: idx < BAIES_TEXT_ORDER.filter((x) => x in baiesData).length - 1 ? `1px solid ${T.border}88` : "none" }}>
+                      <div style={{ padding: "8px 10px", fontSize: 12, color: T.textDim }}>{getBaiesLabel(k)}</div>
+                      <div style={{ padding: "8px 10px", fontSize: 12, color: T.textStrong, borderLeft: `1px solid ${T.border}88` }}>{formatBaiesValue(k, baiesData[k])}</div>
                     </div>
                   ));
                 })()}
               </div>
-              <div style={{ border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, background: T.surfaceHigh, minWidth: 370 }}>
+              <div style={{ border: `1px solid ${T.border}`, borderRadius: 8, padding: 10, background: T.surfaceHigh, maxWidth: 420 }}>
                 <div style={{ fontSize: 11, color: T.textDim, marginBottom: 6, textTransform: "uppercase", letterSpacing: 1 }}>Radar BAIES</div>
                 <svg viewBox="0 0 220 220" width="100%" height="200" role="img" aria-label="Graphique radar BAIES">
                   {[0.2, 0.4, 0.6, 0.8, 1].map((scale, i) => {
@@ -9561,7 +9566,7 @@ function Degustation() {
             </div>
           )}
           <div style={{ fontSize: 12, color: T.text }}>
-            <strong>Conclusion :</strong> {getConclusion(selectedDegustation)}
+            <strong>{selectedDegustation.phase === "BAIES" ? "Notes :" : "Conclusion :"}</strong> {getConclusion(selectedDegustation)}
           </div>
         </Modal>
       )}
