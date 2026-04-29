@@ -18,6 +18,9 @@ import {
   convertHlToBottleCount,
   evaluateAssemblageDecision,
   getBottleFormatLabel,
+  isAssemblageMainEligibleLotStatus,
+  isAssemblageReserveEligibleLotStatus,
+  isAssemblageRoseEligibleLotStatus,
   isAssemblageEligibleLotStatus,
 } from "@/lib/assemblage";
 
@@ -5177,14 +5180,54 @@ function Assemblages() {
     }));
   };
 
-  const bulkSources = (state.lots || [])
+  const mainBulkSources = (state.lots || [])
     .filter((lot: any) => {
       const volume = Number(lot.currentVolume ?? lot.volume ?? 0);
-      return volume > 0.001 && isAssemblageEligibleLotStatus(lot.status);
+      return volume > 0.001 && isAssemblageMainEligibleLotStatus(lot.status);
     })
     .map((lot: any) => ({
       ...lot,
       _type: "bulk",
+      sourceRole: "MAIN",
+      sourceCategoryLabel: "Source principale",
+      code: lot.businessCode || lot.code,
+      availableVolumeHl: Number(lot.currentVolume ?? lot.volume ?? 0),
+      currentContainerLabel:
+        lot.currentContainer?.displayName ||
+        (state.containers || []).find((container: any) => String(container.id) === String(lot.currentContainerId || lot.containerId))?.displayName ||
+        "--",
+    }));
+
+  const reserveBulkSources = (state.lots || [])
+    .filter((lot: any) => {
+      const volume = Number(lot.currentVolume ?? lot.volume ?? 0);
+      if (volume <= 0.001) return false;
+      if (!isAssemblageReserveEligibleLotStatus(lot.status)) return false;
+      return lot.status === "RESERVE" || lot.qualiteLot === "RESERVE";
+    })
+    .map((lot: any) => ({
+      ...lot,
+      _type: "bulk",
+      sourceRole: "RESERVE",
+      sourceCategoryLabel: "Réserve",
+      code: lot.businessCode || lot.code,
+      availableVolumeHl: Number(lot.currentVolume ?? lot.volume ?? 0),
+      currentContainerLabel:
+        lot.currentContainer?.displayName ||
+        (state.containers || []).find((container: any) => String(container.id) === String(lot.currentContainerId || lot.containerId))?.displayName ||
+        "--",
+    }));
+
+  const roseBulkSources = (state.lots || [])
+    .filter((lot: any) => {
+      const volume = Number(lot.currentVolume ?? lot.volume ?? 0);
+      return volume > 0.001 && isAssemblageRoseEligibleLotStatus(lot.status);
+    })
+    .map((lot: any) => ({
+      ...lot,
+      _type: "bulk",
+      sourceRole: "ROSE",
+      sourceCategoryLabel: "Source rosé",
       code: lot.businessCode || lot.code,
       availableVolumeHl: Number(lot.currentVolume ?? lot.volume ?? 0),
       currentContainerLabel:
@@ -5203,6 +5246,8 @@ function Assemblages() {
       return {
         ...bottleLot,
         _type: "bottle",
+        sourceRole: "RESERVE",
+        sourceCategoryLabel: "Réserve bouteille",
         code: bottleLot.businessCode || bottleLot.code,
         formatCode,
         formatLabel: getBottleFormatLabel(formatCode),
@@ -5215,7 +5260,13 @@ function Assemblages() {
       };
     });
 
-  const sourceCandidates = [...bulkSources, ...reserveBottleSources].sort((a: any, b: any) => a.code.localeCompare(b.code));
+  const sourceSections = [
+    { key: "main", title: "Sources principales", helper: "VIN_DE_BASE, ASSEMBLAGE, ASSEMBLE", items: mainBulkSources },
+    { key: "reserve", title: "Réserve", helper: "RESERVE vrac et réserves bouteille / magnum", items: [...reserveBulkSources, ...reserveBottleSources].sort((a: any, b: any) => a.code.localeCompare(b.code)) },
+    { key: "rose", title: "Sources rosé", helper: "VIN_ROUGE uniquement", items: roseBulkSources },
+  ] as const;
+
+  const sourceCandidates = sourceSections.flatMap((section) => section.items);
 
   const selectedSources = sourceCandidates
     .map((source: any) => ({ source, draft: readSourceDraft(source) }))
@@ -5249,13 +5300,14 @@ function Assemblages() {
       volumeHl,
       availableVolumeHl,
       isOverAvailable: volumeHl > availableVolumeHl + 0.0001,
+      sourceRole: source.sourceRole,
       composition: components.map((component: any) => ({
         grapeCode: component.grapeCode || component.cepage || source.cepage || "INCONNU",
         percentage: Number(component.percentage || component.pct || 0) || 0,
       })),
       vintage: Number(source.year || source.millesime || source.sourceLot?.year || 0) || null,
-      isReserve: reserveFlag,
-      isRedWine: redFlag,
+      isReserve: source.sourceRole === "RESERVE" || reserveFlag,
+      isRedWine: source.sourceRole === "ROSE" || redFlag,
     };
   });
 
@@ -5267,6 +5319,7 @@ function Assemblages() {
       vintage: row.vintage,
       isReserve: row.isReserve,
       isRedWine: row.isRedWine,
+      sourceRole: row.sourceRole,
       cepageBreakdown: row.composition,
     }));
 
@@ -5306,10 +5359,10 @@ function Assemblages() {
     .sort((a: any, b: any) => Number(a.disabledReason ? 1 : 0) - Number(b.disabledReason ? 1 : 0) || a.capacity - b.capacity);
 
   const selectedDestination = destinationCandidates.find((container: any) => String(container.id) === String(destinationContainerId));
-  const availableBulkCount = bulkSources.length;
+  const availableBulkCount = mainBulkSources.length;
   const availableReserveBottleCount = reserveBottleSources.length;
-  const redSourceCount = bulkSources.filter((lot: any) => lot.status === "VIN_ROUGE").length + reserveBottleSources.filter((lot: any) => lot.sourceLot?.status === "VIN_ROUGE").length;
-  const reserveSourceCount = bulkSources.filter((lot: any) => lot.status === "RESERVE" || lot.qualiteLot === "RESERVE").length + reserveBottleSources.length;
+  const redSourceCount = roseBulkSources.length;
+  const reserveSourceCount = reserveBulkSources.length + reserveBottleSources.length;
 
   const resetForm = () => {
     setAssemblageType("BSA");
@@ -5344,6 +5397,11 @@ function Assemblages() {
     ...selectedSourceRows.filter((row: any) => row.isOverAvailable).map((row: any) => `Le volume demandé dépasse le disponible pour ${row.source.code}.`),
     ...selectedSourceRows.filter((row: any) => row.isBottle && row.countUsed <= 0).map((row: any) => `Indiquez un nombre de bouteilles ou magnums pour ${row.source.code}.`),
     ...selectedSourceRows.filter((row: any) => !row.isBottle && row.volumeHl <= 0).map((row: any) => `Indiquez un volume en hL pour ${row.source.code}.`),
+    ...((assemblageType !== "ROSE_D_ASSEMBLAGE")
+      ? selectedSourceRows
+          .filter((row: any) => row.sourceRole === "ROSE")
+          .map((row: any) => `${row.source.code} est un VIN_ROUGE et ne peut être utilisé que pour un Rosé d'assemblage.`)
+      : []),
     ...(totalVolumeHl <= 0 ? ["Le volume final doit être supérieur à 0 hL."] : []),
     ...(!destinationContainerId ? ["Choisissez une cuve de destination."] : []),
     ...(selectedDestination?.disabledReason ? [`La cuve sélectionnée est invalide: ${selectedDestination.disabledReason}.`] : []),
@@ -5383,6 +5441,7 @@ function Assemblages() {
                 originUnit: row.source.formatCode,
                 originQuantity: row.countUsed,
                 formatCode: row.source.formatCode,
+                sourceRole: row.sourceRole,
               }
             : {
                 sourceType: "LOT",
@@ -5390,6 +5449,7 @@ function Assemblages() {
                 volumeHl: row.volumeHl,
                 originUnit: "hL",
                 originQuantity: row.volumeHl,
+                sourceRole: row.sourceRole,
               }),
         containerDestinationId: parseInt(destinationContainerId, 10),
         adjuvants: adjuvantRows
@@ -5440,7 +5500,7 @@ function Assemblages() {
             Le module est désormais raccordé aux lots, réserves bouteilles, cuves de destination et intrants. Les règles de décision sont recalculées en direct avant l'enregistrement.
           </div>
           <div style={{ marginTop:6, fontSize:12, color:T.textDim }}>
-            Sources éligibles : vins de base et vins déjà assemblés.
+            Sources principales : vins de base et vins déjà assemblés. Les réserves et vins rouges restent disponibles dans des sections dédiées.
           </div>
         </div>
         <Btn onClick={() => setShowCreateModal(true)} disabled={sourceCandidates.length === 0}>Créer un assemblage</Btn>
@@ -5466,34 +5526,43 @@ function Assemblages() {
 
       <div style={{ display:"grid", gridTemplateColumns:"1.3fr 1fr", gap:16 }}>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:4, overflow:"hidden" }}>
-          <div style={{ padding:"14px 16px", borderBottom:`1px solid ${T.border}`, fontSize:11, textTransform:"uppercase", color:T.textDim, letterSpacing:1 }}>Lots disponibles</div>
-          <div style={{ display:"grid", gridTemplateColumns:"1.5fr 90px 90px 1fr 1fr 100px", padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
-            <div>Source</div>
-            <div>Cépage</div>
-            <div>Millésime</div>
-            <div>Volume dispo</div>
-            <div>Contenant</div>
-            <div>Statut</div>
-          </div>
+          <div style={{ padding:"14px 16px", borderBottom:`1px solid ${T.border}`, fontSize:11, textTransform:"uppercase", color:T.textDim, letterSpacing:1 }}>Lots disponibles par famille</div>
           {sourceCandidates.length === 0 ? (
             <div style={{ padding:"36px 20px", textAlign:"center", color:T.textDim }}>Aucune source n'est actuellement exploitable pour un assemblage.</div>
-          ) : sourceCandidates.slice(0, 10).map((source: any, index: number) => (
-            <div key={buildSourceKey(source)} style={{ display:"grid", gridTemplateColumns:"1.5fr 90px 90px 1fr 1fr 100px", gap:10, padding:"14px 16px", borderBottom:index < Math.min(sourceCandidates.length, 10) - 1 ? `1px solid ${T.border}` : "none", alignItems:"center" }}>
-              <div>
-                <div style={{ fontSize:12, color:T.accent, fontFamily:"monospace", fontWeight:700 }}>{source.code}</div>
-                {source._type === "bottle" && <div style={{ fontSize:11, color:T.textDim, marginTop:4 }}>{source.formatLabel} - conversion {BOTTLE_FORMAT_TO_HL[source.formatCode] || 0} hL / unité</div>}
-              </div>
-              <div style={{ fontSize:12, color:T.text }}>{source.cepage || source.mainGrapeCode || source.sourceLot?.mainGrapeCode || "--"}</div>
-              <div style={{ fontSize:12, color:T.text }}>{source.millesime || source.year || "--"}</div>
-              <div style={{ fontSize:12, color:T.textStrong }}>
-                {source._type === "bottle"
-                  ? `${source.availableVolumeHl.toFixed(3)} hL`
-                  : `${Number(source.availableVolumeHl).toFixed(2)} hL`}
-              </div>
-              <div style={{ fontSize:12, color:T.text }}>{source.currentContainerLabel || "--"}</div>
-              <div><Badge label={source.status} color={LOT_STATUS_COLORS[source.status] || T.textDim} /></div>
+          ) : (
+            <div style={{ display:"grid", gap:16, padding:16 }}>
+              {sourceSections.map((section) => (
+                <div key={section.key} style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:"hidden" }}>
+                  <div style={{ padding:"12px 14px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
+                    <div>
+                      <div style={{ fontSize:12, color:T.textStrong, fontWeight:700 }}>{section.title}</div>
+                      <div style={{ fontSize:11, color:T.textDim, marginTop:4 }}>{section.helper}</div>
+                    </div>
+                    <Badge label={String(section.items.length)} color={T.accent} />
+                  </div>
+                  {section.items.length === 0 ? (
+                    <div style={{ padding:"14px", fontSize:12, color:T.textDim }}>Aucune source dans cette section.</div>
+                  ) : (
+                    <div>
+                      {section.items.slice(0, 4).map((source: any, index: number) => (
+                        <div key={buildSourceKey(source)} style={{ display:"grid", gridTemplateColumns:"1.5fr 90px 90px 1fr 1fr 100px", gap:10, padding:"12px 14px", borderTop:index === 0 ? "none" : `1px solid ${T.border}`, alignItems:"center" }}>
+                          <div>
+                            <div style={{ fontSize:12, color:T.accent, fontFamily:"monospace", fontWeight:700 }}>{source.code}</div>
+                            {source._type === "bottle" && <div style={{ fontSize:11, color:T.textDim, marginTop:4 }}>{source.formatLabel} - conversion {BOTTLE_FORMAT_TO_HL[source.formatCode] || 0} hL / unité</div>}
+                          </div>
+                          <div style={{ fontSize:12, color:T.text }}>{source.cepage || source.mainGrapeCode || source.sourceLot?.mainGrapeCode || "--"}</div>
+                          <div style={{ fontSize:12, color:T.text }}>{source.millesime || source.year || "--"}</div>
+                          <div style={{ fontSize:12, color:T.textStrong }}>{source._type === "bottle" ? `${source.availableVolumeHl.toFixed(3)} hL` : `${Number(source.availableVolumeHl).toFixed(2)} hL`}</div>
+                          <div style={{ fontSize:12, color:T.text }}>{source.currentContainerLabel || "--"}</div>
+                          <div><Badge label={source.status} color={LOT_STATUS_COLORS[source.status] || T.textDim} /></div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
-          ))}
+          )}
         </div>
 
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:4, padding:18 }}>
@@ -5523,62 +5592,75 @@ function Assemblages() {
 
               <div style={{ background:T.surfaceHigh, border:`1px solid ${T.border}`, borderRadius:6, padding:16 }}>
                 <div style={{ fontSize:12, fontWeight:700, color:T.textStrong, marginBottom:12 }}>B. Lots sources disponibles</div>
-                <div style={{ display:"grid", gridTemplateColumns:"48px 1.5fr 90px 90px 90px 1fr 120px 1.1fr", gap:10, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1, paddingBottom:8, borderBottom:`1px solid ${T.border}` }}>
-                  <div>Sélec.</div>
-                  <div>Lot</div>
-                  <div>Cépage</div>
-                  <div>Millésime</div>
-                  <div>Type</div>
-                  <div>Volume dispo</div>
-                  <div>Contenant</div>
-                  <div>Analyse</div>
-                </div>
-                <div style={{ display:"grid", gap:10, marginTop:12 }}>
-                  {sourceCandidates.length === 0 ? (
-                    <div style={{ fontSize:12, color:T.textDim }}>Aucune source disponible.</div>
-                  ) : sourceCandidates.map((source: any) => {
-                    const draft = readSourceDraft(source);
-                    const latestAnalysis = source.analyses?.[0];
-                    const isBottle = source._type === "bottle";
-
-                    return (
-                      <div key={buildSourceKey(source)} style={{ display:"grid", gridTemplateColumns:"48px 1.5fr 90px 90px 90px 1fr 120px 1.1fr", gap:10, alignItems:"center", padding:"12px 0", borderBottom:`1px solid ${T.border}66` }}>
+                <div style={{ display:"grid", gap:14, marginTop:12 }}>
+                  {sourceSections.map((section) => (
+                    <div key={`modal-${section.key}`} style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:"hidden" }}>
+                      <div style={{ padding:"12px 14px", borderBottom:`1px solid ${T.border}`, background:T.surface, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
                         <div>
-                          <input
-                            type="checkbox"
-                            checked={!!draft.selected}
-                            disabled={isSubmitting}
-                            onChange={() => setSourceDrafts((prev: any) => ({
-                              ...prev,
-                              [buildSourceKey(source)]: {
-                                ...readSourceDraft(source),
-                                selected: !draft.selected,
-                              },
-                            }))}
-                            style={{ accentColor: T.accent }}
-                          />
+                          <div style={{ fontSize:12, color:T.textStrong, fontWeight:700 }}>{section.title}</div>
+                          <div style={{ fontSize:11, color:T.textDim, marginTop:4 }}>{section.helper}</div>
                         </div>
-                        <div>
-                          <div style={{ fontSize:12, color:T.accent, fontFamily:"monospace", fontWeight:700 }}>{source.code}</div>
-                          <div style={{ fontSize:11, color:T.textDim, marginTop:4 }}>
-                            {isBottle ? `${source.availableCount} unités ${source.formatLabel}` : source.qualiteLot || source.notes || "Lot vrac"}
-                          </div>
-                        </div>
-                        <div style={{ fontSize:12, color:T.text }}>{source.cepage || source.mainGrapeCode || "--"}</div>
-                        <div style={{ fontSize:12, color:T.text }}>{source.millesime || source.year || "--"}</div>
-                        <div style={{ fontSize:12, color:T.text }}>{isBottle ? "Réserve btle" : source.qualiteLot || source.status}</div>
-                        <div style={{ fontSize:12, color:T.textStrong }}>
-                          {isBottle ? `${source.availableVolumeHl.toFixed(3)} hL` : `${Number(source.availableVolumeHl).toFixed(2)} hL`}
-                        </div>
-                        <div style={{ fontSize:12, color:T.text }}>{source.currentContainerLabel || "--"}</div>
-                        <div style={{ fontSize:11, color:T.textDim, lineHeight:1.4 }}>
-                          {latestAnalysis
-                            ? `alc. ${latestAnalysis.alcohol ?? "--"} | pH ${latestAnalysis.ph ?? "--"} | AT ${latestAnalysis.at ?? "--"}`
-                            : "Aucune analyse"}
-                        </div>
+                        <Badge label={String(section.items.length)} color={T.accent} />
                       </div>
-                    );
-                  })}
+                      <div style={{ display:"grid", gridTemplateColumns:"48px 1.5fr 90px 90px 90px 1fr 120px 1.1fr", gap:10, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1, padding:"10px 14px", borderBottom:`1px solid ${T.border}` }}>
+                        <div>Sélec.</div>
+                        <div>Lot</div>
+                        <div>Cépage</div>
+                        <div>Millésime</div>
+                        <div>Type</div>
+                        <div>Volume dispo</div>
+                        <div>Contenant</div>
+                        <div>Analyse</div>
+                      </div>
+                      <div style={{ display:"grid", gap:0 }}>
+                        {section.items.length === 0 ? (
+                          <div style={{ padding:"14px", fontSize:12, color:T.textDim }}>Aucune source disponible dans cette section.</div>
+                        ) : section.items.map((source: any) => {
+                          const draft = readSourceDraft(source);
+                          const latestAnalysis = source.analyses?.[0];
+                          const isBottle = source._type === "bottle";
+
+                          return (
+                            <div key={buildSourceKey(source)} style={{ display:"grid", gridTemplateColumns:"48px 1.5fr 90px 90px 90px 1fr 120px 1.1fr", gap:10, alignItems:"center", padding:"12px 14px", borderBottom:`1px solid ${T.border}66` }}>
+                              <div>
+                                <input
+                                  type="checkbox"
+                                  checked={!!draft.selected}
+                                  disabled={isSubmitting}
+                                  onChange={() => setSourceDrafts((prev: any) => ({
+                                    ...prev,
+                                    [buildSourceKey(source)]: {
+                                      ...readSourceDraft(source),
+                                      selected: !draft.selected,
+                                    },
+                                  }))}
+                                  style={{ accentColor: T.accent }}
+                                />
+                              </div>
+                              <div>
+                                <div style={{ fontSize:12, color:T.accent, fontFamily:"monospace", fontWeight:700 }}>{source.code}</div>
+                                <div style={{ fontSize:11, color:T.textDim, marginTop:4 }}>
+                                  {isBottle ? `${source.availableCount} unités ${source.formatLabel}` : source.qualiteLot || source.notes || source.sourceCategoryLabel}
+                                </div>
+                              </div>
+                              <div style={{ fontSize:12, color:T.text }}>{source.cepage || source.mainGrapeCode || "--"}</div>
+                              <div style={{ fontSize:12, color:T.text }}>{source.millesime || source.year || "--"}</div>
+                              <div style={{ fontSize:12, color:T.text }}>{isBottle ? "Réserve btle" : source.sourceCategoryLabel}</div>
+                              <div style={{ fontSize:12, color:T.textStrong }}>
+                                {isBottle ? `${source.availableVolumeHl.toFixed(3)} hL` : `${Number(source.availableVolumeHl).toFixed(2)} hL`}
+                              </div>
+                              <div style={{ fontSize:12, color:T.text }}>{source.currentContainerLabel || "--"}</div>
+                              <div style={{ fontSize:11, color:T.textDim, lineHeight:1.4 }}>
+                                {latestAnalysis
+                                  ? `alc. ${latestAnalysis.alcohol ?? "--"} | pH ${latestAnalysis.ph ?? "--"} | AT ${latestAnalysis.at ?? "--"}`
+                                  : "Aucune analyse"}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
 

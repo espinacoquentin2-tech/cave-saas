@@ -1,12 +1,18 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import {
   AssemblageDecisionComponent,
+  AssemblageSourceRole,
   AssemblageType,
-  ASSEMBLAGE_ELIGIBLE_STATUSES,
+  ASSEMBLAGE_MAIN_ELIGIBLE_STATUSES,
+  ASSEMBLAGE_RESERVE_ELIGIBLE_STATUSES,
+  ASSEMBLAGE_ROSE_ELIGIBLE_STATUSES,
   convertBottleCountToHl,
   convertHlToBottleCount,
   evaluateAssemblageDecision,
   getBottleFormatLabel,
+  isAssemblageMainEligibleLotStatus,
+  isAssemblageReserveEligibleLotStatus,
+  isAssemblageRoseEligibleLotStatus,
   isAssemblageEligibleLotStatus,
   normalizeGrapeCode,
 } from '@/lib/assemblage';
@@ -24,6 +30,7 @@ type NormalizedAssemblageSource =
       volumeHl: number;
       originUnit: string;
       originQuantity: number;
+      sourceRole: AssemblageSourceRole;
     }
   | {
       sourceType: 'BOTTLE_LOT';
@@ -32,6 +39,7 @@ type NormalizedAssemblageSource =
       originUnit: string;
       originQuantity: number;
       formatCode?: string;
+      sourceRole: AssemblageSourceRole;
     };
 
 type NormalizedAdjuvant = {
@@ -66,6 +74,26 @@ const buildSourceSummary = (components: AssemblageDecisionComponent[]) =>
     .map((component) => `${component.label}: ${component.volumeHl.toFixed(2)} hL`)
     .join(' | ');
 
+const getLotSourceRole = (
+  status: string,
+  explicitRole?: AssemblageSourceRole | null,
+  qualiteLot?: string | null,
+) => {
+  if (explicitRole) {
+    return explicitRole;
+  }
+
+  if (isAssemblageRoseEligibleLotStatus(status)) {
+    return 'ROSE';
+  }
+
+  if (status === 'RESERVE' || qualiteLot === 'RESERVE') {
+    return 'RESERVE';
+  }
+
+  return 'MAIN';
+};
+
 const normalizeAssemblageInput = (input: CreateAssemblageInput) => {
   const destinationContainerId = input.containerDestinationId ?? input.targetContainerId;
   const sources: NormalizedAssemblageSource[] = [];
@@ -79,6 +107,7 @@ const normalizeAssemblageInput = (input: CreateAssemblageInput) => {
           volumeHl: component.volumeHl,
           originUnit: component.originUnit,
           originQuantity: component.originQuantity ?? component.volumeHl,
+          sourceRole: component.sourceRole ?? 'MAIN',
         });
       } else {
         sources.push({
@@ -88,18 +117,20 @@ const normalizeAssemblageInput = (input: CreateAssemblageInput) => {
           originUnit: component.originUnit,
           originQuantity: component.originQuantity,
           formatCode: component.formatCode,
+          sourceRole: component.sourceRole ?? 'RESERVE',
         });
       }
     }
   } else {
     for (const sourceLot of input.sourceLots) {
-      sources.push({
-        sourceType: 'LOT',
-        lotId: sourceLot.id,
-        volumeHl: sourceLot.volumeUsed,
-        originUnit: 'hL',
-        originQuantity: sourceLot.volumeUsed,
-      });
+        sources.push({
+          sourceType: 'LOT',
+          lotId: sourceLot.id,
+          volumeHl: sourceLot.volumeUsed,
+          originUnit: 'hL',
+          originQuantity: sourceLot.volumeUsed,
+          sourceRole: 'MAIN',
+        });
     }
 
     for (const sourceBottle of input.sourceBottles) {
@@ -110,6 +141,7 @@ const normalizeAssemblageInput = (input: CreateAssemblageInput) => {
         originUnit: sourceBottle.format,
         originQuantity: sourceBottle.countUsed,
         formatCode: sourceBottle.format,
+        sourceRole: 'RESERVE',
       });
     }
   }
@@ -155,6 +187,7 @@ const buildDecisionComponentFromLot = (lot: {
     lot.status === 'VIN_ROUGE' ||
     lot.businessCode.toUpperCase().includes('ROUGE') ||
     lot.notes?.toUpperCase().includes('ROUGE') === true,
+  sourceRole: null,
   cepageBreakdown:
     lot.components.length > 0
       ? lot.components.map((component) => ({
@@ -289,9 +322,41 @@ export class AssemblageModuleService {
             if (!lot) {
               throw new BusinessLogicError(`Lot source introuvable (#${source.lotId}).`, 404);
             }
+            const resolvedSourceRole = getLotSourceRole(lot.status, source.sourceRole, lot.qualiteLot);
+
             if (!isAssemblageEligibleLotStatus(lot.status)) {
               throw new BusinessLogicError(
-                `Le lot ${lot.businessCode} n'est pas eligible a l'assemblage car son statut est ${lot.status}. Statuts autorises: ${ASSEMBLAGE_ELIGIBLE_STATUSES.join(', ')}.`,
+                `Le lot ${lot.businessCode} n'est pas eligible a l'assemblage car son statut est ${lot.status}.`,
+                400,
+              );
+            }
+            if (resolvedSourceRole === 'MAIN' && !isAssemblageMainEligibleLotStatus(lot.status)) {
+              throw new BusinessLogicError(
+                `Le lot ${lot.businessCode} ne peut pas etre utilise comme source principale avec le statut ${lot.status}. Statuts autorises: ${ASSEMBLAGE_MAIN_ELIGIBLE_STATUSES.join(', ')}.`,
+                400,
+              );
+            }
+            if (resolvedSourceRole === 'RESERVE' && !isAssemblageReserveEligibleLotStatus(lot.status) && lot.qualiteLot !== 'RESERVE') {
+              throw new BusinessLogicError(
+                `Le lot ${lot.businessCode} ne peut pas etre utilise comme reserve avec le statut ${lot.status}. Statuts autorises: ${ASSEMBLAGE_RESERVE_ELIGIBLE_STATUSES.join(', ')}.`,
+                400,
+              );
+            }
+            if (resolvedSourceRole === 'ROSE' && !isAssemblageRoseEligibleLotStatus(lot.status)) {
+              throw new BusinessLogicError(
+                `Le lot ${lot.businessCode} ne peut pas etre utilise comme source rose avec le statut ${lot.status}. Statuts autorises: ${ASSEMBLAGE_ROSE_ELIGIBLE_STATUSES.join(', ')}.`,
+                400,
+              );
+            }
+            if (lot.status === 'VIN_ROUGE' && normalized.assemblageType !== 'ROSE_D_ASSEMBLAGE' && resolvedSourceRole !== 'ROSE') {
+              throw new BusinessLogicError(
+                `Le lot ${lot.businessCode} est un VIN_ROUGE et ne peut etre utilise que pour un Rose d'assemblage.`,
+                400,
+              );
+            }
+            if (resolvedSourceRole === 'ROSE' && normalized.assemblageType && normalized.assemblageType !== 'ROSE_D_ASSEMBLAGE') {
+              throw new BusinessLogicError(
+                `Le lot ${lot.businessCode} est utilise comme source rose mais le type demande est ${normalized.assemblageType}.`,
                 400,
               );
             }
@@ -303,7 +368,13 @@ export class AssemblageModuleService {
             }
 
             totalVolumeHl += source.volumeHl;
-            decisionComponents.push(buildDecisionComponentFromLot(lot)(source.volumeHl));
+            const decisionComponent = buildDecisionComponentFromLot(lot)(source.volumeHl);
+            decisionComponents.push({
+              ...decisionComponent,
+              sourceRole: resolvedSourceRole,
+              isReserve: resolvedSourceRole === 'RESERVE' || decisionComponent.isReserve,
+              isRedWine: resolvedSourceRole === 'ROSE' || decisionComponent.isRedWine,
+            });
             if (lot.currentContainerId) {
               sourceContainerIds.add(lot.currentContainerId);
             }
@@ -340,13 +411,19 @@ export class AssemblageModuleService {
             const bottleSourceLot = bottleLot.sourceLot;
             decisionComponents.push(
               bottleSourceLot
-                ? buildDecisionComponentFromLot(bottleSourceLot)(source.volumeHl)
+                ? {
+                    ...buildDecisionComponentFromLot(bottleSourceLot)(source.volumeHl),
+                    sourceRole: source.sourceRole,
+                    isReserve: true,
+                    isRedWine: source.sourceRole === 'ROSE' || bottleSourceLot.status === 'VIN_ROUGE',
+                  }
                 : {
                     label: bottleLot.businessCode,
                     volumeHl: source.volumeHl,
                     vintage: null,
-                    isReserve: bottleLot.status === 'RESERVE',
-                    isRedWine: bottleLot.businessCode.toUpperCase().includes('ROUGE'),
+                    isReserve: true,
+                    isRedWine: source.sourceRole === 'ROSE' || bottleLot.businessCode.toUpperCase().includes('ROUGE'),
+                    sourceRole: source.sourceRole,
                     cepageBreakdown: [{ grapeCode: 'INCONNU', percentage: 100 }],
                   },
             );

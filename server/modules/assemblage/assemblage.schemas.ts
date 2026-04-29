@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ASSEMBLAGE_TYPES } from '@/lib/assemblage';
+import { ASSEMBLAGE_SOURCE_ROLES, ASSEMBLAGE_TYPES } from '@/lib/assemblage';
 
 const legacySourceLotSchema = z.object({
   id: z.coerce.number().int().positive(),
@@ -18,6 +18,7 @@ const lotComponentSchema = z.object({
   volumeHl: z.coerce.number().positive(),
   originUnit: z.string().trim().min(1).default('hL'),
   originQuantity: z.coerce.number().positive().optional(),
+  sourceRole: z.enum(ASSEMBLAGE_SOURCE_ROLES).optional(),
 });
 
 const bottleComponentSchema = z.object({
@@ -27,6 +28,7 @@ const bottleComponentSchema = z.object({
   originUnit: z.string().trim().min(1),
   originQuantity: z.coerce.number().positive(),
   formatCode: z.string().trim().min(1).optional(),
+  sourceRole: z.enum(ASSEMBLAGE_SOURCE_ROLES).optional(),
 });
 
 const adjuvantSchema = z.object({

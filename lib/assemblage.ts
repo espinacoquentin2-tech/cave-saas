@@ -16,10 +16,36 @@ export const ASSEMBLAGE_TYPES = [
 
 export type AssemblageType = (typeof ASSEMBLAGE_TYPES)[number];
 
-export const ASSEMBLAGE_ELIGIBLE_STATUSES = ['VIN_DE_BASE', 'ASSEMBLAGE', 'ASSEMBLE'] as const;
+export const ASSEMBLAGE_MAIN_ELIGIBLE_STATUSES = ['VIN_DE_BASE', 'ASSEMBLAGE', 'ASSEMBLE'] as const;
+export const ASSEMBLAGE_RESERVE_ELIGIBLE_STATUSES = ['RESERVE', 'ASSEMBLAGE', 'ASSEMBLE'] as const;
+export const ASSEMBLAGE_ROSE_ELIGIBLE_STATUSES = ['VIN_ROUGE'] as const;
+export const ASSEMBLAGE_ELIGIBLE_STATUSES = [
+  ...ASSEMBLAGE_MAIN_ELIGIBLE_STATUSES,
+  ...ASSEMBLAGE_RESERVE_ELIGIBLE_STATUSES,
+  ...ASSEMBLAGE_ROSE_ELIGIBLE_STATUSES,
+] as const;
 
-export const isAssemblageEligibleLotStatus = (status: string | null | undefined) =>
-  typeof status === 'string' && (ASSEMBLAGE_ELIGIBLE_STATUSES as readonly string[]).includes(status.trim().toUpperCase());
+const normalizeStatus = (status: string | null | undefined) => (typeof status === 'string' ? status.trim().toUpperCase() : '');
+
+export const isAssemblageMainEligibleLotStatus = (status: string | null | undefined) =>
+  (ASSEMBLAGE_MAIN_ELIGIBLE_STATUSES as readonly string[]).includes(normalizeStatus(status));
+
+export const isAssemblageReserveEligibleLotStatus = (status: string | null | undefined) =>
+  (ASSEMBLAGE_RESERVE_ELIGIBLE_STATUSES as readonly string[]).includes(normalizeStatus(status));
+
+export const isAssemblageRoseEligibleLotStatus = (status: string | null | undefined) =>
+  (ASSEMBLAGE_ROSE_ELIGIBLE_STATUSES as readonly string[]).includes(normalizeStatus(status));
+
+export const isAnyAssemblageEligibleLotStatus = (status: string | null | undefined) =>
+  isAssemblageMainEligibleLotStatus(status) ||
+  isAssemblageReserveEligibleLotStatus(status) ||
+  isAssemblageRoseEligibleLotStatus(status);
+
+export const isAssemblageEligibleLotStatus = isAnyAssemblageEligibleLotStatus;
+
+export const ASSEMBLAGE_SOURCE_ROLES = ['MAIN', 'RESERVE', 'ROSE'] as const;
+
+export type AssemblageSourceRole = (typeof ASSEMBLAGE_SOURCE_ROLES)[number];
 
 export type AssemblageComponentBreakdown = {
   grapeCode: string;
@@ -32,6 +58,7 @@ export type AssemblageDecisionComponent = {
   vintage?: number | null;
   isReserve?: boolean;
   isRedWine?: boolean;
+  sourceRole?: AssemblageSourceRole | null;
   cepageBreakdown: AssemblageComponentBreakdown[];
 };
 
