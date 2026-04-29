@@ -2,8 +2,8 @@ import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { adminResetDatabaseSchema } from '@/server/modules/admin/admin-reset.schemas';
-import { AdminResetService } from '@/server/modules/admin/admin-reset.service';
-import { logger } from '@/server/shared/logger';
+import { AdminResetService, AdminSeedError } from '@/server/modules/admin/admin-reset.service';
+import { logger, serializeErrorDetails } from '@/server/shared/logger';
 import { prisma } from '@/server/shared/prisma';
 import { assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
@@ -26,20 +26,28 @@ export async function POST(request: Request) {
 
     const payload = adminResetDatabaseSchema.parse(await request.json());
 
-    const result = await prisma.$transaction(async (tx) => {
-      const deleted = await AdminResetService.resetBusinessData(tx);
-      const seeded = payload.reseed
-        ? await AdminResetService.seedDemoData(tx, { operatorEmail: actor.email })
-        : {};
+    const deleted = await prisma.$transaction(
+      async (tx) => AdminResetService.resetBusinessData(tx),
+      {
+        timeout: 30000,
+        maxWait: 10000,
+      },
+    );
 
-      return {
-        success: true as const,
-        mode: payload.mode,
-        reseed: payload.reseed,
-        deleted,
-        seeded,
-      };
-    });
+    const seeded = payload.reseed
+      ? await AdminResetService.seedDemoData({
+          operatorEmail: actor.email,
+          requestId,
+        })
+      : {};
+
+    const result = {
+      success: true as const,
+      mode: payload.mode,
+      reseed: payload.reseed,
+      deleted,
+      seeded,
+    };
 
     logger.info({
       action: 'admin.reset-database.post.success',
@@ -97,10 +105,33 @@ export async function POST(request: Request) {
       );
     }
 
+    if (error instanceof AdminSeedError) {
+      logger.error({
+        action: 'admin.reset-database.post.seed_failed',
+        requestId,
+        details: {
+          block: error.block,
+          ...serializeErrorDetails(error.cause ?? error),
+        },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'SEED_FAILED',
+          message: error.message,
+          block: error.block,
+        },
+        {
+          status: 500,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
     logger.error({
       action: 'admin.reset-database.post.unhandled_error',
       requestId,
-      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+      details: serializeErrorDetails(error),
     });
 
     return NextResponse.json(

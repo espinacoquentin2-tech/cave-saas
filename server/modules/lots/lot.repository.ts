@@ -29,6 +29,25 @@ export class LotRepository {
   static listLots() {
     return this.client.lot.findMany({
       orderBy: { id: 'asc' },
+      include: {
+        currentContainer: {
+          select: {
+            id: true,
+            code: true,
+            displayName: true,
+            type: true,
+            capacityValue: true,
+            status: true,
+          },
+        },
+        components: {
+          orderBy: { id: 'asc' },
+        },
+        analyses: {
+          orderBy: { analysisDate: 'desc' },
+          take: 3,
+        },
+      },
     });
   }
 

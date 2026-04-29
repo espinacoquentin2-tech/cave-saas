@@ -1,4 +1,6 @@
 import { Prisma } from '@prisma/client';
+import { logger, serializeErrorDetails } from '@/server/shared/logger';
+import { prisma } from '@/server/shared/prisma';
 
 const DEMO_CAVE_NAME = 'Domaine des Trois Coteaux';
 
@@ -55,6 +57,7 @@ export interface AdminSeedCounts {
 
 type SeedContext = {
   operatorEmail: string;
+  requestId?: string;
 };
 
 type ParcelleSeed = {
@@ -69,6 +72,54 @@ type ParcelleSeed = {
   maladie: 'Aucune' | 'Pourriture Grise';
   intensiteBase: number;
 };
+
+type SeedOperator = {
+  id: number;
+  email: string;
+};
+
+type CreatedParcelle = {
+  id: number;
+  commune: string;
+  nom: string;
+  grapeCode: ParcelleSeed['grapeCode'];
+  areaHa: number;
+};
+
+type SeedContainerMap = Map<string, number>;
+type SeedLotMap = Map<string, number>;
+
+const SEED_TRANSACTION_OPTIONS = {
+  timeout: 30000,
+  maxWait: 10000,
+} as const;
+
+const getPrismaModelName = (error: unknown) => {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) {
+    return null;
+  }
+
+  if (typeof error.meta?.modelName === 'string') {
+    return error.meta.modelName;
+  }
+
+  if (Array.isArray(error.meta?.target) && error.meta.target.length > 0) {
+    return String(error.meta.target[0]);
+  }
+
+  return null;
+};
+
+export class AdminSeedError extends Error {
+  constructor(
+    message: string,
+    public readonly block: string,
+    public override readonly cause?: unknown,
+  ) {
+    super(message);
+    this.name = 'AdminSeedError';
+  }
+}
 
 const createEmptyResetCounts = (): Omit<AdminResetCounts, 'operations'> => ({
   shipmentLines: 0,
@@ -162,9 +213,9 @@ export class AdminResetService {
     return withOperationCount(counts);
   }
 
-  static async seedDemoData(tx: Tx, context: SeedContext): Promise<AdminSeedCounts> {
+  static async seedDemoData(context: SeedContext): Promise<AdminSeedCounts> {
     const counts = createEmptySeedCounts();
-    const operator = await tx.user.findFirst({
+    const operator = await prisma.user.findFirst({
       where: { email: { equals: context.operatorEmail, mode: 'insensitive' } },
       select: { id: true, email: true },
     });
@@ -173,6 +224,83 @@ export class AdminResetService {
       throw new Error('Utilisateur administrateur introuvable pour générer les données de démonstration.');
     }
 
+    const createdParcelles = await this.runSeedBlock(
+      'parcelles_maturations',
+      context.requestId,
+      async (tx) => this.seedParcellesAndMaturations(tx, operator, counts),
+    );
+
+    await this.runSeedBlock(
+      'pressoirs_pressings',
+      context.requestId,
+      async (tx) => this.seedPressingsAndPressoirs(tx, counts),
+    );
+
+    const containerIds = await this.runSeedBlock(
+      'containers_compartments',
+      context.requestId,
+      async (tx) => this.seedContainers(tx, counts),
+    );
+
+    const lotIds = await this.runSeedBlock(
+      'lots_analyses_components',
+      context.requestId,
+      async (tx) => this.seedLotsAndAnalyses(tx, counts, containerIds),
+    );
+
+    await this.runSeedBlock(
+      'products_stock_movements',
+      context.requestId,
+      async (tx) => this.seedProductsAndStockMovements(tx, operator, counts),
+    );
+
+    await this.runSeedBlock(
+      'lot_events',
+      context.requestId,
+      async (tx) => this.seedLotEvents(tx, operator, counts, containerIds, lotIds),
+    );
+
+    await this.runSeedBlock(
+      'bottle_lots_events_degustations',
+      context.requestId,
+      async (tx) => this.seedBottleLotsEventsAndDegustations(tx, operator, counts, lotIds, createdParcelles),
+    );
+
+    return withOperationCount(counts);
+  }
+
+  private static async runSeedBlock<T>(
+    block: string,
+    requestId: string | undefined,
+    work: (tx: Tx) => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await prisma.$transaction(async (tx) => work(tx), SEED_TRANSACTION_OPTIONS);
+    } catch (error) {
+      const prismaModel = getPrismaModelName(error);
+      logger.error({
+        action: 'admin.reset-database.seed.block_failed',
+        requestId,
+        details: {
+          block,
+          ...(prismaModel ? { prismaModel } : {}),
+          ...serializeErrorDetails(error),
+        },
+      });
+
+      throw new AdminSeedError(
+        `Le rechargement des données de démonstration a échoué dans le bloc "${block}"${prismaModel ? ` (${prismaModel})` : ''}.`,
+        block,
+        error,
+      );
+    }
+  }
+
+  private static async seedParcellesAndMaturations(
+    tx: Tx,
+    operator: SeedOperator,
+    counts: Omit<AdminSeedCounts, 'operations'>,
+  ): Promise<Map<string, CreatedParcelle>> {
     const parcellesSeed: ParcelleSeed[] = [
       { commune: 'Avize', nom: 'Les Grands Près', grapeCode: 'CH', areaHa: 1.2, sucreBase: 156, tavpBase: 9.1, atBase: 8.8, phBase: 2.94, maladie: 'Aucune', intensiteBase: 0 },
       { commune: 'Cramant', nom: 'Les Hautes Vignes', grapeCode: 'CH', areaHa: 0.85, sucreBase: 160, tavpBase: 9.4, atBase: 8.2, phBase: 2.97, maladie: 'Aucune', intensiteBase: 0 },
@@ -184,230 +312,225 @@ export class AdminResetService {
       { commune: 'Passy-Grigny', nom: 'Les Sablons', grapeCode: 'PM', areaHa: 0.9, sucreBase: 152, tavpBase: 8.8, atBase: 9.2, phBase: 2.9, maladie: 'Pourriture Grise', intensiteBase: 8 },
     ];
 
-    const createdParcelles = new Map<string, { id: number; commune: string; nom: string; grapeCode: string; areaHa: number }>();
+    const parcelleInsert = await tx.parcelle.createMany({
+      data: parcellesSeed.map((parcelle) => ({
+        nom: parcelle.nom,
+        commune: parcelle.commune,
+        region: 'Champagne',
+        departement: 'Marne',
+      })),
+    });
+    counts.parcelles += parcelleInsert.count;
+
+    const parcelleRecords = await tx.parcelle.findMany({
+      where: {
+        nom: { in: parcellesSeed.map((parcelle) => parcelle.nom) },
+      },
+      select: {
+        id: true,
+        commune: true,
+        nom: true,
+      },
+    });
+
+    const parcelleMap = new Map(
+      parcelleRecords.map((record) => [record.nom, record] as const),
+    );
+    const createdParcelles = new Map<string, CreatedParcelle>();
+
     for (const parcelle of parcellesSeed) {
-      const created = await tx.parcelle.create({
-        data: {
-          nom: parcelle.nom,
-          commune: parcelle.commune,
-          region: 'Champagne',
-          departement: 'Marne',
-        },
-      });
+      const record = parcelleMap.get(parcelle.nom);
+      if (!record) {
+        throw new Error(`Parcelle démo introuvable après insertion: ${parcelle.nom}.`);
+      }
 
       createdParcelles.set(parcelle.nom, {
-        id: created.id,
-        commune: parcelle.commune,
-        nom: parcelle.nom,
+        id: record.id,
+        commune: record.commune ?? parcelle.commune,
+        nom: record.nom,
         grapeCode: parcelle.grapeCode,
         areaHa: parcelle.areaHa,
       });
-      counts.parcelles += 1;
-
-      const maturationDates = ['2026-08-05', '2026-08-12', '2026-08-19'];
-      for (const [index, date] of maturationDates.entries()) {
-        await tx.maturation.create({
-          data: {
-            date: new Date(`${date}T08:00:00.000Z`),
-            parcelle: `${parcelle.commune} - ${parcelle.nom}`,
-            parcelleId: created.id,
-            cepage: parcelle.grapeCode,
-            sucre: parcelle.sucreBase + index * 10,
-            tavp: Number((parcelle.tavpBase + index * 0.55).toFixed(1)),
-            at: Number((parcelle.atBase - index * 0.35).toFixed(1)),
-            ph: Number((parcelle.phBase + index * 0.07).toFixed(2)),
-            malique: Number((5.4 - index * 0.5 + (parcelle.grapeCode === 'PM' ? 0.5 : 0)).toFixed(1)),
-            tartrique: Number((6.5 - index * 0.25 + (parcelle.grapeCode === 'CH' ? 0.4 : 0)).toFixed(1)),
-            maladie: parcelle.maladie,
-            intensite: Math.max(0, parcelle.intensiteBase - 1 + index),
-            operator: operator.email,
-            notes: `${DEMO_CAVE_NAME} · ${parcelle.areaHa.toFixed(2)} ha · suivi maturité`,
-          },
-        });
-        counts.maturations += 1;
-      }
     }
 
-    await tx.pressoir.create({
-      data: {
-        nom: 'Pressoir Coquard 4000',
-        type: 'Traditionnel',
-        marque: 'Coquard',
-        capacite: 4000,
-        status: 'VIDE',
-      },
-    });
-    await tx.pressoir.create({
-      data: {
-        nom: 'Pressoir Bucher XPlus',
-        type: 'Pneumatique',
-        marque: 'Bucher',
-        capacite: 8000,
-        status: 'PRET_ECOULAGE',
-        loadKg: 6200,
-        parcelle: 'Les Grands Près',
-        cepage: 'CH',
-      },
-    });
-    counts.pressoirs += 2;
+    const maturationDates = ['2026-08-05', '2026-08-12', '2026-08-19'] as const;
+    const maturationRows = parcellesSeed.flatMap((parcelle) => {
+      const created = createdParcelles.get(parcelle.nom);
+      if (!created) {
+        throw new Error(`Parcelle démo absente de la map: ${parcelle.nom}.`);
+      }
 
-    await tx.pressing.createMany({
+      return maturationDates.map((date, index) => ({
+        date: new Date(`${date}T08:00:00.000Z`),
+        parcelle: `${parcelle.commune} - ${parcelle.nom}`,
+        parcelleId: created.id,
+        cepage: parcelle.grapeCode,
+        sucre: parcelle.sucreBase + index * 10,
+        tavp: Number((parcelle.tavpBase + index * 0.55).toFixed(1)),
+        at: Number((parcelle.atBase - index * 0.35).toFixed(1)),
+        ph: Number((parcelle.phBase + index * 0.07).toFixed(2)),
+        malique: Number((5.4 - index * 0.5 + (parcelle.grapeCode === 'PM' ? 0.5 : 0)).toFixed(1)),
+        tartrique: Number((6.5 - index * 0.25 + (parcelle.grapeCode === 'CH' ? 0.4 : 0)).toFixed(1)),
+        maladie: parcelle.maladie,
+        intensite: Math.max(0, parcelle.intensiteBase - 1 + index),
+        operator: operator.email,
+        notes: `${DEMO_CAVE_NAME} · ${parcelle.areaHa.toFixed(2)} ha · suivi maturité`,
+      }));
+    });
+
+    const maturationInsert = await tx.maturation.createMany({
+      data: maturationRows,
+    });
+    counts.maturations += maturationInsert.count;
+
+    return createdParcelles;
+  }
+
+  private static async seedPressingsAndPressoirs(
+    tx: Tx,
+    counts: Omit<AdminSeedCounts, 'operations'>,
+  ) {
+    const pressoirInsert = await tx.pressoir.createMany({
+      data: [
+        {
+          nom: 'Pressoir Coquard 4000',
+          type: 'Traditionnel',
+          marque: 'Coquard',
+          capacite: 4000,
+          status: 'VIDE',
+        },
+        {
+          nom: 'Pressoir Bucher XPlus',
+          type: 'Pneumatique',
+          marque: 'Bucher',
+          capacite: 8000,
+          status: 'PRET_ECOULAGE',
+          loadKg: 6200,
+          parcelle: 'Les Grands Près',
+          cepage: 'CH',
+        },
+      ],
+    });
+    counts.pressoirs += pressoirInsert.count;
+
+    const pressingInsert = await tx.pressing.createMany({
       data: [
         { date: '2026-09-07', cru: 'Avize', cepage: 'CH', weight: decimal(6200), status: 'PRESSE' },
         { date: '2026-09-08', cru: 'Bouzy', cepage: 'PN', weight: decimal(5800), status: 'PRESSE' },
         { date: '2026-09-09', cru: 'Damery', cepage: 'PM', weight: decimal(7100), status: 'EN_ATTENTE' },
       ],
     });
-    counts.pressings += 3;
+    counts.pressings += pressingInsert.count;
+  }
 
-    const inox25 = await tx.container.create({
-      data: {
-        code: 'CUV-INX-025-A',
-        displayName: 'Cuve inox 25 hL A',
-        type: 'CUVE_INOX',
-        capacityValue: decimal(25),
-        capacityUnit: 'hL',
-        site: DEMO_CAVE_NAME,
-        zone: 'Cuverie Nord',
-        status: 'EN_FERMENTATION',
-      },
-    });
-    const inox50 = await tx.container.create({
-      data: {
-        code: 'CUV-INX-050-A',
-        displayName: 'Cuve inox 50 hL A',
-        type: 'CUVE_INOX',
-        capacityValue: decimal(50),
-        capacityUnit: 'hL',
-        site: DEMO_CAVE_NAME,
-        zone: 'Cuverie Nord',
-        status: 'EN_FERMENTATION',
-      },
-    });
-    const inox100 = await tx.container.create({
-      data: {
-        code: 'CUV-INX-100-A',
-        displayName: 'Cuve inox 100 hL A',
-        type: 'CUVE_INOX',
-        capacityValue: decimal(100),
-        capacityUnit: 'hL',
-        site: DEMO_CAVE_NAME,
-        zone: 'Cuverie Centrale',
-        status: 'EN_ELEVAGE',
-      },
-    });
-    const inox200 = await tx.container.create({
-      data: {
-        code: 'CUV-INX-200-A',
-        displayName: 'Cuve inox 200 hL A',
-        type: 'CUVE_INOX',
-        capacityValue: decimal(200),
-        capacityUnit: 'hL',
-        site: DEMO_CAVE_NAME,
-        zone: 'Cuverie Centrale',
-        status: 'RESERVE_TIRAGE',
-      },
-    });
-    const compartimentee = await tx.container.create({
-      data: {
-        code: 'CUV-COMP-100-A',
-        displayName: 'Cuve compartimentée 2 x 50 hL',
-        type: 'CUVE_INOX',
-        capacityValue: decimal(100),
-        capacityUnit: 'hL',
-        site: DEMO_CAVE_NAME,
-        zone: 'Cuverie Est',
-        status: 'EN_SERVICE',
-      },
-    });
-    const compartimentA = await tx.container.create({
-      data: {
-        code: 'CUV-COMP-050-A',
-        displayName: 'Compartiment A 50 hL',
-        type: 'COMPARTIMENT',
-        capacityValue: decimal(50),
-        capacityUnit: 'hL',
-        site: DEMO_CAVE_NAME,
-        zone: 'Cuverie Est',
-        status: 'EN_ELEVAGE',
-        parentId: compartimentee.id,
-      },
-    });
-    const compartimentB = await tx.container.create({
-      data: {
-        code: 'CUV-COMP-050-B',
-        displayName: 'Compartiment B 50 hL',
-        type: 'COMPARTIMENT',
-        capacityValue: decimal(50),
-        capacityUnit: 'hL',
-        site: DEMO_CAVE_NAME,
-        zone: 'Cuverie Est',
-        status: 'EN_ELEVAGE',
-        parentId: compartimentee.id,
-      },
-    });
-    const foudre = await tx.container.create({
-      data: {
-        code: 'FOUDRE-030-A',
-        displayName: 'Foudre 30 hL',
-        type: 'FOUDRE',
-        capacityValue: decimal(30),
-        capacityUnit: 'hL',
-        site: DEMO_CAVE_NAME,
-        zone: 'Elevage Bois',
-        status: 'EN_ELEVAGE',
-      },
-    });
-    await tx.container.create({
-      data: {
-        code: 'BARRIQUE-228-A',
-        displayName: 'Barrique 228 L A',
-        type: 'BARRIQUE',
-        capacityValue: decimal(2.28),
-        capacityUnit: 'hL',
-        site: DEMO_CAVE_NAME,
-        zone: 'Elevage Bois',
-        status: 'RESERVE_TIRAGE',
-      },
-    });
-    await tx.container.create({
-      data: {
-        code: 'BARRIQUE-228-B',
-        displayName: 'Barrique 228 L B',
-        type: 'BARRIQUE',
-        capacityValue: decimal(2.28),
-        capacityUnit: 'hL',
-        site: DEMO_CAVE_NAME,
-        zone: 'Elevage Bois',
-        status: 'A_NETTOYER',
-      },
-    });
-    const demiMuidA = await tx.container.create({
-      data: {
-        code: 'DEMI-MUID-600-A',
-        displayName: 'Demi-muid 600 L A',
-        type: 'DEMI_MUID',
-        capacityValue: decimal(6),
-        capacityUnit: 'hL',
-        site: DEMO_CAVE_NAME,
-        zone: 'Elevage Bois',
-        status: 'EN_ELEVAGE',
-      },
-    });
-    const demiMuidB = await tx.container.create({
-      data: {
-        code: 'DEMI-MUID-600-B',
-        displayName: 'Demi-muid 600 L B',
-        type: 'DEMI_MUID',
-        capacityValue: decimal(6),
-        capacityUnit: 'hL',
-        site: DEMO_CAVE_NAME,
-        zone: 'Elevage Bois',
-        status: 'VIDE',
-      },
-    });
-    counts.containers += 12;
+  private static async seedContainers(
+    tx: Tx,
+    counts: Omit<AdminSeedCounts, 'operations'>,
+  ): Promise<SeedContainerMap> {
+    const rootContainers = [
+      { code: 'CUV-INX-025-A', displayName: 'Cuve inox 25 hL A', type: 'CUVE_INOX', capacityValue: decimal(25), zone: 'Cuverie Nord', status: 'EN_FERMENTATION' },
+      { code: 'CUV-INX-050-A', displayName: 'Cuve inox 50 hL A', type: 'CUVE_INOX', capacityValue: decimal(50), zone: 'Cuverie Nord', status: 'EN_FERMENTATION' },
+      { code: 'CUV-INX-100-A', displayName: 'Cuve inox 100 hL A', type: 'CUVE_INOX', capacityValue: decimal(100), zone: 'Cuverie Centrale', status: 'EN_ELEVAGE' },
+      { code: 'CUV-INX-200-A', displayName: 'Cuve inox 200 hL A', type: 'CUVE_INOX', capacityValue: decimal(200), zone: 'Cuverie Centrale', status: 'RESERVE_TIRAGE' },
+      { code: 'CUV-INX-120-B', displayName: 'Cuve inox 120 hL B', type: 'CUVE_INOX', capacityValue: decimal(120), zone: 'Cuverie Assemblages', status: 'VIDE' },
+      { code: 'CUV-INX-060-B', displayName: 'Cuve inox 60 hL B', type: 'CUVE_INOX', capacityValue: decimal(60), zone: 'Cuverie Assemblages', status: 'VIDE' },
+      { code: 'CUV-INX-015-ROUGE', displayName: 'Cuve inox 15 hL Rouge', type: 'CUVE_INOX', capacityValue: decimal(15), zone: 'Cuverie Rouge', status: 'EN_ELEVAGE' },
+      { code: 'CUV-COMP-100-A', displayName: 'Cuve compartimentée 2 x 50 hL', type: 'CUVE_INOX', capacityValue: decimal(100), zone: 'Cuverie Est', status: 'EN_SERVICE' },
+      { code: 'FOUDRE-030-A', displayName: 'Foudre 30 hL', type: 'FOUDRE', capacityValue: decimal(30), zone: 'Elevage Bois', status: 'EN_ELEVAGE' },
+      { code: 'BARRIQUE-228-A', displayName: 'Barrique 228 L A', type: 'BARRIQUE', capacityValue: decimal(2.28), zone: 'Elevage Bois', status: 'RESERVE_TIRAGE' },
+      { code: 'BARRIQUE-228-B', displayName: 'Barrique 228 L B', type: 'BARRIQUE', capacityValue: decimal(2.28), zone: 'Elevage Bois', status: 'A_NETTOYER' },
+      { code: 'DEMI-MUID-600-A', displayName: 'Demi-muid 600 L A', type: 'DEMI_MUID', capacityValue: decimal(6), zone: 'Elevage Bois', status: 'EN_ELEVAGE' },
+      { code: 'DEMI-MUID-600-B', displayName: 'Demi-muid 600 L B', type: 'DEMI_MUID', capacityValue: decimal(6), zone: 'Elevage Bois', status: 'VIDE' },
+    ] as const;
 
+    const rootInsert = await tx.container.createMany({
+      data: rootContainers.map((container) => ({
+        code: container.code,
+        displayName: container.displayName,
+        type: container.type,
+        capacityValue: container.capacityValue,
+        capacityUnit: 'hL',
+        site: DEMO_CAVE_NAME,
+        zone: container.zone,
+        status: container.status,
+      })),
+    });
+    counts.containers += rootInsert.count;
+
+    const rootRecords = await tx.container.findMany({
+      where: {
+        code: { in: rootContainers.map((container) => container.code) },
+      },
+      select: {
+        id: true,
+        code: true,
+      },
+    });
+    const rootMap = new Map(rootRecords.map((container) => [container.code, container.id] as const));
+    const parentId = rootMap.get('CUV-COMP-100-A');
+
+    if (!parentId) {
+      throw new Error('Cuve parent compartimentée introuvable après insertion.');
+    }
+
+    const childInsert = await tx.container.createMany({
+      data: [
+        {
+          code: 'CUV-COMP-050-A',
+          displayName: 'Compartiment A 50 hL',
+          type: 'COMPARTIMENT',
+          capacityValue: decimal(50),
+          capacityUnit: 'hL',
+          site: DEMO_CAVE_NAME,
+          zone: 'Cuverie Est',
+          status: 'EN_ELEVAGE',
+          parentId,
+        },
+        {
+          code: 'CUV-COMP-050-B',
+          displayName: 'Compartiment B 50 hL',
+          type: 'COMPARTIMENT',
+          capacityValue: decimal(50),
+          capacityUnit: 'hL',
+          site: DEMO_CAVE_NAME,
+          zone: 'Cuverie Est',
+          status: 'EN_ELEVAGE',
+          parentId,
+        },
+      ],
+    });
+    counts.containers += childInsert.count;
+
+    const allCodes = [
+      ...rootContainers.map((container) => container.code),
+      'CUV-COMP-050-A',
+      'CUV-COMP-050-B',
+    ];
+    const allContainers = await tx.container.findMany({
+      where: {
+        code: { in: allCodes },
+      },
+      select: {
+        id: true,
+        code: true,
+      },
+    });
+
+    const containerIds = new Map(allContainers.map((container) => [container.code, container.id] as const));
+    for (const code of allCodes) {
+      if (!containerIds.has(code)) {
+        throw new Error(`Contenant démo introuvable après insertion: ${code}.`);
+      }
+    }
+
+    return containerIds;
+  }
+
+  private static async seedLotsAndAnalyses(
+    tx: Tx,
+    counts: Omit<AdminSeedCounts, 'operations'>,
+    containerIds: SeedContainerMap,
+  ): Promise<SeedLotMap> {
     const lotDefinitions = [
       {
         technicalCode: 'LOT-CH-AVIZE-2026',
@@ -418,7 +541,7 @@ export class AdminResetService {
         sequenceNumber: 1,
         status: 'FERMENTATION_ALCOOLIQUE',
         currentVolume: 46.8,
-        currentContainerId: inox50.id,
+        currentContainerCode: 'CUV-INX-050-A',
         qualiteLot: 'CUVEE',
         notes: `${DEMO_CAVE_NAME} · sélection parcellaire Avize`,
         components: [{ grapeCode: 'CH', percentage: 100 }],
@@ -432,7 +555,7 @@ export class AdminResetService {
         sequenceNumber: 2,
         status: 'MOUT_DEBOURBE',
         currentVolume: 23.6,
-        currentContainerId: inox25.id,
+        currentContainerCode: 'CUV-INX-025-A',
         qualiteLot: 'CUVEE',
         notes: `${DEMO_CAVE_NAME} · moût débourbé en froid`,
         components: [{ grapeCode: 'CH', percentage: 100 }],
@@ -446,7 +569,7 @@ export class AdminResetService {
         sequenceNumber: 3,
         status: 'VIN_DE_BASE',
         currentVolume: 98.2,
-        currentContainerId: inox100.id,
+        currentContainerCode: 'CUV-INX-100-A',
         qualiteLot: 'TAILLE',
         notes: `${DEMO_CAVE_NAME} · base structurante`,
         components: [{ grapeCode: 'PN', percentage: 100 }],
@@ -460,7 +583,7 @@ export class AdminResetService {
         sequenceNumber: 4,
         status: 'FERMENTATION_MALOLACTIQUE',
         currentVolume: 47.1,
-        currentContainerId: compartimentA.id,
+        currentContainerCode: 'CUV-COMP-050-A',
         qualiteLot: 'CUVEE',
         notes: `${DEMO_CAVE_NAME} · lot parcellaire Bouzy`,
         components: [{ grapeCode: 'PN', percentage: 100 }],
@@ -474,7 +597,7 @@ export class AdminResetService {
         sequenceNumber: 5,
         status: 'VIN_DE_BASE',
         currentVolume: 43.9,
-        currentContainerId: compartimentB.id,
+        currentContainerCode: 'CUV-COMP-050-B',
         qualiteLot: 'CUVEE',
         notes: `${DEMO_CAVE_NAME} · Meunier frais et souple`,
         components: [{ grapeCode: 'PM', percentage: 100 }],
@@ -488,10 +611,24 @@ export class AdminResetService {
         sequenceNumber: 6,
         status: 'VIN_DE_BASE',
         currentVolume: 5.4,
-        currentContainerId: demiMuidB.id,
+        currentContainerCode: 'DEMI-MUID-600-B',
         qualiteLot: 'TAILLE',
         notes: `${DEMO_CAVE_NAME} · lot test sur petit contenant`,
         components: [{ grapeCode: 'PM', percentage: 100 }],
+      },
+      {
+        technicalCode: 'LOT-ROUGE-BOUZY-2025',
+        businessCode: 'Vin Rouge Bouzy 2025',
+        year: 2025,
+        mainGrapeCode: 'PN',
+        placeCode: 'BOUZY-LES-TERRES-ROUGES',
+        sequenceNumber: 7,
+        status: 'VIN_ROUGE',
+        currentVolume: 8.4,
+        currentContainerCode: 'CUV-INX-015-ROUGE',
+        qualiteLot: 'CUVEE',
+        notes: `${DEMO_CAVE_NAME} · vin rouge de réserve pour rosé d'assemblage`,
+        components: [{ grapeCode: 'PN', percentage: 100 }],
       },
       {
         technicalCode: 'LOT-BSA-BRUT-2026',
@@ -499,10 +636,10 @@ export class AdminResetService {
         year: 2026,
         mainGrapeCode: 'MULTI',
         placeCode: 'DOMAINE-DES-TROIS-COTEAUX',
-        sequenceNumber: 7,
+        sequenceNumber: 8,
         status: 'ASSEMBLAGE',
         currentVolume: 186.4,
-        currentContainerId: inox200.id,
+        currentContainerCode: 'CUV-INX-200-A',
         qualiteLot: 'CUVEE',
         notes: `${DEMO_CAVE_NAME} · base non millésimée`,
         components: [
@@ -517,10 +654,10 @@ export class AdminResetService {
         year: 2026,
         mainGrapeCode: 'PN',
         placeCode: 'DOMAINE-DES-TROIS-COTEAUX',
-        sequenceNumber: 8,
+        sequenceNumber: 9,
         status: 'ASSEMBLAGE',
         currentVolume: 5.65,
-        currentContainerId: demiMuidA.id,
+        currentContainerCode: 'DEMI-MUID-600-A',
         qualiteLot: 'CUVEE',
         notes: `${DEMO_CAVE_NAME} · base rosé de macération courte`,
         components: [
@@ -535,10 +672,10 @@ export class AdminResetService {
         year: 2025,
         mainGrapeCode: 'MULTI',
         placeCode: 'DOMAINE-DES-TROIS-COTEAUX',
-        sequenceNumber: 9,
+        sequenceNumber: 10,
         status: 'RESERVE',
-        currentVolume: 28.7,
-        currentContainerId: foudre.id,
+        currentVolume: 26.9,
+        currentContainerCode: 'FOUDRE-030-A',
         qualiteLot: 'RESERVE',
         notes: `${DEMO_CAVE_NAME} · réserve élevée sous bois`,
         components: [
@@ -549,10 +686,14 @@ export class AdminResetService {
       },
     ] as const;
 
-    const createdLots = new Map<string, { id: number; currentContainerId: number | null }>();
-    for (const definition of lotDefinitions) {
-      const lot = await tx.lot.create({
-        data: {
+    const lotInsert = await tx.lot.createMany({
+      data: lotDefinitions.map((definition) => {
+        const currentContainerId = containerIds.get(definition.currentContainerCode);
+        if (!currentContainerId) {
+          throw new Error(`Contenant introuvable pour le lot démo ${definition.businessCode}.`);
+        }
+
+        return {
           technicalCode: definition.technicalCode,
           businessCode: definition.businessCode,
           year: definition.year,
@@ -561,28 +702,45 @@ export class AdminResetService {
           sequenceNumber: definition.sequenceNumber,
           status: definition.status,
           currentVolume: decimal(definition.currentVolume),
-          currentContainerId: definition.currentContainerId,
+          currentContainerId,
           qualiteLot: definition.qualiteLot,
           notes: definition.notes,
-        },
-      });
-      createdLots.set(definition.businessCode, {
-        id: lot.id,
-        currentContainerId: definition.currentContainerId ?? null,
-      });
-      counts.lots += 1;
+        };
+      }),
+    });
+    counts.lots += lotInsert.count;
 
-      for (const component of definition.components) {
-        await tx.lotComponent.create({
-          data: {
-            lotId: lot.id,
-            grapeCode: component.grapeCode,
-            percentage: decimal(component.percentage, 2),
-          },
-        });
-        counts.lotComponents += 1;
+    const createdLots = await tx.lot.findMany({
+      where: {
+        businessCode: { in: lotDefinitions.map((definition) => definition.businessCode) },
+      },
+      select: {
+        id: true,
+        businessCode: true,
+      },
+    });
+    const lotIds = new Map(createdLots.map((lot) => [lot.businessCode, lot.id] as const));
+    for (const definition of lotDefinitions) {
+      if (!lotIds.has(definition.businessCode)) {
+        throw new Error(`Lot démo introuvable après insertion: ${definition.businessCode}.`);
       }
     }
+
+    const lotComponentInsert = await tx.lotComponent.createMany({
+      data: lotDefinitions.flatMap((definition) => {
+        const lotId = lotIds.get(definition.businessCode);
+        if (!lotId) {
+          throw new Error(`Lot démo introuvable pour composant: ${definition.businessCode}.`);
+        }
+
+        return definition.components.map((component) => ({
+          lotId,
+          grapeCode: component.grapeCode,
+          percentage: decimal(component.percentage, 2),
+        }));
+      }),
+    });
+    counts.lotComponents += lotComponentInsert.count;
 
     const analysisDefinitions = [
       { lotCode: 'CH-AVIZE-2026', analysisDate: '2026-09-11', alcohol: 10.4, ph: 3.04, at: 7.8, so2Free: 18, so2Total: 64, sucresResiduel: 1.8, aciditeVolatile: 0.18, turbiditeNtu: 140 },
@@ -591,20 +749,21 @@ export class AdminResetService {
       { lotCode: 'PN-BOUZY-2026', analysisDate: '2026-09-12', alcohol: 10.7, ph: 3.11, at: 6.8, so2Free: 15, so2Total: 57, sucresResiduel: 1.4, aciditeVolatile: 0.24, turbiditeNtu: 90 },
       { lotCode: 'ME-DAMERY-2026', analysisDate: '2026-09-13', alcohol: 10.0, ph: 3.03, at: 7.6, so2Free: 20, so2Total: 68, sucresResiduel: 2.1, aciditeVolatile: 0.17, turbiditeNtu: 120 },
       { lotCode: 'ME-FESTIGNY-2026', analysisDate: '2026-09-13', alcohol: 9.8, ph: 2.99, at: 8.2, so2Free: 19, so2Total: 70, sucresResiduel: 2.5, aciditeVolatile: 0.18, turbiditeNtu: 132 },
+      { lotCode: 'Vin Rouge Bouzy 2025', analysisDate: '2026-09-22', alcohol: 10.9, ph: 3.18, at: 6.4, so2Free: 18, so2Total: 52, sucresResiduel: 1.3, aciditeVolatile: 0.29, turbiditeNtu: 48 },
       { lotCode: 'Assemblage BSA Brut', analysisDate: '2026-10-03', alcohol: 10.6, ph: 3.08, at: 7.2, so2Free: 22, so2Total: 82, sucresResiduel: 1.6, aciditeVolatile: 0.21, turbiditeNtu: 60 },
       { lotCode: 'Base Rosé', analysisDate: '2026-10-04', alcohol: 10.5, ph: 3.1, at: 7.1, so2Free: 23, so2Total: 79, sucresResiduel: 1.9, aciditeVolatile: 0.23, turbiditeNtu: 70 },
       { lotCode: 'Vin de réserve 2025', analysisDate: '2026-10-05', alcohol: 10.9, ph: 3.14, at: 6.7, so2Free: 24, so2Total: 90, sucresResiduel: 1.2, aciditeVolatile: 0.26, turbiditeNtu: 45 },
     ] as const;
 
-    for (const analysis of analysisDefinitions) {
-      const lot = createdLots.get(analysis.lotCode);
-      if (!lot) {
-        continue;
-      }
+    const analysisInsert = await tx.analysis.createMany({
+      data: analysisDefinitions.map((analysis) => {
+        const lotId = lotIds.get(analysis.lotCode);
+        if (!lotId) {
+          throw new Error(`Lot démo introuvable pour analyse: ${analysis.lotCode}.`);
+        }
 
-      await tx.analysis.create({
-        data: {
-          lotId: lot.id,
+        return {
+          lotId,
           analysisDate: new Date(`${analysis.analysisDate}T09:00:00.000Z`),
           alcohol: analysis.alcohol,
           ph: analysis.ph,
@@ -617,11 +776,19 @@ export class AdminResetService {
             aciditeVolatile: analysis.aciditeVolatile,
             turbiditeNtu: analysis.turbiditeNtu,
           },
-        },
-      });
-      counts.analyses += 1;
-    }
+        };
+      }),
+    });
+    counts.analyses += analysisInsert.count;
 
+    return lotIds;
+  }
+
+  private static async seedProductsAndStockMovements(
+    tx: Tx,
+    operator: SeedOperator,
+    counts: Omit<AdminSeedCounts, 'operations'>,
+  ) {
     const productDefinitions = [
       { name: 'SO2 solution 6 %', category: 'Intrants', subCategory: 'Sulfites', unit: 'L', minStock: 20, currentStock: 48 },
       { name: 'Levure prise de mousse', category: 'Intrants', subCategory: 'Levures', unit: 'kg', minStock: 5, currentStock: 15 },
@@ -635,399 +802,347 @@ export class AdminResetService {
       { name: 'Adjuvant de remuage', category: 'Intrants', subCategory: 'Adjuvants', unit: 'L', minStock: 4, currentStock: 10 },
     ] as const;
 
-    for (const productDefinition of productDefinitions) {
-      const product = await tx.product.create({
-        data: {
-          name: productDefinition.name,
-          category: productDefinition.category,
-          subCategory: productDefinition.subCategory,
-          unit: productDefinition.unit,
-          minStock: decimal(productDefinition.minStock),
-          currentStock: decimal(productDefinition.currentStock),
-        },
-      });
-      counts.products += 1;
+    const productInsert = await tx.product.createMany({
+      data: productDefinitions.map((product) => ({
+        name: product.name,
+        category: product.category,
+        subCategory: product.subCategory,
+        unit: product.unit,
+        minStock: decimal(product.minStock),
+        currentStock: decimal(product.currentStock),
+      })),
+    });
+    counts.products += productInsert.count;
 
-      await tx.stockMovement.create({
-        data: {
-          productId: product.id,
+    const products = await tx.product.findMany({
+      where: {
+        name: { in: productDefinitions.map((product) => product.name) },
+      },
+      select: {
+        id: true,
+        name: true,
+      },
+    });
+    const productMap = new Map(products.map((product) => [product.name, product.id] as const));
+
+    const stockMovementInsert = await tx.stockMovement.createMany({
+      data: productDefinitions.map((product) => {
+        const productId = productMap.get(product.name);
+        if (!productId) {
+          throw new Error(`Produit démo introuvable après insertion: ${product.name}.`);
+        }
+
+        return {
+          productId,
           type: 'IN',
-          quantity: decimal(productDefinition.currentStock),
+          quantity: decimal(product.currentStock),
           note: `${DEMO_CAVE_NAME} · stock initial démo`,
           operator: operator.email,
-        },
-      });
-      counts.stockMovements += 1;
-    }
+        };
+      }),
+    });
+    counts.stockMovements += stockMovementInsert.count;
+  }
 
-    const bsaBrut = createdLots.get('Assemblage BSA Brut');
-    const chAvize = createdLots.get('CH-AVIZE-2026');
-    const chCramant = createdLots.get('CH-CRAMANT-2026');
-    const pnAy = createdLots.get('PN-AY-2026');
-    const pnBouzy = createdLots.get('PN-BOUZY-2026');
-    const meDamery = createdLots.get('ME-DAMERY-2026');
-    const reserve = createdLots.get('Vin de réserve 2025');
-    const baseRose = createdLots.get('Base Rosé');
-
-    if (!bsaBrut || !chAvize || !chCramant || !pnAy || !pnBouzy || !meDamery || !reserve || !baseRose) {
-      throw new Error('Lots de démonstration incomplets après création.');
-    }
-
-    const lotEvent1 = await tx.lotEvent.create({
-      data: {
+  private static async seedLotEvents(
+    tx: Tx,
+    operator: SeedOperator,
+    counts: Omit<AdminSeedCounts, 'operations'>,
+    containerIds: SeedContainerMap,
+    lotIds: SeedLotMap,
+  ) {
+    const eventDefinitions = [
+      {
         eventType: 'DEBOURBAGE',
-        eventDatetime: new Date('2026-09-01T09:00:00.000Z'),
-        operatorUserId: operator.id,
+        eventDatetime: '2026-09-01T09:00:00.000Z',
         comment: `${DEMO_CAVE_NAME} · débourbage statique Chardonnay Avize`,
+        lotLinks: [{ lotCode: 'CH-AVIZE-2026', roleInEvent: 'CIBLE', volumeChange: 46.8 }],
+        containerLinks: [{ containerCode: 'CUV-INX-050-A', roleInEvent: 'CIBLE' }],
       },
-    });
-    counts.lotEvents += 1;
-    await tx.lotEventLot.create({
-      data: {
-        eventId: lotEvent1.id,
-        lotId: chAvize.id,
-        roleInEvent: 'CIBLE',
-        volumeChange: decimal(46.8),
-      },
-    });
-    counts.lotEventLots += 1;
-    await tx.lotEventContainer.create({
-      data: {
-        eventId: lotEvent1.id,
-        containerId: inox50.id,
-        roleInEvent: 'CIBLE',
-      },
-    });
-    counts.lotEventContainers += 1;
-
-    const lotEvent2 = await tx.lotEvent.create({
-      data: {
+      {
         eventType: 'LEVURAGE',
-        eventDatetime: new Date('2026-09-01T14:00:00.000Z'),
-        operatorUserId: operator.id,
+        eventDatetime: '2026-09-01T14:00:00.000Z',
         comment: `${DEMO_CAVE_NAME} · levurage Chardonnay Cramant`,
+        lotLinks: [{ lotCode: 'CH-CRAMANT-2026', roleInEvent: 'CIBLE', volumeChange: 23.6 }],
+        containerLinks: [{ containerCode: 'CUV-INX-025-A', roleInEvent: 'CIBLE' }],
       },
-    });
-    counts.lotEvents += 1;
-    await tx.lotEventLot.create({
-      data: {
-        eventId: lotEvent2.id,
-        lotId: chCramant.id,
-        roleInEvent: 'CIBLE',
-        volumeChange: decimal(23.6),
-      },
-    });
-    counts.lotEventLots += 1;
-    await tx.lotEventContainer.create({
-      data: {
-        eventId: lotEvent2.id,
-        containerId: inox25.id,
-        roleInEvent: 'CIBLE',
-      },
-    });
-    counts.lotEventContainers += 1;
-
-    const lotEvent3 = await tx.lotEvent.create({
-      data: {
+      {
         eventType: 'FERMENTATION_ALCOOLIQUE',
-        eventDatetime: new Date('2026-09-03T08:00:00.000Z'),
-        operatorUserId: operator.id,
+        eventDatetime: '2026-09-03T08:00:00.000Z',
         comment: `${DEMO_CAVE_NAME} · départ FA Pinot Noir Aÿ`,
+        lotLinks: [{ lotCode: 'PN-AY-2026', roleInEvent: 'CIBLE', volumeChange: 98.2 }],
+        containerLinks: [{ containerCode: 'CUV-INX-100-A', roleInEvent: 'CIBLE' }],
       },
-    });
-    counts.lotEvents += 1;
-    await tx.lotEventLot.create({
-      data: {
-        eventId: lotEvent3.id,
-        lotId: pnAy.id,
-        roleInEvent: 'CIBLE',
-        volumeChange: decimal(98.2),
-      },
-    });
-    counts.lotEventLots += 1;
-    await tx.lotEventContainer.create({
-      data: {
-        eventId: lotEvent3.id,
-        containerId: inox100.id,
-        roleInEvent: 'CIBLE',
-      },
-    });
-    counts.lotEventContainers += 1;
-
-    const lotEvent4 = await tx.lotEvent.create({
-      data: {
+      {
         eventType: 'SOUTIRAGE',
-        eventDatetime: new Date('2026-09-09T10:00:00.000Z'),
-        operatorUserId: operator.id,
+        eventDatetime: '2026-09-09T10:00:00.000Z',
         comment: `${DEMO_CAVE_NAME} · soutirage Pinot Noir Bouzy`,
+        lotLinks: [{ lotCode: 'PN-BOUZY-2026', roleInEvent: 'CIBLE', volumeChange: 47.1 }],
+        containerLinks: [{ containerCode: 'CUV-COMP-050-A', roleInEvent: 'CIBLE' }],
       },
-    });
-    counts.lotEvents += 1;
-    await tx.lotEventLot.create({
-      data: {
-        eventId: lotEvent4.id,
-        lotId: pnBouzy.id,
-        roleInEvent: 'CIBLE',
-        volumeChange: decimal(47.1),
-      },
-    });
-    counts.lotEventLots += 1;
-    await tx.lotEventContainer.create({
-      data: {
-        eventId: lotEvent4.id,
-        containerId: compartimentA.id,
-        roleInEvent: 'CIBLE',
-      },
-    });
-    counts.lotEventContainers += 1;
-
-    const lotEvent5 = await tx.lotEvent.create({
-      data: {
+      {
         eventType: 'SULFITAGE',
-        eventDatetime: new Date('2026-09-10T11:30:00.000Z'),
-        operatorUserId: operator.id,
+        eventDatetime: '2026-09-10T11:30:00.000Z',
         comment: `${DEMO_CAVE_NAME} · sulfitage Meunier Damery`,
+        lotLinks: [{ lotCode: 'ME-DAMERY-2026', roleInEvent: 'CIBLE', volumeChange: 43.9 }],
+        containerLinks: [{ containerCode: 'CUV-COMP-050-B', roleInEvent: 'CIBLE' }],
       },
-    });
-    counts.lotEvents += 1;
-    await tx.lotEventLot.create({
-      data: {
-        eventId: lotEvent5.id,
-        lotId: meDamery.id,
-        roleInEvent: 'CIBLE',
-        volumeChange: decimal(43.9),
-      },
-    });
-    counts.lotEventLots += 1;
-    await tx.lotEventContainer.create({
-      data: {
-        eventId: lotEvent5.id,
-        containerId: compartimentB.id,
-        roleInEvent: 'CIBLE',
-      },
-    });
-    counts.lotEventContainers += 1;
-
-    const lotEvent6 = await tx.lotEvent.create({
-      data: {
+      {
         eventType: 'ASSEMBLAGE',
-        eventDatetime: new Date('2026-10-01T08:30:00.000Z'),
-        operatorUserId: operator.id,
+        eventDatetime: '2026-10-01T08:30:00.000Z',
         comment: `${DEMO_CAVE_NAME} · assemblage BSA Brut`,
+        lotLinks: [
+          { lotCode: 'CH-AVIZE-2026', roleInEvent: 'SOURCE', volumeChange: 55 },
+          { lotCode: 'PN-AY-2026', roleInEvent: 'SOURCE', volumeChange: 75 },
+          { lotCode: 'ME-DAMERY-2026', roleInEvent: 'SOURCE', volumeChange: 38 },
+          { lotCode: 'Vin de réserve 2025', roleInEvent: 'SOURCE', volumeChange: 18.4 },
+          { lotCode: 'Assemblage BSA Brut', roleInEvent: 'CIBLE', volumeChange: 186.4 },
+        ],
+        containerLinks: [{ containerCode: 'CUV-INX-200-A', roleInEvent: 'CIBLE' }],
       },
-    });
-    counts.lotEvents += 1;
-    for (const link of [
-      { lotId: chAvize.id, roleInEvent: 'SOURCE', volumeChange: 55 },
-      { lotId: pnAy.id, roleInEvent: 'SOURCE', volumeChange: 75 },
-      { lotId: meDamery.id, roleInEvent: 'SOURCE', volumeChange: 38 },
-      { lotId: reserve.id, roleInEvent: 'SOURCE', volumeChange: 18.4 },
-      { lotId: bsaBrut.id, roleInEvent: 'CIBLE', volumeChange: 186.4 },
-    ]) {
-      await tx.lotEventLot.create({
-        data: {
-          eventId: lotEvent6.id,
-          lotId: link.lotId,
-          roleInEvent: link.roleInEvent,
-          volumeChange: decimal(link.volumeChange),
-        },
-      });
-      counts.lotEventLots += 1;
-    }
-    await tx.lotEventContainer.create({
-      data: {
-        eventId: lotEvent6.id,
-        containerId: inox200.id,
-        roleInEvent: 'CIBLE',
-      },
-    });
-    counts.lotEventContainers += 1;
-
-    const lotEvent7 = await tx.lotEvent.create({
-      data: {
+      {
         eventType: 'ASSEMBLAGE',
-        eventDatetime: new Date('2026-10-02T09:30:00.000Z'),
-        operatorUserId: operator.id,
+        eventDatetime: '2026-10-02T09:30:00.000Z',
         comment: `${DEMO_CAVE_NAME} · préparation Base Rosé`,
+        lotLinks: [
+          { lotCode: 'PN-BOUZY-2026', roleInEvent: 'SOURCE', volumeChange: 3.2 },
+          { lotCode: 'CH-AVIZE-2026', roleInEvent: 'SOURCE', volumeChange: 1.45 },
+          { lotCode: 'ME-DAMERY-2026', roleInEvent: 'SOURCE', volumeChange: 1.0 },
+          { lotCode: 'Base Rosé', roleInEvent: 'CIBLE', volumeChange: 5.65 },
+        ],
+        containerLinks: [{ containerCode: 'DEMI-MUID-600-A', roleInEvent: 'CIBLE' }],
       },
-    });
-    counts.lotEvents += 1;
-    for (const link of [
-      { lotId: pnBouzy.id, roleInEvent: 'SOURCE', volumeChange: 3.2 },
-      { lotId: chAvize.id, roleInEvent: 'SOURCE', volumeChange: 1.45 },
-      { lotId: meDamery.id, roleInEvent: 'SOURCE', volumeChange: 1.0 },
-      { lotId: baseRose.id, roleInEvent: 'CIBLE', volumeChange: 5.65 },
-    ]) {
-      await tx.lotEventLot.create({
+      {
+        eventType: 'ELEVAGE',
+        eventDatetime: '2026-10-03T07:15:00.000Z',
+        comment: `${DEMO_CAVE_NAME} · maintien d'un vin rouge de réserve pour assemblage rosé`,
+        lotLinks: [{ lotCode: 'Vin Rouge Bouzy 2025', roleInEvent: 'CIBLE', volumeChange: 8.4 }],
+        containerLinks: [{ containerCode: 'CUV-INX-015-ROUGE', roleInEvent: 'CIBLE' }],
+      },
+      {
+        eventType: 'PREPARATION_TIRAGE',
+        eventDatetime: '2027-03-05T08:45:00.000Z',
+        comment: `${DEMO_CAVE_NAME} · préparation de liqueur de tirage BSA`,
+        lotLinks: [{ lotCode: 'Assemblage BSA Brut', roleInEvent: 'SOURCE', volumeChange: 111 }],
+        containerLinks: [{ containerCode: 'CUV-INX-200-A', roleInEvent: 'SOURCE' }],
+      },
+      {
+        eventType: 'TIRAGE',
+        eventDatetime: '2027-03-06T07:30:00.000Z',
+        comment: `${DEMO_CAVE_NAME} · tirage cuvée BSA Brut`,
+        lotLinks: [{ lotCode: 'Assemblage BSA Brut', roleInEvent: 'SOURCE', volumeChange: 111 }],
+        containerLinks: [{ containerCode: 'CUV-INX-200-A', roleInEvent: 'SOURCE' }],
+      },
+      {
+        eventType: 'ELEVAGE',
+        eventDatetime: '2026-11-15T10:15:00.000Z',
+        comment: `${DEMO_CAVE_NAME} · suivi élevage réserve 2025`,
+        lotLinks: [{ lotCode: 'Vin de réserve 2025', roleInEvent: 'CIBLE', volumeChange: 28.7 }],
+        containerLinks: [{ containerCode: 'FOUDRE-030-A', roleInEvent: 'CIBLE' }],
+      },
+    ] as const;
+
+    for (const eventDefinition of eventDefinitions) {
+      const lotEvent = await tx.lotEvent.create({
         data: {
-          eventId: lotEvent7.id,
-          lotId: link.lotId,
-          roleInEvent: link.roleInEvent,
-          volumeChange: decimal(link.volumeChange),
+          eventType: eventDefinition.eventType,
+          eventDatetime: new Date(eventDefinition.eventDatetime),
+          operatorUserId: operator.id,
+          comment: eventDefinition.comment,
         },
       });
-      counts.lotEventLots += 1;
+      counts.lotEvents += 1;
+
+      const lotLinksInsert = await tx.lotEventLot.createMany({
+        data: eventDefinition.lotLinks.map((link) => {
+          const lotId = lotIds.get(link.lotCode);
+          if (!lotId) {
+            throw new Error(`Lot démo introuvable pour évènement: ${link.lotCode}.`);
+          }
+
+          return {
+            eventId: lotEvent.id,
+            lotId,
+            roleInEvent: link.roleInEvent,
+            volumeChange: decimal(link.volumeChange),
+          };
+        }),
+      });
+      counts.lotEventLots += lotLinksInsert.count;
+
+      const containerLinksInsert = await tx.lotEventContainer.createMany({
+        data: eventDefinition.containerLinks.map((link) => {
+          const containerId = containerIds.get(link.containerCode);
+          if (!containerId) {
+            throw new Error(`Contenant démo introuvable pour évènement: ${link.containerCode}.`);
+          }
+
+          return {
+            eventId: lotEvent.id,
+            containerId,
+            roleInEvent: link.roleInEvent,
+          };
+        }),
+      });
+      counts.lotEventContainers += containerLinksInsert.count;
     }
-    await tx.lotEventContainer.create({
-      data: {
-        eventId: lotEvent7.id,
-        containerId: demiMuidA.id,
-        roleInEvent: 'CIBLE',
-      },
-    });
-    counts.lotEventContainers += 1;
+  }
 
-    const lotEvent8 = await tx.lotEvent.create({
-      data: {
-        eventType: 'PREPARATION_TIRAGE',
-        eventDatetime: new Date('2027-03-05T08:45:00.000Z'),
-        operatorUserId: operator.id,
-        comment: `${DEMO_CAVE_NAME} · préparation de liqueur de tirage BSA`,
-      },
-    });
-    counts.lotEvents += 1;
-    await tx.lotEventLot.create({
-      data: {
-        eventId: lotEvent8.id,
-        lotId: bsaBrut.id,
-        roleInEvent: 'SOURCE',
-        volumeChange: decimal(111),
-      },
-    });
-    counts.lotEventLots += 1;
-    await tx.lotEventContainer.create({
-      data: {
-        eventId: lotEvent8.id,
-        containerId: inox200.id,
-        roleInEvent: 'SOURCE',
-      },
-    });
-    counts.lotEventContainers += 1;
+  private static async seedBottleLotsEventsAndDegustations(
+    tx: Tx,
+    operator: SeedOperator,
+    counts: Omit<AdminSeedCounts, 'operations'>,
+    lotIds: SeedLotMap,
+    createdParcelles: Map<string, CreatedParcelle>,
+  ) {
+    const bsaBrut = lotIds.get('Assemblage BSA Brut');
+    const baseRose = lotIds.get('Base Rosé');
+    const chAvize = lotIds.get('CH-AVIZE-2026');
+    const reserve2025 = lotIds.get('Vin de réserve 2025');
 
-    const lotEvent9 = await tx.lotEvent.create({
-      data: {
-        eventType: 'TIRAGE',
-        eventDatetime: new Date('2027-03-06T07:30:00.000Z'),
-        operatorUserId: operator.id,
-        comment: `${DEMO_CAVE_NAME} · tirage cuvée BSA Brut`,
-      },
-    });
-    counts.lotEvents += 1;
-    await tx.lotEventLot.create({
-      data: {
-        eventId: lotEvent9.id,
-        lotId: bsaBrut.id,
-        roleInEvent: 'SOURCE',
-        volumeChange: decimal(111),
-      },
-    });
-    counts.lotEventLots += 1;
-    await tx.lotEventContainer.create({
-      data: {
-        eventId: lotEvent9.id,
-        containerId: inox200.id,
-        roleInEvent: 'SOURCE',
-      },
-    });
-    counts.lotEventContainers += 1;
+    if (!bsaBrut || !baseRose || !chAvize || !reserve2025) {
+      throw new Error('Lots nécessaires au seed bouteilles/dégustations introuvables.');
+    }
 
-    const lotEvent10 = await tx.lotEvent.create({
-      data: {
-        eventType: 'ELEVAGE',
-        eventDatetime: new Date('2026-11-15T10:15:00.000Z'),
-        operatorUserId: operator.id,
-        comment: `${DEMO_CAVE_NAME} · suivi élevage réserve 2025`,
+    const reserveBottleDefinitions = [
+      {
+        technicalCode: 'BL-RES-2026-0001',
+        businessCode: 'Réserve 2025 75cl',
+        sourceLotId: reserve2025,
+        formatCode: '75cl',
+        initialBottleCount: 120,
+        currentBottleCount: 120,
+        locationZone: 'Réserve bouteilles',
+        locationRack: 'Rack RES-01',
+        locationPalette: 'PAL-RES-75',
       },
-    });
-    counts.lotEvents += 1;
-    await tx.lotEventLot.create({
-      data: {
-        eventId: lotEvent10.id,
-        lotId: reserve.id,
-        roleInEvent: 'CIBLE',
-        volumeChange: decimal(28.7),
+      {
+        technicalCode: 'BL-RES-2026-0002',
+        businessCode: 'Réserve 2025 Magnum',
+        sourceLotId: reserve2025,
+        formatCode: '150cl',
+        initialBottleCount: 60,
+        currentBottleCount: 60,
+        locationZone: 'Réserve bouteilles',
+        locationRack: 'Rack RES-02',
+        locationPalette: 'PAL-RES-MAG',
       },
-    });
-    counts.lotEventLots += 1;
-    await tx.lotEventContainer.create({
-      data: {
-        eventId: lotEvent10.id,
-        containerId: foudre.id,
-        roleInEvent: 'CIBLE',
-      },
-    });
-    counts.lotEventContainers += 1;
+    ] as const;
 
-    const tirage1 = await tx.bottleLot.create({
-      data: {
+    const reserveBottleInsert = await tx.bottleLot.createMany({
+      data: reserveBottleDefinitions.map((definition) => ({
+        technicalCode: definition.technicalCode,
+        businessCode: definition.businessCode,
+        type: 'RESERVE',
+        sourceLotId: definition.sourceLotId,
+        formatCode: definition.formatCode,
+        initialBottleCount: definition.initialBottleCount,
+        currentBottleCount: definition.currentBottleCount,
+        status: 'RESERVE',
+        locationZone: definition.locationZone,
+        locationRack: definition.locationRack,
+        locationPalette: definition.locationPalette,
+      })),
+    });
+    counts.bottleLots += reserveBottleInsert.count;
+
+    const tirageDefinitions = [
+      {
         technicalCode: 'BL-TIRAGE-2027-0001',
         businessCode: 'Tirage BSA Brut Lot 1',
-        type: 'TIRAGE',
-        sourceLotId: bsaBrut.id,
+        sourceLotId: bsaBrut,
         formatCode: '75cl',
         initialBottleCount: 3600,
         currentBottleCount: 3600,
-        status: 'SUR_LATTES',
         tirageDate: new Date('2027-03-06T09:00:00.000Z'),
         locationZone: 'Cellier A',
         locationRack: 'Rack 01',
         locationPalette: 'PAL-001',
       },
-    });
-    const tirage2 = await tx.bottleLot.create({
-      data: {
+      {
         technicalCode: 'BL-TIRAGE-2027-0002',
         businessCode: 'Tirage BSA Brut Lot 2',
-        type: 'TIRAGE',
-        sourceLotId: bsaBrut.id,
+        sourceLotId: bsaBrut,
         formatCode: '75cl',
         initialBottleCount: 3200,
         currentBottleCount: 3200,
-        status: 'SUR_LATTES',
         tirageDate: new Date('2027-03-06T10:30:00.000Z'),
         locationZone: 'Cellier A',
         locationRack: 'Rack 02',
         locationPalette: 'PAL-002',
       },
-    });
-    const tirage3 = await tx.bottleLot.create({
-      data: {
+      {
         technicalCode: 'BL-TIRAGE-2027-0003',
         businessCode: 'Tirage BSA Brut Lot 3',
-        type: 'TIRAGE',
-        sourceLotId: bsaBrut.id,
+        sourceLotId: bsaBrut,
         formatCode: '75cl',
         initialBottleCount: 2800,
         currentBottleCount: 2800,
-        status: 'SUR_LATTES',
         tirageDate: new Date('2027-03-07T08:45:00.000Z'),
         locationZone: 'Cellier B',
         locationRack: 'Rack 03',
         locationPalette: 'PAL-003',
       },
-    });
-    const tirageRose = await tx.bottleLot.create({
-      data: {
+      {
         technicalCode: 'BL-TIRAGE-2027-ROSE-0001',
         businessCode: 'Tirage Base Rosé',
-        type: 'TIRAGE',
-        sourceLotId: baseRose.id,
+        sourceLotId: baseRose,
         formatCode: '75cl',
         initialBottleCount: 600,
         currentBottleCount: 600,
-        status: 'SUR_LATTES',
         tirageDate: new Date('2027-03-07T11:00:00.000Z'),
         locationZone: 'Cellier Rose',
         locationRack: 'Rack 01',
         locationPalette: 'PAL-ROSE-01',
       },
+    ] as const;
+
+    const tirageInsert = await tx.bottleLot.createMany({
+      data: tirageDefinitions.map((definition) => ({
+        technicalCode: definition.technicalCode,
+        businessCode: definition.businessCode,
+        type: 'TIRAGE',
+        sourceLotId: definition.sourceLotId,
+        formatCode: definition.formatCode,
+        initialBottleCount: definition.initialBottleCount,
+        currentBottleCount: definition.currentBottleCount,
+        status: 'SUR_LATTES',
+        tirageDate: definition.tirageDate,
+        locationZone: definition.locationZone,
+        locationRack: definition.locationRack,
+        locationPalette: definition.locationPalette,
+      })),
     });
+    counts.bottleLots += tirageInsert.count;
+
+    const tirageLots = await tx.bottleLot.findMany({
+      where: {
+        technicalCode: { in: tirageDefinitions.map((definition) => definition.technicalCode) },
+      },
+      select: {
+        id: true,
+        technicalCode: true,
+        currentBottleCount: true,
+        tirageDate: true,
+      },
+    });
+    const tirageMap = new Map(tirageLots.map((lot) => [lot.technicalCode, lot] as const));
+
+    const tirage1 = tirageMap.get('BL-TIRAGE-2027-0001');
+    const tirage2 = tirageMap.get('BL-TIRAGE-2027-0002');
+    const tirage3 = tirageMap.get('BL-TIRAGE-2027-0003');
+    const tirageRose = tirageMap.get('BL-TIRAGE-2027-ROSE-0001');
+
+    if (!tirage1 || !tirage2 || !tirage3 || !tirageRose) {
+      throw new Error('Lots bouteilles de tirage introuvables après insertion.');
+    }
+
     const degorge1 = await tx.bottleLot.create({
       data: {
         technicalCode: 'BL-DEG-2028-0001',
         businessCode: 'Dégorgé BSA Brut Lot 1',
         type: 'DEGORGE',
-        sourceLotId: bsaBrut.id,
+        sourceLotId: bsaBrut,
         sourceBottleLotId: tirage1.id,
         formatCode: '75cl',
         initialBottleCount: 1600,
@@ -1047,7 +1162,7 @@ export class AdminResetService {
         technicalCode: 'BL-DEG-2028-0002',
         businessCode: 'Dégorgé BSA Brut Lot 2',
         type: 'DEGORGE',
-        sourceLotId: bsaBrut.id,
+        sourceLotId: bsaBrut,
         sourceBottleLotId: tirage2.id,
         formatCode: '75cl',
         initialBottleCount: 1400,
@@ -1067,7 +1182,7 @@ export class AdminResetService {
         technicalCode: 'BL-HAB-2028-0001',
         businessCode: 'Brut prêt expédition',
         type: 'HABILLE',
-        sourceLotId: bsaBrut.id,
+        sourceLotId: bsaBrut,
         sourceBottleLotId: degorge1.id,
         formatCode: '75cl',
         initialBottleCount: 1000,
@@ -1082,7 +1197,7 @@ export class AdminResetService {
         locationPalette: 'PAL-EXP-01',
       },
     });
-    counts.bottleLots += 7;
+    counts.bottleLots += 3;
 
     const bottleEvent1 = await tx.bottleEvent.create({
       data: {
@@ -1093,17 +1208,15 @@ export class AdminResetService {
       },
     });
     counts.bottleEvents += 1;
-    for (const bottleLot of [tirage1, tirage2, tirage3, tirageRose]) {
-      await tx.bottleEventLink.create({
-        data: {
-          eventId: bottleEvent1.id,
-          bottleLotId: bottleLot.id,
-          roleInEvent: 'CIBLE',
-          bottleCount: bottleLot.currentBottleCount,
-        },
-      });
-      counts.bottleEventLinks += 1;
-    }
+    const bottleEvent1Links = await tx.bottleEventLink.createMany({
+      data: [tirage1, tirage2, tirage3, tirageRose].map((bottleLot) => ({
+        eventId: bottleEvent1.id,
+        bottleLotId: bottleLot.id,
+        roleInEvent: 'CIBLE',
+        bottleCount: bottleLot.currentBottleCount,
+      })),
+    });
+    counts.bottleEventLinks += bottleEvent1Links.count;
 
     const bottleEvent2 = await tx.bottleEvent.create({
       data: {
@@ -1114,17 +1227,15 @@ export class AdminResetService {
       },
     });
     counts.bottleEvents += 1;
-    for (const bottleLot of [degorge1, degorge2]) {
-      await tx.bottleEventLink.create({
-        data: {
-          eventId: bottleEvent2.id,
-          bottleLotId: bottleLot.id,
-          roleInEvent: 'CIBLE',
-          bottleCount: bottleLot.currentBottleCount,
-        },
-      });
-      counts.bottleEventLinks += 1;
-    }
+    const bottleEvent2Links = await tx.bottleEventLink.createMany({
+      data: [degorge1, degorge2].map((bottleLot) => ({
+        eventId: bottleEvent2.id,
+        bottleLotId: bottleLot.id,
+        roleInEvent: 'CIBLE',
+        bottleCount: bottleLot.currentBottleCount,
+      })),
+    });
+    counts.bottleEventLinks += bottleEvent2Links.count;
 
     const bottleEvent3 = await tx.bottleEvent.create({
       data: {
@@ -1135,17 +1246,19 @@ export class AdminResetService {
       },
     });
     counts.bottleEvents += 1;
-    await tx.bottleEventLink.create({
-      data: {
-        eventId: bottleEvent3.id,
-        bottleLotId: pretExpedition.id,
-        roleInEvent: 'CIBLE',
-        bottleCount: pretExpedition.currentBottleCount,
-      },
+    const bottleEvent3Links = await tx.bottleEventLink.createMany({
+      data: [
+        {
+          eventId: bottleEvent3.id,
+          bottleLotId: pretExpedition.id,
+          roleInEvent: 'CIBLE',
+          bottleCount: pretExpedition.currentBottleCount,
+        },
+      ],
     });
-    counts.bottleEventLinks += 1;
+    counts.bottleEventLinks += bottleEvent3Links.count;
 
-    await tx.degustation.createMany({
+    const degustationInsert = await tx.degustation.createMany({
       data: [
         {
           date: new Date('2026-08-19T10:00:00.000Z'),
@@ -1161,7 +1274,7 @@ export class AdminResetService {
         {
           date: new Date('2026-10-06T09:30:00.000Z'),
           phase: 'VINS_CLAIRS',
-          lotId: String(chAvize.id),
+          lotId: String(chAvize),
           robe: 'Cristalline',
           nez: 'Citron confit, fleurs blanches',
           bouche: 'Droite, saline, finale longue',
@@ -1183,8 +1296,6 @@ export class AdminResetService {
         },
       ],
     });
-    counts.degustations += 3;
-
-    return withOperationCount(counts);
+    counts.degustations += degustationInsert.count;
   }
 }

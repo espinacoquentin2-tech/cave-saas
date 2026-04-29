@@ -35,6 +35,23 @@ export class BottleModuleService {
     return prisma.bottleLot.findMany({
       where: input.id ? { id: input.id } : undefined,
       orderBy: { id: 'desc' },
+      include: {
+        sourceLot: {
+          include: {
+            components: true,
+            currentContainer: {
+              select: {
+                id: true,
+                code: true,
+                displayName: true,
+                type: true,
+                capacityValue: true,
+                status: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 
