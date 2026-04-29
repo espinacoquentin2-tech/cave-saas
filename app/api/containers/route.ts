@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { Prisma } from '@prisma/client';
 import { z, ZodError } from 'zod';
-import { logger } from '@/server/shared/logger';
+import { logger, logApiError } from '@/server/shared/logger';
 import { prisma } from '@/server/shared/prisma';
 import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
@@ -30,9 +30,11 @@ const deleteContainerQuerySchema = z.object({
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
+  const route = '/api/containers';
+  let actor: Awaited<ReturnType<typeof resolveAuthenticatedActor>> | null = null;
 
   try {
-    const actor = await resolveAuthenticatedActor(request);
+    actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
     const containers = await prisma.container.findMany({
       where: { status: { not: 'ARCHIVÉE' } },
@@ -44,7 +46,7 @@ export async function GET(request: Request) {
       requestId,
       userEmail: actor.email,
       role: actor.role,
-      details: { count: containers.length },
+      details: { route, count: containers.length },
     });
 
     return NextResponse.json(containers, { status: 200, headers: { 'x-request-id': requestId } });
@@ -73,7 +75,13 @@ export async function GET(request: Request) {
       return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });
     }
 
-    logger.error({ action: 'containers.get.unhandled_error', requestId, details: { error: error instanceof Error ? error.message : 'unknown_error' } });
+    logApiError({
+      action: 'containers.get.unhandled_error',
+      route,
+      requestId,
+      actor,
+      error,
+    });
     return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
   }
 }

@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { ForbiddenError, UnauthorizedError } from '@/lib/errors';
+import { logger } from '@/server/shared/logger';
 import { prisma } from '@/server/shared/prisma';
 
 export const requestActorSchema = z.object({
@@ -13,6 +14,7 @@ export type RequestActor = z.infer<typeof requestActorSchema>;
 export const READ_ROLES: Array<RequestActor['role']> = ['ADMIN', 'CHEF_CAVE', 'CAVISTE', 'LECTURE_SEULE'];
 export const WRITE_ROLES: Array<RequestActor['role']> = ['ADMIN', 'CHEF_CAVE', 'CAVISTE'];
 export const DELETE_ROLES: Array<RequestActor['role']> = ['ADMIN', 'CHEF_CAVE'];
+const DEVELOPMENT_ADMIN_LOCAL_PART = 'espinacoquentin2';
 
 const normalizePersistedRole = (role: string | null | undefined) => {
   if (!role) {
@@ -29,6 +31,14 @@ const normalizePersistedRole = (role: string | null | undefined) => {
   }
 
   return null;
+};
+
+const isDevelopmentAdminEmail = (email: string | null | undefined) => {
+  if (process.env.NODE_ENV !== 'development' || !email) {
+    return false;
+  }
+
+  return email.trim().toLowerCase().startsWith(`${DEVELOPMENT_ADMIN_LOCAL_PART}@`);
 };
 
 const parseBearerToken = (request: Request) => {
@@ -86,11 +96,23 @@ export const resolveAuthenticatedActor = async (request: Request): Promise<Reque
     const roleFromMetadata = normalizePersistedRole(
       typeof user.user_metadata?.role === 'string' ? user.user_metadata.role : null,
     );
-    const defaultRole = roleFromMetadata ?? 'CAVISTE';
+    const defaultRole = isDevelopmentAdminEmail(user.email) ? 'ADMIN' : roleFromMetadata ?? 'CAVISTE';
     const fallbackName =
       typeof user.user_metadata?.full_name === 'string' && user.user_metadata.full_name.trim()
         ? user.user_metadata.full_name.trim()
         : user.email.split('@')[0];
+
+    if (isDevelopmentAdminEmail(user.email) && defaultRole !== roleFromMetadata) {
+      logger.warn({
+        action: 'auth.dev_admin_bootstrap',
+        userEmail: user.email,
+        details: {
+          message: 'Compte de développement promu ADMIN lors de sa création.',
+          previousRole: roleFromMetadata ?? 'missing',
+          targetRole: defaultRole,
+        },
+      });
+    }
 
     try {
       dbUser = await prisma.user.create({
@@ -111,6 +133,28 @@ export const resolveAuthenticatedActor = async (request: Request): Promise<Reque
 
   if (!dbUser) {
     throw new UnauthorizedError('Utilisateur introuvable ou non autorisé.');
+  }
+
+  if (isDevelopmentAdminEmail(dbUser.email)) {
+    const currentRole = normalizePersistedRole(dbUser.role);
+
+    if (currentRole !== 'ADMIN') {
+      logger.warn({
+        action: 'auth.dev_admin_role_mismatch',
+        userEmail: dbUser.email,
+        role: currentRole ?? dbUser.role,
+        details: {
+          message: 'Le compte de développement espinacoquentin2 doit être ADMIN. Mise à niveau automatique en cours.',
+          currentRole: dbUser.role,
+        },
+      });
+
+      dbUser = await prisma.user.update({
+        where: { email: dbUser.email },
+        data: { role: 'ADMIN' },
+        select: { email: true, role: true },
+      });
+    }
   }
 
   const persistedRole = normalizePersistedRole(dbUser.role);

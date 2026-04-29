@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  env: {
+    ALLOW_DATABASE_RESET: process.env.ALLOW_DATABASE_RESET,
+  },
 };
 
 export default nextConfig;

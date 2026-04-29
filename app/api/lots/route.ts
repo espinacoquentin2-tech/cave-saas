@@ -3,14 +3,16 @@ import { ZodError } from 'zod';
 import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { LotModuleService } from '@/server/modules/lots/lot.service';
 import { createLotSchema } from '@/server/modules/lots/lot.schemas';
-import { logger } from '@/server/shared/logger';
+import { logger, logApiError } from '@/server/shared/logger';
 import { READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
+  const route = '/api/lots';
+  let actor: Awaited<ReturnType<typeof resolveAuthenticatedActor>> | null = null;
 
   try {
-    const actor = await resolveAuthenticatedActor(request);
+    actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
     const lots = await LotModuleService.list();
 
@@ -19,7 +21,7 @@ export async function GET(request: Request) {
       requestId,
       userEmail: actor.email,
       role: actor.role,
-      details: { count: lots.length },
+      details: { route, count: lots.length },
     });
 
     return NextResponse.json(lots, {
@@ -65,10 +67,12 @@ export async function GET(request: Request) {
       );
     }
 
-    logger.error({
+    logApiError({
       action: 'lots.get.unhandled_error',
+      route,
       requestId,
-      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+      actor,
+      error,
     });
 
     return NextResponse.json(
@@ -85,9 +89,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
+  const route = '/api/lots';
+  let actor: Awaited<ReturnType<typeof resolveAuthenticatedActor>> | null = null;
 
   try {
-    const actor = await resolveAuthenticatedActor(request);
+    actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
     const payload = createLotSchema.parse(await request.json());
     const result = await LotModuleService.create(payload, actor);
@@ -172,10 +178,12 @@ export async function POST(request: Request) {
       );
     }
 
-    logger.error({
+    logApiError({
       action: 'lots.post.unhandled_error',
+      route,
       requestId,
-      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+      actor,
+      error,
     });
 
     return NextResponse.json(

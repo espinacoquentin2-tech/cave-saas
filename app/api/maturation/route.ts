@@ -3,16 +3,18 @@ import { ZodError } from 'zod';
 import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { saveMaturationSchema } from '@/server/modules/maturation/maturation.schemas';
 import { MaturationModuleService } from '@/server/modules/maturation/maturation.service';
-import { logger } from '@/server/shared/logger';
+import { logger, logApiError } from '@/server/shared/logger';
 import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
+  const route = '/api/maturation';
+  let actor: Awaited<ReturnType<typeof resolveAuthenticatedActor>> | null = null;
 
   try {
-    const actor = await resolveAuthenticatedActor(request);
+    actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
     const records = await MaturationModuleService.list();
 
@@ -21,7 +23,7 @@ export async function GET(request: Request) {
       requestId,
       userEmail: actor.email,
       role: actor.role,
-      details: { count: records.length },
+      details: { route, count: records.length },
     });
 
     return NextResponse.json(records, {
@@ -67,10 +69,12 @@ export async function GET(request: Request) {
       );
     }
 
-    logger.error({
+    logApiError({
       action: 'maturation.get.unhandled_error',
+      route,
       requestId,
-      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+      actor,
+      error,
     });
 
     return NextResponse.json(
@@ -87,9 +91,11 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
+  const route = '/api/maturation';
+  let actor: Awaited<ReturnType<typeof resolveAuthenticatedActor>> | null = null;
 
   try {
-    const actor = await resolveAuthenticatedActor(request);
+    actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
     const payload = saveMaturationSchema.parse(await request.json());
     const result = await MaturationModuleService.save(payload, actor);
@@ -189,10 +195,12 @@ export async function POST(request: Request) {
       );
     }
 
-    logger.error({
+    logApiError({
       action: 'maturation.post.unhandled_error',
+      route,
       requestId,
-      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+      actor,
+      error,
     });
 
     return NextResponse.json(

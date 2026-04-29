@@ -49,6 +49,9 @@ type DashboardProps = {
   workOrders: any[];
   setWorkOrders: (next: any[]) => void;
   onRefresh: () => Promise<void> | void;
+  canResetDatabase: boolean;
+  onOpenResetModal: () => void;
+  lastResetSummary: any | null;
 };
 
 type MacerationModalProps = {
@@ -104,6 +107,46 @@ const buildApiHeaders = (user: { accessToken?: string } | null | undefined, extr
   ...((user?.accessToken ?? latestAccessToken) ? { Authorization: `Bearer ${user?.accessToken ?? latestAccessToken}` } : {}),
   ...extra,
 });
+
+const ROLE_LABELS: Record<string, string> = {
+  ADMIN: "Admin",
+  CHEF_CAVE: "Chef de cave",
+  CAVISTE: "Caviste",
+  LECTURE_SEULE: "Lecture seule",
+};
+
+const normalizeRoleKey = (role: any) => {
+  if (typeof role !== "string" || !role.trim()) return null;
+  const normalized = role.trim().toUpperCase().replace(/\s+/g, "_");
+  if (normalized === "CHEF_DE_CAVE") return "CHEF_CAVE";
+  return ROLE_LABELS[normalized] ? normalized : null;
+};
+
+const formatRoleLabel = (role: any) => {
+  const normalized = normalizeRoleKey(role);
+  return normalized ? ROLE_LABELS[normalized] : (role || "Utilisateur");
+};
+
+const roleMatches = (role: any, expectedRoles: string[]) => {
+  const normalized = normalizeRoleKey(role);
+  return normalized ? expectedRoles.includes(normalized) : false;
+};
+
+const findUserByEmail = (users: any[], email: string | null | undefined) => {
+  if (!email) return null;
+  return (users || []).find((candidate: any) => candidate?.email?.toLowerCase() === email.toLowerCase()) || null;
+};
+
+const toUiUser = (rawUser: any) => {
+  const name = rawUser?.name?.trim() || rawUser?.email?.split("@")[0]?.toUpperCase() || "Utilisateur";
+  return {
+    ...rawUser,
+    id: rawUser?.id != null ? String(rawUser.id) : rawUser?.id,
+    name,
+    role: formatRoleLabel(rawUser?.role),
+    initials: name.substring(0, 2).toUpperCase(),
+  };
+};
 
 function MultiSelectDrop({ label, options, selected, onChange, format = (v: any) => v, width = 140 }: MultiSelectDropProps) {
   const T = useTheme();
@@ -176,11 +219,36 @@ function LoginScreen({ onLogin }: LoginScreenProps) {
         return;
       }
 
-      const foundUser = (state.users || []).find((u: any) => u.email === authUser.email);
-      const fullName = foundUser ? foundUser.name : authUser.email.split('@')[0].toUpperCase();
-      const role = foundUser ? foundUser.role : "Chef de cave";
+      let foundUser = findUserByEmail(state.users || [], authUser.email);
+      const accessToken = data.session?.access_token;
 
-      onLogin({ id: authUser.id, email: authUser.email, name: fullName, role: role, initials: fullName.substring(0, 2).toUpperCase(), accessToken: data.session?.access_token });
+      if (!foundUser && accessToken) {
+        try {
+          const response = await fetch('/api/users?login=1', {
+            method: 'GET',
+            headers: buildApiHeaders({ accessToken }),
+          });
+
+          if (response.ok) {
+            const payload = unwrapApiData(await response.json().catch(() => []));
+            if (Array.isArray(payload)) {
+              foundUser = findUserByEmail(payload, authUser.email);
+            }
+          }
+        } catch {
+          // La synchronisation globale reprendra au chargement complet de l'application.
+        }
+      }
+
+      onLogin({
+        ...toUiUser({
+          id: authUser.id,
+          email: authUser.email,
+          name: foundUser?.name,
+          role: foundUser?.role,
+        }),
+        accessToken,
+      });
     }
   };
 
@@ -576,7 +644,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 // =============================================================================
 // DASHBOARD (Avec intégration des alertes d'inventaire)
 // =============================================================================
-function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }: DashboardProps) {
+function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh, canResetDatabase, onOpenResetModal, lastResetSummary }: DashboardProps) {
   const T = useTheme(); 
   const { user } = useAuth(); 
   const { state } = useStore();
@@ -651,11 +719,74 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh }: DashboardPr
 
   return (
     <div>
-      <div style={{ marginBottom:28 }}>
-        <div style={{ fontSize:10, color:T.accent, letterSpacing:4, textTransform:"uppercase", marginBottom:6 }}>Vue d'ensemble</div>
-        <h1 style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:32, color:T.textStrong, margin:0 }}>Tableau de bord</h1>
-        <div style={{ color:T.textDim, fontSize:13, marginTop:4 }}>{new Date().toLocaleDateString("fr-FR", { weekday:"long", year:"numeric", month:"long", day:"numeric" })}<span style={{ marginLeft:16, color:T.accent }}>{user.name}</span><span style={{ marginLeft:8, fontSize:10, color:T.textDim }}>({user.role})</span></div>
+      <div style={{ marginBottom:28, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:20, flexWrap:"wrap" }}>
+        <div>
+          <div style={{ fontSize:10, color:T.accent, letterSpacing:4, textTransform:"uppercase", marginBottom:6 }}>Vue d'ensemble</div>
+          <h1 style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:32, color:T.textStrong, margin:0 }}>Tableau de bord</h1>
+          <div style={{ color:T.textDim, fontSize:13, marginTop:4 }}>{new Date().toLocaleDateString("fr-FR", { weekday:"long", year:"numeric", month:"long", day:"numeric" })}<span style={{ marginLeft:16, color:T.accent }}>{user.name}</span><span style={{ marginLeft:8, fontSize:10, color:T.textDim }}>({formatRoleLabel(user.role)})</span></div>
+        </div>
+        {canResetDatabase && (
+          <button
+            onClick={onOpenResetModal}
+            style={{
+              minWidth: 230,
+              background: "linear-gradient(135deg, #7a1622, #a71f2f)",
+              color: "#fff",
+              border: "1px solid #d75a66",
+              borderRadius: 8,
+              padding: "12px 16px",
+              cursor: "pointer",
+              boxShadow: "0 12px 24px rgba(122,22,34,0.24)",
+              textAlign: "left",
+            }}
+          >
+            <div style={{ fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", opacity: 0.8, marginBottom: 4 }}>⚠ Action sensible</div>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>Attention : Réinitialiser la base</div>
+            <div style={{ fontSize: 11, marginTop: 4, opacity: 0.85 }}>Supprime les données métier de développement puis recharge la démo si demandé.</div>
+          </button>
+        )}
       </div>
+
+      {lastResetSummary && (
+        <div style={{ marginBottom: 24, background: T.surface, border: `1px solid ${T.border}`, borderTop: `2px solid ${T.green}`, borderRadius: 6, padding: 20 }}>
+          <div style={{ fontSize: 16, color: T.textStrong, fontWeight: 700, marginBottom: 6 }}>Résumé de la dernière réinitialisation</div>
+          <div style={{ fontSize: 12, color: T.textDim, marginBottom: 14 }}>
+            Mode: <span style={{ color: T.textStrong, fontFamily: "monospace" }}>{lastResetSummary.mode}</span> ·
+            Démo rechargée: <span style={{ color: T.textStrong, fontFamily: "monospace" }}>{String(lastResetSummary.reseed)}</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+            <div>
+              <div style={{ fontSize: 11, color: T.textDim, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>Supprimé</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {Object.entries(lastResetSummary.deleted || {})
+                  .filter(([, value]) => typeof value === "number" && value > 0)
+                  .map(([key, value]) => (
+                    <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12, color: T.text }}>
+                      <span>{key}</span>
+                      <span style={{ fontFamily: "monospace", color: T.red }}>{String(value)}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+            <div>
+              <div style={{ fontSize: 11, color: T.textDim, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>Recréé</div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                {Object.entries(lastResetSummary.seeded || {})
+                  .filter(([, value]) => typeof value === "number" && value > 0)
+                  .map(([key, value]) => (
+                    <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12, color: T.text }}>
+                      <span>{key}</span>
+                      <span style={{ fontFamily: "monospace", color: T.green }}>{String(value)}</span>
+                    </div>
+                  ))}
+                {Object.keys(lastResetSummary.seeded || {}).length === 0 && (
+                  <div style={{ fontSize: 12, color: T.textDim }}>Aucune donnée de démo recréée.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill,minmax(210px,1fr))", gap:16, marginBottom:24 }}>
         {[
@@ -987,7 +1118,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
   const { state, dispatch, refreshData } = useStore();
   const { user } = useAuth(); 
   
-  const isChef = user?.role === "Chef de cave" || user?.role === "Admin";
+  const isChef = roleMatches(user?.role, ["ADMIN", "CHEF_CAVE"]);
 
   const [activeTab, setActiveTab] = useState("PRESSOIRS"); 
   
@@ -2363,7 +2494,7 @@ function TransferModal({ container, onClose }: TransferModalProps) {
     return Number.isFinite(n) ? n : 0;
   };
 
-  const isAdmin = user?.role === "Admin" || user?.role === "Chef de cave";
+  const isAdmin = roleMatches(user?.role, ["ADMIN", "CHEF_CAVE"]);
   
   const lotToTransfer = (state.lots || []).find((l: any) => String(l.id) === String(container.lotId || container.currentLots?.[0]?.id));
   const isSoutirageDebourbage = container.type === "CUVE_DEBOURBAGE" && lotToTransfer?.status === "MOUT_NON_DEBOURBE";
@@ -2982,7 +3113,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
 
         <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
           
-          {user.role !== "Lecture seule" && (
+          {!roleMatches(user.role, ["LECTURE_SEULE"]) && (
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:18 }}>
               <div style={{ fontSize:10, textTransform:"uppercase", letterSpacing:2, color:T.textDim, marginBottom:14, fontWeight:"bold" }}>Actions rapides</div>
               <div style={{ display:"flex", flexWrap:"wrap", gap:8 }}>
@@ -3004,7 +3135,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
                   </>
                 )}
                 
-                {(user.role === "Admin" || user.role === "Chef de cave") && (
+                {roleMatches(user.role, ["ADMIN", "CHEF_CAVE"]) && (
                   <>
                     <Btn variant="ghost" onClick={() => setModal("rename" as any)} disabled={isSubmitting}>✏️ Renommer</Btn>
                     {isReallyEmpty && (
@@ -3435,7 +3566,7 @@ function Cuverie({ onSelectContainer }: { onSelectContainer: any }) {
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:28 }}>
         <div><h1 style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:32, color:T.textStrong, margin:0 }}>Cuverie</h1></div>
-        {user?.role !== "Lecture seule" && user?.role !== "LECTURE_SEULE" && <Btn onClick={() => setModal(true)}>+ Ajouter cuve</Btn>}
+        {!roleMatches(user?.role, ["LECTURE_SEULE"]) && <Btn onClick={() => setModal(true)}>+ Ajouter cuve</Btn>}
       </div>
       
       <div style={{ display:"flex", gap:10, marginBottom: mainFilter === "CUVES" || mainFilter === "BOIS" || mainFilter === "SOUS-PRODUITS" ? 10 : 20, flexWrap:"wrap" }}>
@@ -7355,11 +7486,7 @@ function AdminUsers() {
         throw new Error(data.error || "Erreur lors de la sauvegarde de l'utilisateur.");
       }
 
-      // 'data' correspond maintenant à l'utilisateur fraîchement renvoyé par Prisma
-      const savedUser = {
-        ...data,
-        initials: data.name.substring(0, 2).toUpperCase() // On recrée l'initiale pour l'UI
-      };
+      const savedUser = toUiUser(unwrapApiData(data));
 
       if (isEdit) {
         dispatch({ type: "UPDATE_USER", payload: savedUser });
@@ -9725,7 +9852,22 @@ export default function App() {
         dispatch({type:"SET_EVENTS", payload: safeMap(d, (e: any)=>{const dD=new Date(e.eventDatetime); return{id:e.id.toString(),type:e.eventType,date:`${dD.toLocaleDateString('fr-FR')} à ${dD.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`,lotId:e.lots?.[0]?.lotId?.toString(),containerId:e.containers?.[0]?.containerId?.toString(),volumeIn:e.eventType==='CREATION'?e.lots?.[0]?.volumeChange||0:0,volumeOut:e.eventType==='TRANSFERT'?e.lots?.[0]?.volumeChange||0:0,operator: e.operator || "Inconnu",note:e.comment||""};})});
       });
       fetchSafe(`/api/pressings?t=${t}`).then((d: any) => { if (Array.isArray(d)) dispatch({type:"SET_PRESSINGS", payload: d.map((p: any) => ({...p, id: p.id.toString()}))}); });
-      fetchSafe(`/api/users?t=${t}`).then((d: any) => { if (Array.isArray(d)) dispatch({type: "SET_USERS", payload: d.map((u: any) => ({...u, id: u.id.toString(), initials: u.name ? u.name.substring(0, 2).toUpperCase() : "??"})) }); });
+      fetchSafe(`/api/users?t=${t}`).then((d: any) => {
+        if (!Array.isArray(d)) return;
+        const users = d.map((u: any) => toUiUser(u));
+        dispatch({type: "SET_USERS", payload: users });
+        setUser((current: any) => {
+          if (!current?.email) return current;
+          const matchedUser = findUserByEmail(users, current.email);
+          if (!matchedUser) return current;
+          return {
+            ...current,
+            name: matchedUser.name,
+            role: matchedUser.role,
+            initials: matchedUser.initials,
+          };
+        });
+      });
       fetchSafe(`/api/maturation?t=${t}`).then(d => { if (Array.isArray(d)) dispatch({type:"SET_MATURATIONS", payload: d}); });
       fetchSafe(`/api/parcelles?t=${t}`).then(d => { if (Array.isArray(d)) dispatch({type:"SET_PARCELLES", payload:d}); });
       fetchSafe(`/api/degustations?t=${t}`).then(d => { if (Array.isArray(d)) dispatch({type:"SET_DEGUSTATIONS", payload:d}); });
@@ -9776,8 +9918,8 @@ export default function App() {
   const goNav = (id: string) => { setNav(id); setSelCont(null); setSelLot(null); };
   const logout = () => { supabase.auth.signOut(); setUser(null); setNav("dashboard"); setSelCont(null); setSelLot(null); };
   
-  const isAdmin = user?.role === "Admin" || user?.role === "Chef de cave"; 
-  const canResetDatabase = process.env.NODE_ENV === "development" && user?.role === "Admin";
+  const isAdmin = roleMatches(user?.role, ["ADMIN", "CHEF_CAVE"]); 
+  const canResetDatabase = process.env.NODE_ENV === "development" && process.env.ALLOW_DATABASE_RESET === "true" && roleMatches(user?.role, ["ADMIN"]);
   const alertCount = state.containers.filter((c: any) => c.status === "VIDE" && c.notes).length + state.lots.filter((l: any) => l.notes && l.notes.includes("sans suivi")).length + state.bottleLots.filter((b: any) => b.status === "A_DEGORGER").length;
 
   const handleSelectLot = (lotObj: any) => {
@@ -9797,7 +9939,7 @@ export default function App() {
     if (nav === "lots"    && selLot)       return <LotDetail       lot={selLot}             onBack={() => setSelLot(null)} onSelectLot={handleSelectLot} />;
     
     switch(nav) {
-      case "dashboard":   return <Dashboard setNav={goNav} workOrders={workOrders} setWorkOrders={setWorkOrders} onRefresh={fetchAll} />;
+      case "dashboard":   return <Dashboard setNav={goNav} workOrders={workOrders} setWorkOrders={setWorkOrders} onRefresh={fetchAll} canResetDatabase={canResetDatabase} onOpenResetModal={() => setShowResetModal(true)} lastResetSummary={lastResetSummary} />;
       case "maturation":  return <Maturation />;
       case "planificateur": return <PlanificateurVendanges />;
       case "degustation": return <Degustation />;
@@ -9817,7 +9959,7 @@ export default function App() {
       case "admin_users": return <AdminUsers />;
       case "admin_logs":  return <AdminLogs />;
       case "parametres":  return <Parametres theme={themeKey} setTheme={setThemeKey} />;
-      default:            return <Dashboard setNav={goNav} workOrders={workOrders} setWorkOrders={setWorkOrders} onRefresh={fetchAll} />;
+      default:            return <Dashboard setNav={goNav} workOrders={workOrders} setWorkOrders={setWorkOrders} onRefresh={fetchAll} canResetDatabase={canResetDatabase} onOpenResetModal={() => setShowResetModal(true)} lastResetSummary={lastResetSummary} />;
     }
   };
 
@@ -9955,60 +10097,6 @@ export default function App() {
                 </div>
                 
                 <div style={{ flex:1, overflowY:"auto", padding:"40px 48px" }}>
-
-                  {canResetDatabase && (
-                    <button 
-                      onClick={() => setShowResetModal(true)} 
-                      style={{ 
-                        width: "100%", background: "#7b1f28", color: "white", padding: "12px", 
-                        marginBottom: "24px", borderRadius: "6px", fontWeight: "bold", 
-                        cursor: "pointer", border: "1px solid #d75a66", fontFamily: "monospace", letterSpacing: "0.8px"
-                      }}
-                    >
-                      Réinitialiser la base de test
-                    </button>
-                  )}
-
-                  {lastResetSummary && (
-                    <div style={{ marginBottom: 24, background: T.surface, border: `1px solid ${T.border}`, borderTop: `2px solid ${T.green}`, borderRadius: 6, padding: 20 }}>
-                      <div style={{ fontSize: 16, color: T.textStrong, fontWeight: 700, marginBottom: 6 }}>Résumé de la dernière réinitialisation</div>
-                      <div style={{ fontSize: 12, color: T.textDim, marginBottom: 14 }}>
-                        Mode: <span style={{ color: T.textStrong, fontFamily: "monospace" }}>{lastResetSummary.mode}</span> ·
-                        Démo rechargée: <span style={{ color: T.textStrong, fontFamily: "monospace" }}>{String(lastResetSummary.reseed)}</span>
-                      </div>
-                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
-                        <div>
-                          <div style={{ fontSize: 11, color: T.textDim, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>Supprimé</div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {Object.entries(lastResetSummary.deleted || {})
-                              .filter(([, value]) => typeof value === "number" && value > 0)
-                              .map(([key, value]) => (
-                                <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12, color: T.text }}>
-                                  <span>{key}</span>
-                                  <span style={{ fontFamily: "monospace", color: T.red }}>{String(value)}</span>
-                                </div>
-                              ))}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: 11, color: T.textDim, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>Recréé</div>
-                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                            {Object.entries(lastResetSummary.seeded || {})
-                              .filter(([, value]) => typeof value === "number" && value > 0)
-                              .map(([key, value]) => (
-                                <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12, color: T.text }}>
-                                  <span>{key}</span>
-                                  <span style={{ fontFamily: "monospace", color: T.green }}>{String(value)}</span>
-                                </div>
-                              ))}
-                            {Object.keys(lastResetSummary.seeded || {}).length === 0 && (
-                              <div style={{ fontSize: 12, color: T.textDim }}>Aucune donnée de démo recréée.</div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
                   {showResetModal && (
                     <Modal title="Réinitialiser la base de test" onClose={closeResetModal}>
