@@ -9929,16 +9929,6 @@ export default function App() {
     roleMatches(currentUser?.roleKey ?? currentUser?.role, ["ADMIN"]);
   const alertCount = state.containers.filter((c: any) => c.status === "VIDE" && c.notes).length + state.lots.filter((l: any) => l.notes && l.notes.includes("sans suivi")).length + state.bottleLots.filter((b: any) => b.status === "A_DEGORGER").length;
 
-  useEffect(() => {
-    if (process.env.NODE_ENV !== "development") return;
-    console.info("[admin-reset] visibility", {
-      nodeEnv: process.env.NODE_ENV,
-      publicReset: process.env.NEXT_PUBLIC_ALLOW_DATABASE_RESET,
-      role: currentUser?.roleKey ?? currentUser?.role,
-      canShowDatabaseReset,
-    });
-  }, [currentUser?.role, currentUser?.roleKey, canShowDatabaseReset]);
-
   const handleSelectLot = (lotObj: any) => {
     setSelCont(null);  
     setNav("lots");    
