@@ -21,9 +21,43 @@ export class MaturationService {
         calculatedTavp = data.sucre / 16.83; 
       }
 
+      const existing = data.id
+        ? await tx.maturation.findUnique({ where: { id: data.id } })
+        : null;
+
+      if (data.id && !existing) {
+        throw new Error("Le relevé à modifier n'existe plus.");
+      }
+
+      let linkedParcelle: { id: number; nom: string } | null = null;
+
+      if (data.parcelleId) {
+        linkedParcelle = await tx.parcelle.findUnique({
+          where: { id: data.parcelleId },
+          select: { id: true, nom: true }
+        });
+
+        if (!linkedParcelle) {
+          throw new Error("La parcelle sélectionnée n'existe plus.");
+        }
+      } else if (existing?.parcelleId && existing.parcelle === data.parcelle) {
+        linkedParcelle = { id: existing.parcelleId, nom: existing.parcelle };
+      } else {
+        const matches = await tx.parcelle.findMany({
+          where: { nom: data.parcelle },
+          select: { id: true, nom: true },
+          take: 2
+        });
+
+        if (matches.length === 1) {
+          linkedParcelle = matches[0];
+        }
+      }
+
       const recordData = {
         date: new Date(data.date),
-        parcelle: data.parcelle,
+        parcelle: linkedParcelle?.nom ?? data.parcelle,
+        parcelleId: linkedParcelle?.id ?? null,
         cepage: data.cepage,
         sucre: data.sucre || null,
         tavp: calculatedTavp,
@@ -42,9 +76,6 @@ export class MaturationService {
       // 3. UPSERT (Mise à jour ou Création)
       if (data.id) {
         // Mise à jour
-        const existing = await tx.maturation.findUnique({ where: { id: data.id } });
-        if (!existing) throw new Error("Le relevé à modifier n'existe plus.");
-
         record = await tx.maturation.update({
           where: { id: data.id },
           data: recordData
@@ -64,7 +95,7 @@ export class MaturationService {
       await tx.auditLog.create({
         data: { 
           action: "MATURATION_SAVE", 
-          details: `${data.id ? 'Mise à jour' : 'Création'} relevé ${data.parcelle} (${data.date})`, 
+          details: `${data.id ? 'Mise à jour' : 'Création'} relevé ${recordData.parcelle} (${data.date})`, 
           userId: userEmail 
         }
       });

@@ -32,12 +32,18 @@ export class VendangesService {
     type ParcelleRecord = (typeof parcelles)[number];
     const groupedMaturations: Record<string, MaturationRecord[]> = {};
     const parcellesByNom: Record<string, ParcelleRecord[]> = {};
+    const parcellesById: Record<number, ParcelleRecord> = {};
+    const buildLegacyProjectionKey = (parcelle: string, cepage: string) => `legacy:${parcelle}::cepage:${cepage}`;
+    const buildProjectionGroupKey = (parcelleId: number | null | undefined, parcelle: string, cepage: string) =>
+      parcelleId ? `parcelle:${parcelleId}::cepage:${cepage}` : buildLegacyProjectionKey(parcelle, cepage);
+
     for (const m of maturations) {
-      const key = `${m.parcelle}_${m.cepage}`;
+      const key = buildProjectionGroupKey(m.parcelleId, m.parcelle, m.cepage);
       if (!groupedMaturations[key]) groupedMaturations[key] = [];
       groupedMaturations[key].push(m);
     }
     for (const parcelle of parcelles) {
+      parcellesById[parcelle.id] = parcelle;
       if (!parcellesByNom[parcelle.nom]) parcellesByNom[parcelle.nom] = [];
       parcellesByNom[parcelle.nom].push(parcelle);
     }
@@ -62,10 +68,18 @@ export class VendangesService {
         }
       }
 
-      const baseTarget = data.customTargets[key] || data.globalTarget;
+      const directParcelle = last.parcelleId ? parcellesById[last.parcelleId] ?? null : null;
+      const matchingParcelles = parcellesByNom[last.parcelle] || [];
+      const resolvedParcelle = directParcelle ?? (matchingParcelles.length === 1 ? matchingParcelles[0] : null);
+      const projectionParcelleId = last.parcelleId ?? resolvedParcelle?.id;
+      const projectionKey = buildProjectionGroupKey(projectionParcelleId, last.parcelle, last.cepage);
+      const legacyProjectionKey = buildLegacyProjectionKey(last.parcelle, last.cepage);
+      const targetKey = [projectionKey, projectionParcelleId ? String(projectionParcelleId) : null, legacyProjectionKey, key]
+        .find((candidate) => candidate && Object.prototype.hasOwnProperty.call(data.customTargets, candidate));
+      const baseTarget = targetKey ? data.customTargets[targetKey] : data.globalTarget;
       let adjustedTarget = baseTarget;
       let riskLevel = "GREEN";
-      
+
       const maladie = last.maladie || "Aucune";
       const intensiteNum = last.intensite || 0;
 
@@ -88,12 +102,10 @@ export class VendangesService {
       projDate.setDate(projDate.getDate() + Math.ceil(daysNeeded));
 
       const isReady = currentDeg >= adjustedTarget || new Date() >= projDate;
-      const matchingParcelles = parcellesByNom[last.parcelle] || [];
-      const resolvedParcelle = matchingParcelles.length === 1 ? matchingParcelles[0] : null;
 
       projections.push({
-        parcelleId: resolvedParcelle?.id,
-        parcelleKey: key,
+        parcelleId: projectionParcelleId,
+        parcelleKey: projectionKey,
         parcelleNom: last.parcelle,
         commune: resolvedParcelle?.commune ?? null,
         region: resolvedParcelle?.region ?? null,

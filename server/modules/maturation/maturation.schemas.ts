@@ -7,6 +7,7 @@ export const saveMaturationSchema = z.object({
   id: z.coerce.number().int().positive().optional(),
   date: z.string().trim().min(1, 'La date est requise'),
   parcelle: z.string().trim().min(1, 'La parcelle est requise'),
+  parcelleId: optionalNumber(z.coerce.number().int().positive()),
   cepage: z.string().trim().min(1, 'Le cépage est requis'),
   sucre: optionalNumber(z.coerce.number().nonnegative()),
   ph: optionalNumber(z.coerce.number().positive()),

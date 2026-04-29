@@ -5,6 +5,7 @@ export const SaveMaturationSchema = z.object({
   id: z.number().optional(), // Présent uniquement si c'est une édition
   date: z.string().min(1, "La date est requise"),
   parcelle: z.string().min(1, "La parcelle est requise"),
+  parcelleId: z.number().int().positive().optional().nullable(),
   cepage: z.string().min(1, "Le cépage est requis"),
   sucre: z.number().nonnegative().optional(),
   ph: z.number().positive().optional(),

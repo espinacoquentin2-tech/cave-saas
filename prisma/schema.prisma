@@ -321,6 +321,7 @@ model Maturation {
   id          Int      @id @default(autoincrement())
   date        DateTime
   parcelle    String   // Ex: "Les Craies" ou "Velye"
+  parcelleId  Int?
   cepage      String   // Ex: "CH", "PN", "PM"
   
   // Paramètres analytiques (Optionnels car on ne mesure pas tout tous les jours)
@@ -339,6 +340,10 @@ model Maturation {
   notes       String?
   
   createdAt   DateTime @default(now())
+
+  parcelleRef Parcelle? @relation(fields: [parcelleId], references: [id], onDelete: SetNull)
+
+  @@index([parcelleId])
 }
 
 // ==========================================
@@ -354,6 +359,8 @@ model Parcelle {
   commune     String?
   
   createdAt   DateTime @default(now())
+
+  maturations Maturation[]
 
   @@unique([nom, departement, region, commune])
 }

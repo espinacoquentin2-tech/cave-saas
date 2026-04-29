@@ -8060,7 +8060,7 @@ function PlanificateurVendanges() {
   };
 
   const allProjections = serverProjections.map((backendProj: any) => {
-    const parcelleKey = backendProj.parcelleId ?? backendProj.parcelleKey ?? `${backendProj.parcelleNom}::${backendProj.cepage}::${backendProj.proj.lastDate}`;
+    const parcelleKey = backendProj.parcelleKey ?? backendProj.parcelleId ?? `${backendProj.parcelleNom}::${backendProj.cepage}::${backendProj.proj.lastDate}`;
     return {
       parcelle: { 
         id: backendProj.parcelleId,
@@ -8261,13 +8261,14 @@ function MaturationModal({ onClose, editData = null }: { onClose: any; editData?
       return {
         ...editData,
         date: new Date(editData.date).toISOString().slice(0, 10),
+        parcelleId: editData.parcelleId ?? "",
         sucre: editData.sucre ?? "", ph: editData.ph ?? "", at: editData.at ?? "",
         malique: editData.malique ?? "", tartrique: editData.tartrique ?? "",
         maladie: editData.maladie || "Aucune", intensite: editData.intensite ?? "", notes: editData.notes || ""
       };
     }
     return {
-      date: new Date().toISOString().slice(0, 10), parcelle: "", cepage: "CH",
+      date: new Date().toISOString().slice(0, 10), parcelle: "", parcelleId: "", cepage: "CH",
       sucre: "", ph: "", at: "", malique: "", tartrique: "", maladie: "Aucune", intensite: "", notes: ""
     };
   });
@@ -8292,7 +8293,7 @@ function MaturationModal({ onClose, editData = null }: { onClose: any; editData?
       if (res.ok) {
         const d = await res.json();
         dispatch({ type: "ADD_PARCELLE", payload: d });
-        setForm({ ...form, parcelle: d.nom });
+        setForm({ ...form, parcelle: d.nom, parcelleId: d.id });
         setIsAddingParcelle(false);
         setNewDep(""); setNewReg(""); setNewCom(""); setNewNom("");
       } else {
@@ -8314,6 +8315,7 @@ function MaturationModal({ onClose, editData = null }: { onClose: any; editData?
       
       const payload = {
         ...form,
+        parcelleId: form.parcelleId ? Number(form.parcelleId) : undefined,
         sucre: cleanNum(form.sucre),
         ph: cleanNum(form.ph),
         at: cleanNum(form.at),
@@ -8350,6 +8352,13 @@ function MaturationModal({ onClose, editData = null }: { onClose: any; editData?
   const depts = Object.keys(CHAMPAGNE_GEODATA || {});
   const regions = newDep ? Object.keys((CHAMPAGNE_GEODATA as any)[newDep] || {}) : [];
   const communes = (newDep && newReg) ? ((CHAMPAGNE_GEODATA as any)[newDep]?.[newReg] || []) : [];
+  const selectedParcelleExists = form.parcelleId
+    ? (state.parcelles || []).some((p: any) => String(p.id) === String(form.parcelleId))
+    : false;
+  const legacyParcelleOptionValue = !form.parcelleId && form.parcelle ? `LEGACY:${form.parcelle}` : "";
+  const selectedParcelleValue = form.parcelleId
+    ? String(form.parcelleId)
+    : legacyParcelleOptionValue;
 
   return (
     <Modal title={form.id ? "Compléter les analyses" : "Saisir un prélèvement"} onClose={onClose}>
@@ -8372,12 +8381,36 @@ function MaturationModal({ onClose, editData = null }: { onClose: any; editData?
       
       {!isAddingParcelle ? (
         <FF label="Parcelle">
-	          <Select value={form.parcelle} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-	            if (e.target.value === "ADD_NEW") setIsAddingParcelle(true);
-	            else setForm({...form, parcelle: e.target.value});
+	          <Select value={selectedParcelleValue} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+	            if (e.target.value === "ADD_NEW") {
+                setIsAddingParcelle(true);
+                return;
+              }
+              if (!e.target.value) {
+                setForm({ ...form, parcelle: "", parcelleId: "" });
+                return;
+              }
+              if (e.target.value.startsWith("LEGACY:")) {
+                setForm({ ...form, parcelle: e.target.value.slice("LEGACY:".length), parcelleId: "" });
+                return;
+              }
+              const selectedParcelle = (state.parcelles || []).find((p: any) => String(p.id) === e.target.value);
+              if (selectedParcelle) {
+                setForm({ ...form, parcelle: selectedParcelle.nom, parcelleId: selectedParcelle.id });
+              }
 	          }} disabled={isSubmitting}>
 	            <option value="">-- Choisir une parcelle --</option>
-	            {(state.parcelles || []).map((p: any) => <option key={p.id} value={p.nom}>{p.nom} {p.commune ? `(${p.commune})` : ""}</option>)}
+              {form.parcelleId && !selectedParcelleExists ? (
+                <option value={String(form.parcelleId)}>
+                  {form.parcelle} (liaison introuvable)
+                </option>
+              ) : null}
+              {!form.parcelleId && form.parcelle ? (
+                <option value={legacyParcelleOptionValue}>
+                  {form.parcelle} (relevé historique)
+                </option>
+              ) : null}
+	            {(state.parcelles || []).map((p: any) => <option key={p.id} value={String(p.id)}>{p.nom} {p.commune ? `(${p.commune})` : ""}</option>)}
             <option value="ADD_NEW" style={{ fontWeight: "bold", color: T.accent }}>+ Ajouter une nouvelle parcelle...</option>
           </Select>
         </FF>
