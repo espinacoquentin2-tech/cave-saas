@@ -655,7 +655,7 @@ export class AdminResetService {
         mainGrapeCode: 'PN',
         placeCode: 'DOMAINE-DES-TROIS-COTEAUX',
         sequenceNumber: 9,
-        status: 'ASSEMBLAGE',
+        status: 'ASSEMBLE',
         currentVolume: 5.65,
         currentContainerCode: 'DEMI-MUID-600-A',
         qualiteLot: 'CUVEE',

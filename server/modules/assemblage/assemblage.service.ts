@@ -2,10 +2,12 @@ import { Prisma, PrismaClient } from '@prisma/client';
 import {
   AssemblageDecisionComponent,
   AssemblageType,
+  ASSEMBLAGE_ELIGIBLE_STATUSES,
   convertBottleCountToHl,
   convertHlToBottleCount,
   evaluateAssemblageDecision,
   getBottleFormatLabel,
+  isAssemblageEligibleLotStatus,
   normalizeGrapeCode,
 } from '@/lib/assemblage';
 import { BusinessLogicError } from '@/lib/errors';
@@ -286,6 +288,12 @@ export class AssemblageModuleService {
             const lot = sourceLotMap.get(source.lotId);
             if (!lot) {
               throw new BusinessLogicError(`Lot source introuvable (#${source.lotId}).`, 404);
+            }
+            if (!isAssemblageEligibleLotStatus(lot.status)) {
+              throw new BusinessLogicError(
+                `Le lot ${lot.businessCode} n'est pas eligible a l'assemblage car son statut est ${lot.status}. Statuts autorises: ${ASSEMBLAGE_ELIGIBLE_STATUSES.join(', ')}.`,
+                400,
+              );
             }
             if (source.volumeHl > toNumber(lot.currentVolume)) {
               throw new BusinessLogicError(

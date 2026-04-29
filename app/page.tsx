@@ -18,6 +18,7 @@ import {
   convertHlToBottleCount,
   evaluateAssemblageDecision,
   getBottleFormatLabel,
+  isAssemblageEligibleLotStatus,
 } from "@/lib/assemblage";
 
 // =============================================================================
@@ -4469,7 +4470,7 @@ function PlanificateurTirage() {
     if (n.includes("BOURBE") || n.includes("LIE") || n.includes("REBECHE")) return false;
     const lot = getContainerLot(c);
     if (!lot) return false;
-    if (lot.status !== "VIN_CLAIR" && lot.status !== "ASSEMBLAGE") return false;
+    if (lot.status !== "VIN_CLAIR" && lot.status !== "ASSEMBLAGE" && lot.status !== "ASSEMBLE") return false;
     return true;
   });
 
@@ -5179,7 +5180,7 @@ function Assemblages() {
   const bulkSources = (state.lots || [])
     .filter((lot: any) => {
       const volume = Number(lot.currentVolume ?? lot.volume ?? 0);
-      return volume > 0.001 && !["ARCHIVE", "TIRE", "MIS_EN_BOUTEILLE", "BOURBES", "LIES", "REBECHES"].includes(lot.status);
+      return volume > 0.001 && isAssemblageEligibleLotStatus(lot.status);
     })
     .map((lot: any) => ({
       ...lot,
@@ -5437,6 +5438,9 @@ function Assemblages() {
           <h1 style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:32, color:T.textStrong, margin:0 }}>Assemblages</h1>
           <div style={{ marginTop:8, fontSize:13, color:T.textDim, maxWidth:840 }}>
             Le module est désormais raccordé aux lots, réserves bouteilles, cuves de destination et intrants. Les règles de décision sont recalculées en direct avant l'enregistrement.
+          </div>
+          <div style={{ marginTop:6, fontSize:12, color:T.textDim }}>
+            Sources éligibles : vins de base et vins déjà assemblés.
           </div>
         </div>
         <Btn onClick={() => setShowCreateModal(true)} disabled={sourceCandidates.length === 0}>Créer un assemblage</Btn>
@@ -6163,7 +6167,7 @@ const submitTirage = async () => {
             {!isDeadBulk && (
               <>
                 <Btn variant="secondary" onClick={() => { setStatusForm({ status: lot.status, note: "" }); setModal("status" as any); }}>Modifier Statut</Btn>
-                <Btn variant="ghost" onClick={() => setModal("tirage" as any)} disabled={!["VIN_DE_BASE", "ASSEMBLAGE", "RESERVE", "VIN_ROUGE"].includes(lot.status)}>
+                <Btn variant="ghost" onClick={() => setModal("tirage" as any)} disabled={!["VIN_DE_BASE", "ASSEMBLAGE", "ASSEMBLE", "RESERVE", "VIN_ROUGE"].includes(lot.status)}>
                   Tirer / Mettre en bouteille
                 </Btn>
               </>

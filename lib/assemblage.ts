@@ -16,6 +16,11 @@ export const ASSEMBLAGE_TYPES = [
 
 export type AssemblageType = (typeof ASSEMBLAGE_TYPES)[number];
 
+export const ASSEMBLAGE_ELIGIBLE_STATUSES = ['VIN_DE_BASE', 'ASSEMBLAGE', 'ASSEMBLE'] as const;
+
+export const isAssemblageEligibleLotStatus = (status: string | null | undefined) =>
+  typeof status === 'string' && (ASSEMBLAGE_ELIGIBLE_STATUSES as readonly string[]).includes(status.trim().toUpperCase());
+
 export type AssemblageComponentBreakdown = {
   grapeCode: string;
   percentage: number;
