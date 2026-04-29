@@ -49,7 +49,7 @@ type DashboardProps = {
   workOrders: any[];
   setWorkOrders: (next: any[]) => void;
   onRefresh: () => Promise<void> | void;
-  canResetDatabase: boolean;
+  canShowDatabaseReset: boolean;
   onOpenResetModal: () => void;
   lastResetSummary: any | null;
 };
@@ -139,10 +139,12 @@ const findUserByEmail = (users: any[], email: string | null | undefined) => {
 
 const toUiUser = (rawUser: any) => {
   const name = rawUser?.name?.trim() || rawUser?.email?.split("@")[0]?.toUpperCase() || "Utilisateur";
+  const roleKey = normalizeRoleKey(rawUser?.role);
   return {
     ...rawUser,
     id: rawUser?.id != null ? String(rawUser.id) : rawUser?.id,
     name,
+    roleKey,
     role: formatRoleLabel(rawUser?.role),
     initials: name.substring(0, 2).toUpperCase(),
   };
@@ -644,7 +646,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 // =============================================================================
 // DASHBOARD (Avec intégration des alertes d'inventaire)
 // =============================================================================
-function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh, canResetDatabase, onOpenResetModal, lastResetSummary }: DashboardProps) {
+function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh, canShowDatabaseReset, onOpenResetModal, lastResetSummary }: DashboardProps) {
   const T = useTheme(); 
   const { user } = useAuth(); 
   const { state } = useStore();
@@ -725,7 +727,7 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh, canResetDatab
           <h1 style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:32, color:T.textStrong, margin:0 }}>Tableau de bord</h1>
           <div style={{ color:T.textDim, fontSize:13, marginTop:4 }}>{new Date().toLocaleDateString("fr-FR", { weekday:"long", year:"numeric", month:"long", day:"numeric" })}<span style={{ marginLeft:16, color:T.accent }}>{user.name}</span><span style={{ marginLeft:8, fontSize:10, color:T.textDim }}>({formatRoleLabel(user.role)})</span></div>
         </div>
-        {canResetDatabase && (
+        {canShowDatabaseReset && (
           <button
             onClick={onOpenResetModal}
             style={{
@@ -740,8 +742,8 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh, canResetDatab
               textAlign: "left",
             }}
           >
-            <div style={{ fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", opacity: 0.8, marginBottom: 4 }}>⚠ Action sensible</div>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>Attention : Réinitialiser la base</div>
+            <div style={{ fontSize: 11, letterSpacing: 1.5, textTransform: "uppercase", opacity: 0.8, marginBottom: 4 }}>Attention</div>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>Reset base de test</div>
             <div style={{ fontSize: 11, marginTop: 4, opacity: 0.85 }}>Supprime les données métier de développement puis recharge la démo si demandé.</div>
           </button>
         )}
@@ -7494,7 +7496,7 @@ function AdminUsers() {
         
         // Si l'utilisateur modifie son PROPRE compte, on met à jour sa session active
         if (user && user.email === savedUser.email) {
-          setUser({ ...user, name: savedUser.name, role: savedUser.role, initials: savedUser.initials });
+          setUser({ ...user, name: savedUser.name, role: savedUser.role, roleKey: savedUser.roleKey, initials: savedUser.initials });
         }
         setEditUser(null);
       } else {
@@ -9892,11 +9894,12 @@ export default function App() {
       const email = session.user.email || "";
         const name = email.split('@')[0].toUpperCase();
         
-        setUser({ 
+        setUser({
           id: session.user.id, 
           email: email, 
           name: name, 
-          role: "Utilisateur", 
+          role: "Utilisateur",
+          roleKey: null,
           initials: name.substring(0, 2),
           accessToken: session.access_token,
         });
@@ -9918,9 +9921,23 @@ export default function App() {
   const goNav = (id: string) => { setNav(id); setSelCont(null); setSelLot(null); };
   const logout = () => { supabase.auth.signOut(); setUser(null); setNav("dashboard"); setSelCont(null); setSelLot(null); };
   
-  const isAdmin = roleMatches(user?.role, ["ADMIN", "CHEF_CAVE"]); 
-  const canResetDatabase = process.env.NODE_ENV === "development" && process.env.ALLOW_DATABASE_RESET === "true" && roleMatches(user?.role, ["ADMIN"]);
+  const currentUser = user;
+  const isAdmin = roleMatches(currentUser?.roleKey ?? currentUser?.role, ["ADMIN", "CHEF_CAVE"]);
+  const canShowDatabaseReset =
+    process.env.NODE_ENV === "development" &&
+    process.env.NEXT_PUBLIC_ALLOW_DATABASE_RESET === "true" &&
+    roleMatches(currentUser?.roleKey ?? currentUser?.role, ["ADMIN"]);
   const alertCount = state.containers.filter((c: any) => c.status === "VIDE" && c.notes).length + state.lots.filter((l: any) => l.notes && l.notes.includes("sans suivi")).length + state.bottleLots.filter((b: any) => b.status === "A_DEGORGER").length;
+
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    console.info("[admin-reset] visibility", {
+      nodeEnv: process.env.NODE_ENV,
+      publicReset: process.env.NEXT_PUBLIC_ALLOW_DATABASE_RESET,
+      role: currentUser?.roleKey ?? currentUser?.role,
+      canShowDatabaseReset,
+    });
+  }, [currentUser?.role, currentUser?.roleKey, canShowDatabaseReset]);
 
   const handleSelectLot = (lotObj: any) => {
     setSelCont(null);  
@@ -9939,7 +9956,7 @@ export default function App() {
     if (nav === "lots"    && selLot)       return <LotDetail       lot={selLot}             onBack={() => setSelLot(null)} onSelectLot={handleSelectLot} />;
     
     switch(nav) {
-      case "dashboard":   return <Dashboard setNav={goNav} workOrders={workOrders} setWorkOrders={setWorkOrders} onRefresh={fetchAll} canResetDatabase={canResetDatabase} onOpenResetModal={() => setShowResetModal(true)} lastResetSummary={lastResetSummary} />;
+      case "dashboard":   return <Dashboard setNav={goNav} workOrders={workOrders} setWorkOrders={setWorkOrders} onRefresh={fetchAll} canShowDatabaseReset={canShowDatabaseReset} onOpenResetModal={() => setShowResetModal(true)} lastResetSummary={lastResetSummary} />;
       case "maturation":  return <Maturation />;
       case "planificateur": return <PlanificateurVendanges />;
       case "degustation": return <Degustation />;
@@ -9959,7 +9976,7 @@ export default function App() {
       case "admin_users": return <AdminUsers />;
       case "admin_logs":  return <AdminLogs />;
       case "parametres":  return <Parametres theme={themeKey} setTheme={setThemeKey} />;
-      default:            return <Dashboard setNav={goNav} workOrders={workOrders} setWorkOrders={setWorkOrders} onRefresh={fetchAll} canResetDatabase={canResetDatabase} onOpenResetModal={() => setShowResetModal(true)} lastResetSummary={lastResetSummary} />;
+      default:            return <Dashboard setNav={goNav} workOrders={workOrders} setWorkOrders={setWorkOrders} onRefresh={fetchAll} canShowDatabaseReset={canShowDatabaseReset} onOpenResetModal={() => setShowResetModal(true)} lastResetSummary={lastResetSummary} />;
     }
   };
 
