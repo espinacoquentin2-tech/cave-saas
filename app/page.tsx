@@ -9674,6 +9674,9 @@ export default function App() {
 
   const [showResetModal, setShowResetModal] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
+  const [resetConfirmation, setResetConfirmation] = useState("");
+  const [resetReseed, setResetReseed] = useState(true);
+  const [lastResetSummary, setLastResetSummary] = useState<any | null>(null);
   
   const [openMenus, setOpenMenus] = useState<number[]>([1, 2, 3]); 
   const [adminOpen, setAdminOpen] = useState(false);     
@@ -9774,6 +9777,7 @@ export default function App() {
   const logout = () => { supabase.auth.signOut(); setUser(null); setNav("dashboard"); setSelCont(null); setSelLot(null); };
   
   const isAdmin = user?.role === "Admin" || user?.role === "Chef de cave"; 
+  const canResetDatabase = process.env.NODE_ENV === "development" && user?.role === "Admin";
   const alertCount = state.containers.filter((c: any) => c.status === "VIDE" && c.notes).length + state.lots.filter((l: any) => l.notes && l.notes.includes("sans suivi")).length + state.bottleLots.filter((b: any) => b.status === "A_DEGORGER").length;
 
   const handleSelectLot = (lotObj: any) => {
@@ -9817,22 +9821,38 @@ export default function App() {
     }
   };
 
+  const closeResetModal = (force = false) => {
+    if (isResetting && !force) return;
+    setShowResetModal(false);
+    setResetConfirmation("");
+    setResetReseed(true);
+  };
+
   const executeHardReset = async () => {
     setIsResetting(true);
     try {
-      const res = await fetch('/api/reset', { 
+      const res = await fetch('/api/admin/reset-database', { 
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: buildApiHeaders(user),
+        body: JSON.stringify({
+          confirmation: "RESET DATABASE",
+          mode: "business-data",
+          reseed: resetReseed,
+        }),
       });
       
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erreur serveur lors du reset");
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(extractApiErrorMessage(data, "Erreur serveur lors du reset"));
 
-      dispatch({ type: "TOAST_ADD", payload: { msg: "Base de données remise à zéro. Rechargement...", color: T.green } });
+      setLastResetSummary(data);
+      setSelCont(null);
+      setSelLot(null);
+      setNav("dashboard");
+      setWorkOrders([]);
+      closeResetModal(true);
+      dispatch({ type: "TOAST_ADD", payload: { msg: resetReseed ? "Base réinitialisée et démo rechargée." : "Base réinitialisée.", color: T.green } });
       
       await fetchAll();
-      setShowResetModal(false);
-
     } catch (e) {
       dispatch({ type: "TOAST_ADD", payload: { msg: e instanceof Error ? e.message : String(e), color: T.red } });
     } finally {
@@ -9936,42 +9956,90 @@ export default function App() {
                 
                 <div style={{ flex:1, overflowY:"auto", padding:"40px 48px" }}>
 
-                  {/* BOUTON D'URGENCE (VISIBLE UNIQUEMENT PAR LES ADMINS) */}
-                  {isAdmin && (
+                  {canResetDatabase && (
                     <button 
                       onClick={() => setShowResetModal(true)} 
                       style={{ 
-                        width: "100%", background: "#8b1c31", color: "white", padding: "12px", 
+                        width: "100%", background: "#7b1f28", color: "white", padding: "12px", 
                         marginBottom: "24px", borderRadius: "6px", fontWeight: "bold", 
-                        cursor: "pointer", border: "1px solid #ff4444", fontFamily: "monospace", letterSpacing: "1px"
+                        cursor: "pointer", border: "1px solid #d75a66", fontFamily: "monospace", letterSpacing: "0.8px"
                       }}
                     >
-                      🚨 BOUTON D'URGENCE : RÉINITIALISER LA BASE DE DONNÉES (LOTS & CUVES) 🚨
+                      Réinitialiser la base de test
                     </button>
                   )}
 
-                  {showResetModal && (
-                    <Modal title="⚠️ Réinitialisation de Saison" onClose={() => setShowResetModal(false)}>
-                      {/* ... Le contenu de ta modale ... */}
-                      <div style={{ padding:"20px 0", color:T.text, lineHeight:1.5 }}>
-                        Vous allez préparer l'application pour une nouvelle campagne. <br/><br/>
-                        <strong>Ce qui sera conservé :</strong>
-                        <ul style={{ marginTop: 8, fontSize: 13, color: T.green }}>
-                          <li>🗺️ Vos parcelles (Terroirs)</li>
-                          <li>📦 Votre catalogue de produits (Matières sèches)</li>
-                          <li>🛢️ Votre plan de cuverie (Capacités/Noms)</li>
-                        </ul>
-                        <strong>Ce qui sera remis à zéro :</strong>
-                        <ul style={{ marginTop: 8, fontSize: 13, color: T.red }}>
-                          <li>🍷 Tous les lots de vin et bouteilles</li>
-                          <li>📉 Tous les stocks de matières sèches (mis à 0)</li>
-                          <li>📋 Tout l'historique de traçabilité et maturation</li>
-                        </ul>
+                  {lastResetSummary && (
+                    <div style={{ marginBottom: 24, background: T.surface, border: `1px solid ${T.border}`, borderTop: `2px solid ${T.green}`, borderRadius: 6, padding: 20 }}>
+                      <div style={{ fontSize: 16, color: T.textStrong, fontWeight: 700, marginBottom: 6 }}>Résumé de la dernière réinitialisation</div>
+                      <div style={{ fontSize: 12, color: T.textDim, marginBottom: 14 }}>
+                        Mode: <span style={{ color: T.textStrong, fontFamily: "monospace" }}>{lastResetSummary.mode}</span> ·
+                        Démo rechargée: <span style={{ color: T.textStrong, fontFamily: "monospace" }}>{String(lastResetSummary.reseed)}</span>
                       </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16 }}>
+                        <div>
+                          <div style={{ fontSize: 11, color: T.textDim, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>Supprimé</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {Object.entries(lastResetSummary.deleted || {})
+                              .filter(([, value]) => typeof value === "number" && value > 0)
+                              .map(([key, value]) => (
+                                <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12, color: T.text }}>
+                                  <span>{key}</span>
+                                  <span style={{ fontFamily: "monospace", color: T.red }}>{String(value)}</span>
+                                </div>
+                              ))}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={{ fontSize: 11, color: T.textDim, textTransform: "uppercase", letterSpacing: 1.5, marginBottom: 8 }}>Recréé</div>
+                          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                            {Object.entries(lastResetSummary.seeded || {})
+                              .filter(([, value]) => typeof value === "number" && value > 0)
+                              .map(([key, value]) => (
+                                <div key={key} style={{ display: "flex", justifyContent: "space-between", gap: 12, fontSize: 12, color: T.text }}>
+                                  <span>{key}</span>
+                                  <span style={{ fontFamily: "monospace", color: T.green }}>{String(value)}</span>
+                                </div>
+                              ))}
+                            {Object.keys(lastResetSummary.seeded || {}).length === 0 && (
+                              <div style={{ fontSize: 12, color: T.textDim }}>Aucune donnée de démo recréée.</div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {showResetModal && (
+                    <Modal title="Réinitialiser la base de test" onClose={closeResetModal}>
+                      <div style={{ padding:"4px 0 0", color:T.text, lineHeight:1.6, fontSize:13 }}>
+                        Cette action supprime les données métier de développement puis recharge, si vous le souhaitez, une démo crédible du <strong>Domaine des Trois Coteaux</strong>.
+                      </div>
+                      <div style={{ marginTop: 14, padding: 14, background: T.bg, border: `1px solid ${T.border}`, borderRadius: 4, fontSize: 12, color: T.textDim }}>
+                        Sont conservés : utilisateurs, rôles, authentification, sessions et référentiels système indispensables.
+                      </div>
+                      <label style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 18, fontSize: 13, color: T.text, cursor: isResetting ? "not-allowed" : "pointer", opacity: isResetting ? 0.6 : 1 }}>
+                        <input
+                          type="checkbox"
+                          checked={resetReseed}
+                          disabled={isResetting}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setResetReseed(e.target.checked)}
+                          style={{ accentColor: T.accent }}
+                        />
+                        Recharger des données de démo crédibles
+                      </label>
+                      <FF label="Tapez RESET DATABASE pour confirmer">
+                        <Input
+                          value={resetConfirmation}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => setResetConfirmation(e.target.value)}
+                          disabled={isResetting}
+                          placeholder="RESET DATABASE"
+                        />
+                      </FF>
                       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop: 24 }}>
-                        <Btn variant="secondary" onClick={() => setShowResetModal(false)} disabled={isResetting}>Annuler</Btn>
-                        <Btn onClick={executeHardReset} disabled={isResetting} style={{ background: T.red, color: "#fff", borderColor: T.red }}>
-                          {isResetting ? "Nettoyage..." : "Confirmer le Reset"}
+                        <Btn variant="secondary" onClick={closeResetModal} disabled={isResetting}>Annuler</Btn>
+                        <Btn onClick={executeHardReset} disabled={isResetting || resetConfirmation !== "RESET DATABASE"} style={{ background: T.red, color: "#fff", borderColor: T.red }}>
+                          {isResetting ? "Réinitialisation..." : "Réinitialiser"}
                         </Btn>
                       </div>
                     </Modal>
