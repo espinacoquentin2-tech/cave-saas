@@ -7984,7 +7984,7 @@ function PerteCasseModal({ onClose }: { onClose: any }) {
 function PlanificateurVendanges() {
   const T = useTheme();
   const { user } = useAuth();
-  const { state, dispatch } = useStore();
+  const { dispatch } = useStore();
 
   // --- ÉTATS LOCAUX (Mémoire vive uniquement - Plus de LocalStorage) ---
   const [globalTarget, setGlobalTarget] = useState(10.5);
@@ -8040,14 +8040,14 @@ function PlanificateurVendanges() {
 
 
   // --- HELPERS D'AFFICHAGE ---
-  const handleCustomTarget = (parcelleName: any, val: any) => {
+  const handleCustomTarget = (parcelleKey: any, val: any) => {
     const num = parseFloat(val);
     if (isNaN(num)) {
       const newT = { ...(customTargets as any) };
-      delete newT[parcelleName];
+      delete newT[parcelleKey];
       setCustomTargets(newT);
     } else {
-      setCustomTargets({ ...(customTargets as any), [parcelleName]: num });
+      setCustomTargets({ ...(customTargets as any), [parcelleKey]: num });
     }
   };
 
@@ -8059,14 +8059,17 @@ function PlanificateurVendanges() {
     return T.green; 
   };
 
-  // Synchronisation avec les données géographiques locales
   const allProjections = serverProjections.map((backendProj: any) => {
-    const geoParcelle = (state.parcelles || []).find((p: any) => p.nom === backendProj.parcelleNom) || {};
+    const parcelleKey = backendProj.parcelleId ?? backendProj.parcelleKey ?? `${backendProj.parcelleNom}::${backendProj.cepage}::${backendProj.proj.lastDate}`;
     return {
       parcelle: { 
+        id: backendProj.parcelleId,
+        key: parcelleKey,
         nom: backendProj.parcelleNom, 
         cepage: backendProj.cepage, 
-        commune: geoParcelle.commune || "Inconnue" 
+        commune: backendProj.commune || "Inconnue",
+        region: backendProj.region || null,
+        departement: backendProj.departement || null,
       },
       proj: backendProj.proj
     };
@@ -8213,14 +8216,15 @@ function PlanificateurVendanges() {
           </div>
 	          {displayedProjections.map(({ parcelle, proj }: any, i: number) => {
             const sColor = getSanitaryColor(proj.maladie, proj.intensiteNum);
+            const parcelleKey = parcelle.id ?? parcelle.key;
             return (
-              <div key={parcelle.nom} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1.5fr 1fr 1.5fr 1.5fr", padding: "16px 20px", alignItems: "center", borderBottom: i < displayedProjections.length - 1 ? `1px solid ${T.border}` : 'none', background: proj.isReady ? T.green+"11" : "transparent" }}>
+              <div key={parcelleKey} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1.5fr 1fr 1.5fr 1.5fr", padding: "16px 20px", alignItems: "center", borderBottom: i < displayedProjections.length - 1 ? `1px solid ${T.border}` : 'none', background: proj.isReady ? T.green+"11" : "transparent" }}>
                 <div>
                   <div style={{ fontWeight: "bold", color: T.textStrong, fontSize: 14 }}>{parcelle.nom}</div>
                   <div style={{ fontSize: 11, color: T.accent, marginTop: 4 }}>{parcelle.cepage} • {parcelle.commune}</div>
                 </div>
                 <div style={{ textAlign: "center" }}>
-	                  <Input type="number" step="0.1" placeholder={globalTarget.toString()} value={(customTargets as any)[parcelle.nom] || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleCustomTarget(parcelle.nom, e.target.value)} style={{ width: 60, fontSize: 14, fontWeight: "bold", color: T.textStrong, textAlign: "center", padding: "4px", background: "transparent", borderColor: (customTargets as any)[parcelle.nom] ? T.accent : "transparent" }} />
+	                  <Input type="number" step="0.1" placeholder={globalTarget.toString()} value={(customTargets as any)[parcelleKey] || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleCustomTarget(parcelleKey, e.target.value)} style={{ width: 60, fontSize: 14, fontWeight: "bold", color: T.textStrong, textAlign: "center", padding: "4px", background: "transparent", borderColor: (customTargets as any)[parcelleKey] ? T.accent : "transparent" }} />
                 </div>
                 <div style={{ textAlign: "center" }}>
                   <div style={{ fontSize: 14, fontWeight: "bold", color: T.textStrong }}>{proj.currentDeg.toFixed(2)}</div>

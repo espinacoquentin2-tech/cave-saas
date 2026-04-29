@@ -18,13 +18,28 @@ export class VendangesService {
     const maturations = await prisma.maturation.findMany({
       orderBy: { date: 'asc' }
     });
+    const parcelles = await prisma.parcelle.findMany({
+      select: {
+        id: true,
+        nom: true,
+        commune: true,
+        region: true,
+        departement: true,
+      },
+    });
 
     type MaturationRecord = (typeof maturations)[number];
+    type ParcelleRecord = (typeof parcelles)[number];
     const groupedMaturations: Record<string, MaturationRecord[]> = {};
+    const parcellesByNom: Record<string, ParcelleRecord[]> = {};
     for (const m of maturations) {
       const key = `${m.parcelle}_${m.cepage}`;
       if (!groupedMaturations[key]) groupedMaturations[key] = [];
       groupedMaturations[key].push(m);
+    }
+    for (const parcelle of parcelles) {
+      if (!parcellesByNom[parcelle.nom]) parcellesByNom[parcelle.nom] = [];
+      parcellesByNom[parcelle.nom].push(parcelle);
     }
 
     const projections = [];
@@ -47,7 +62,7 @@ export class VendangesService {
         }
       }
 
-      const baseTarget = data.customTargets[last.parcelle] || data.globalTarget;
+      const baseTarget = data.customTargets[key] || data.globalTarget;
       let adjustedTarget = baseTarget;
       let riskLevel = "GREEN";
       
@@ -73,9 +88,16 @@ export class VendangesService {
       projDate.setDate(projDate.getDate() + Math.ceil(daysNeeded));
 
       const isReady = currentDeg >= adjustedTarget || new Date() >= projDate;
+      const matchingParcelles = parcellesByNom[last.parcelle] || [];
+      const resolvedParcelle = matchingParcelles.length === 1 ? matchingParcelles[0] : null;
 
       projections.push({
+        parcelleId: resolvedParcelle?.id,
+        parcelleKey: key,
         parcelleNom: last.parcelle,
+        commune: resolvedParcelle?.commune ?? null,
+        region: resolvedParcelle?.region ?? null,
+        departement: resolvedParcelle?.departement ?? null,
         cepage: last.cepage,
         proj: {
           currentDeg,
