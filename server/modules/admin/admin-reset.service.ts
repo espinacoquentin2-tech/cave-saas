@@ -790,6 +790,14 @@ export class AdminResetService {
     counts: Omit<AdminSeedCounts, 'operations'>,
   ) {
     const productDefinitions = [
+      { name: 'Bouteilles 37.5cl', category: 'Matières Sèches', subCategory: 'Bouteilles', unit: 'unites', minStock: 500, currentStock: 2400 },
+      { name: 'Bouteilles 75cl', category: 'Matières Sèches', subCategory: 'Bouteilles', unit: 'unites', minStock: 8000, currentStock: 36000 },
+      { name: 'Magnums 150cl', category: 'Matières Sèches', subCategory: 'Bouteilles', unit: 'unites', minStock: 300, currentStock: 1800 },
+      { name: 'Jeroboams 300cl', category: 'Matières Sèches', subCategory: 'Bouteilles', unit: 'unites', minStock: 60, currentStock: 240 },
+      { name: 'Capsules tirage', category: 'Bouchage', subCategory: 'Capsules', unit: 'unites', minStock: 8000, currentStock: 36000 },
+      { name: 'Bidules', category: 'Bouchage', subCategory: 'Bidules', unit: 'unites', minStock: 8000, currentStock: 36000 },
+      { name: 'Bouchons liege tirage', category: 'Bouchage', subCategory: 'Bouchons', unit: 'unites', minStock: 1200, currentStock: 6400 },
+      { name: 'Agrafes tirage', category: 'Bouchage', subCategory: 'Agrafes', unit: 'unites', minStock: 1200, currentStock: 6400 },
       { name: 'SO2 solution 6 %', category: 'Intrants', subCategory: 'Sulfites', unit: 'L', minStock: 20, currentStock: 48 },
       { name: 'Levure prise de mousse', category: 'Intrants', subCategory: 'Levures', unit: 'kg', minStock: 5, currentStock: 15 },
       { name: 'Levure fermentation alcoolique', category: 'Intrants', subCategory: 'Levures', unit: 'kg', minStock: 6, currentStock: 18 },

@@ -1,5 +1,6 @@
 // services/tirage.service.ts
 import { ExecuteMixtionPayload, TiragePayload } from '../validations/tirage.schema';
+import { calculateMixtionVolumes } from '@/lib/tirage';
 import { BusinessLogicError } from '../lib/errors';
 import { prisma } from '@/server/shared/prisma';
 
@@ -51,28 +52,23 @@ export class TirageService {
       }
 
       // 3. CALCULS MATHÉMATIQUES (Méthode CIVC)
-      const baseSugar = 1.0; 
-      const targetSugarGF = (data.targetPressure * 4) * (25.4 / 24.0);
       const volLevain = data.baseVolToDraw * (data.levainPct / 100);
       
       if (currentLevainVol < volLevain) {
         throw new BusinessLogicError(`Volume insuffisant dans le levain. Requis: ${volLevain.toFixed(2)} hL.`);
       }
 
-      const volVinLevain = data.baseVolToDraw + volLevain;
-      const sucreVinLevain = ((data.baseVolToDraw * baseSugar) + (volLevain * data.levainSugar)) / volVinLevain;
-      const sucreManquant = targetSugarGF - sucreVinLevain;
+      const mixtionResult = calculateMixtionVolumes({
+        baseVolumeHl: data.baseVolToDraw,
+        targetPressureBars: data.targetPressure,
+        levainPct: data.levainPct,
+        levainSugarGPerL: data.levainSugar,
+        sugarSource: data.sugarSource === "LIQUEUR" ? "LIQUEUR" : "SUCRE",
+        liqueurSugarGPerL: data.liqueurSugar,
+      });
+      if ('error' in mixtionResult && mixtionResult.error) throw new BusinessLogicError(mixtionResult.error);
 
-      if (sucreManquant <= 0) throw new BusinessLogicError("Le vin contient déjà trop de sucre.");
-
-      let volMixtion = 0;
-      if (data.sugarSource === "LIQUEUR" && data.liqueurSugar) {
-        const volLiqueur = (volVinLevain * sucreManquant) / (data.liqueurSugar - sucreManquant);
-        volMixtion = volVinLevain + volLiqueur;
-      } else {
-        const poidsSucre = (volVinLevain * sucreManquant) / (1 - (sucreManquant * 0.00063));
-        volMixtion = volVinLevain + (poidsSucre * 0.00063);
-      }
+      const volMixtion = mixtionResult.volMixtion ?? 0;
 
       // 4. VÉRIFICATION DES STOCKS MATIÈRES SÈCHES (NOUVEAU CATALOGUE)
       const nbCols = Math.floor((volMixtion * 100) / data.tirageFormat);

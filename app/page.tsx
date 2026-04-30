@@ -23,6 +23,17 @@ import {
   isAssemblageRoseEligibleLotStatus,
   isAssemblageEligibleLotStatus,
 } from "@/lib/assemblage";
+import {
+  calculateAdjuvantQuantity,
+  calculateBottleCount,
+  calculateLevainVolume,
+  calculateMixtionVolumes,
+  calculateSugarDose,
+  calculateTiragePlan,
+  calculateYeastQuantity,
+  isTirageEligibleLotStatus,
+  normalizeTirageBouchage,
+} from "@/lib/tirage";
 
 // =============================================================================
 // HELPERS & COMPOSANTS SUR-MESURE
@@ -119,6 +130,89 @@ const buildApiHeaders = (user: { accessToken?: string } | null | undefined, extr
   ...((user?.accessToken ?? latestAccessToken) ? { Authorization: `Bearer ${user?.accessToken ?? latestAccessToken}` } : {}),
   ...extra,
 });
+
+const toSafeNumber = (value: any) => {
+  const parsed = Number(value ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const getLotCode = (lot: any) => lot?.businessCode || lot?.code || `Lot #${lot?.id ?? "?"}`;
+
+const resolveTiragePackagingProducts = (products: any[], formatCode: string, bouchageValue: string) => {
+  const bouchage = normalizeTirageBouchage(bouchageValue);
+  const formatToken = formatCode.toLowerCase();
+
+  const bottleProduct = products.find((product: any) => {
+    if (product.subCategory !== "Bouteilles") return false;
+    return (product.name || "").toLowerCase().includes(formatToken);
+  });
+
+  const primaryClosureProduct = products.find((product: any) => {
+    if (bouchage === "CAPSULE") return product.subCategory === "Capsules";
+    return product.subCategory === "Bouchons";
+  });
+
+  const secondaryClosureProduct = products.find((product: any) => {
+    if (bouchage === "CAPSULE") return product.subCategory === "Bidules";
+    return product.subCategory === "Agrafes";
+  });
+
+  return {
+    bottleProduct,
+    primaryClosureProduct,
+    secondaryClosureProduct,
+    bouchage,
+  };
+};
+
+const buildTirageStockItems = (products: any[], formatCode: string, bouchageValue: string, count: number) => {
+  const { bottleProduct, primaryClosureProduct, secondaryClosureProduct, bouchage } =
+    resolveTiragePackagingProducts(products, formatCode, bouchageValue);
+
+  const items = [
+    bottleProduct
+      ? {
+          kind: "PACKAGING_BOTTLE",
+          productId: bottleProduct.id,
+          quantity: count,
+          unit: bottleProduct.unit,
+          label: `Bouteilles ${formatCode}`,
+        }
+      : null,
+    primaryClosureProduct
+      ? {
+          kind: "PACKAGING_PRIMARY_CLOSURE",
+          productId: primaryClosureProduct.id,
+          quantity: count,
+          unit: primaryClosureProduct.unit,
+          label: bouchage === "CAPSULE" ? "Capsules tirage" : "Bouchons liege tirage",
+        }
+      : null,
+    secondaryClosureProduct
+      ? {
+          kind: "PACKAGING_SECONDARY_CLOSURE",
+          productId: secondaryClosureProduct.id,
+          quantity: count,
+          unit: secondaryClosureProduct.unit,
+          label: bouchage === "CAPSULE" ? "Bidules" : "Agrafes tirage",
+        }
+      : null,
+  ].filter(Boolean);
+
+  const missing = [
+    bottleProduct ? null : `Bouteilles ${formatCode}`,
+    primaryClosureProduct ? null : bouchage === "CAPSULE" ? "Capsules" : "Bouchons",
+    secondaryClosureProduct ? null : bouchage === "CAPSULE" ? "Bidules" : "Agrafes",
+  ].filter(Boolean);
+
+  return {
+    items,
+    missing,
+    bottleProduct,
+    primaryClosureProduct,
+    secondaryClosureProduct,
+  };
+};
 
 const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Admin",
@@ -302,28 +396,42 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
-  const fmtHL = { "37.5cl":0.00375, "75cl":0.0075, "150cl":0.015, "300cl":0.03 };
   const [tirageTypeMise, setTirageTypeMise] = useState("EFFERVESCENT");
   const [tirageFormat, setTirageFormat] = useState("75cl");
   const [tirageBouchage, setTirageBouchage] = useState("Capsule");
   const [tirageModele, setTirageModele] = useState("");
   const [tirageZone, setTirageZone] = useState("");
-  const [tirageCount, setTirageCount] = useState(plannedVol > 0 ? Math.floor(plannedVol / fmtHL["75cl"]).toString() : "");
+  const [tirageCount, setTirageCount] = useState(
+    plannedVol > 0 ? calculateBottleCount(plannedVol, "75cl").toString() : "",
+  );
 
   const targetContainer = (state.containers || []).find((c: any) => String(c.id) === String(task.targetContainerId));
   const freeSpace = targetContainer ? Math.round(((targetContainer.capacityValue || targetContainer.capacity || 0) - (targetContainer.currentVolume || 0)) * 100) / 100 : 0;
   const isTankCapacityIssue = targetContainer && task.recette !== "TIRAGE" ? (parseFloat(volMain) || 0) > freeSpace : false;
 
-  const btlNeeded = task.recette === "TIRAGE" ? (parseInt(tirageCount) || 0) : 0;
-  const bottleProduct = (state.products || []).find((p: any) => p.subCategory === "Bouteilles" && p.name.includes(tirageFormat));
-  const bouchageProduct = (state.products || []).find((p: any) => p.subCategory === (tirageBouchage === "Capsule" ? "Capsules" : "Bouchons"));
+  const requestedTirageVolume = task.recette === "TIRAGE" ? toSafeNumber(volMain || plannedVol) : 0;
+  const tiragePlanPreview = task.recette === "TIRAGE"
+    ? calculateTiragePlan({ requestedVolumeHl: requestedTirageVolume, formatCode: tirageFormat })
+    : null;
+  const btlNeeded = task.recette === "TIRAGE" ? tiragePlanPreview?.bottleCount ?? 0 : 0;
+  const packagingStock = buildTirageStockItems(state.products || [], tirageFormat, tirageBouchage, btlNeeded);
+  const bottleProduct = packagingStock.bottleProduct;
+  const bouchageProduct = packagingStock.primaryClosureProduct;
+  const secondaryBouchageProduct = packagingStock.secondaryClosureProduct;
 
-  const bottleStock = bottleProduct ? bottleProduct.currentStock : 0;
-  const bouchageStock = bouchageProduct ? bouchageProduct.currentStock : 0;
+  const bottleStock = bottleProduct ? toSafeNumber(bottleProduct.currentStock) : 0;
+  const bouchageStock = bouchageProduct ? toSafeNumber(bouchageProduct.currentStock) : 0;
+  const secondaryBouchageStock = secondaryBouchageProduct ? toSafeNumber(secondaryBouchageProduct.currentStock) : 0;
 
   const isBottleShortage = btlNeeded > bottleStock;
   const isBouchageShortage = btlNeeded > bouchageStock;
-  const isStockShortage = task.recette === "TIRAGE" && (isBottleShortage || isBouchageShortage || !bottleProduct || !bouchageProduct);
+  const isSecondaryBouchageShortage = btlNeeded > secondaryBouchageStock;
+  const isStockShortage =
+    task.recette === "TIRAGE" &&
+    (isBottleShortage ||
+      isBouchageShortage ||
+      isSecondaryBouchageShortage ||
+      packagingStock.missing.length > 0);
 
   const recoveryTanks = (state.containers || []).filter((c: any) => 
     c.status !== "ARCHIVÉE" && (remType === "LIES" ? c.type === "CUVE_LIES" : c.type === "CUVE_BOURBES")
@@ -334,6 +442,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   let nextYear = baseYear + 1;
   const lotSourceId = task.lotId || (task.sources && task.sources[0]?.lotId);
   const lotSource = (state.lots || []).find((l: any) => String(l.id) === String(lotSourceId));
+  const isLotTirageEligible = isTirageEligibleLotStatus(lotSource?.status);
   
   if (task.recette === "TIRAGE" && tirageTypeMise === "EFFERVESCENT" && lotSource) {
       baseYear = parseInt(lotSource.year || lotSource.millesime) || parseInt((lotSource.businessCode || lotSource.code).substring(0,4)) || baseYear;
@@ -361,6 +470,9 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
   const execute = async () => {
     if (isTankCapacityIssue) return alert("Capacité insuffisante pour ce volume !");
+    if (task.recette === "TIRAGE" && lotSource && !isLotTirageEligible) {
+      return alert(`Ce lot n'est pas éligible au tirage. Statut actuel : ${lotSource.status}.`);
+    }
     if (isStockShortage) return alert("Stock insuffisant pour réaliser ce tirage !");
     
     setIsSubmitting(true);
@@ -449,7 +561,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
       // 3. TIRAGE (API TIRAGE SÉCURISÉE)
       else if (task.recette === "TIRAGE") {
         const execDate = new Date().toISOString(); 
-        const volUsed = btlNeeded * ((fmtHL as Record<string, number>)[tirageFormat] || 0.0075);
+        const volUsed = tiragePlanPreview?.consumedVolumeHl ?? 0;
         const detailBouchage = `${tirageBouchage} (${tirageModele || "Non précisé"})`;
         const isTranquille = tirageTypeMise === "TRANQUILLE";
         const finalNote = isTranquille ? `Mise en bouteille vin tranquille sous ${detailBouchage}.` : `Exécution OT Tirage effervescent sous ${detailBouchage}.`;
@@ -459,9 +571,11 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
           headers: buildApiHeaders(user), 
           body: JSON.stringify({ 
             lotId: parseInt(lotSourceId), 
+            sourceContainerId: lotSource?.currentContainerId || lotSource?.containerId || null,
             format: tirageFormat, count: btlNeeded, volume: volUsed, 
+            bouchage: tirageBouchage,
             zone: tirageZone, tirageDate: execDate, operator: user.name, note: finalNote,
-            isTranquille, idempotencyKey
+            isTranquille, stockItems: packagingStock.items, idempotencyKey
           }) 
         });
         if (!res.ok) {
@@ -533,6 +647,14 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
       {task.recette === "TIRAGE" ? (
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          {lotSource && !isLotTirageEligible && (
+            <div style={{ background:T.red+"15", border:`1px solid ${T.red}55`, borderRadius:4, padding:14 }}>
+              <div style={{ color:T.red, fontSize:12, fontWeight:"bold", marginBottom:4 }}>Lot non éligible au tirage</div>
+              <div style={{ color:T.red, fontSize:11, lineHeight:1.4 }}>
+                Ce lot n'est pas éligible au tirage. Statut actuel : {lotSource.status}.
+              </div>
+            </div>
+          )}
           
           <div style={{ marginBottom: 4, borderBottom:`1px solid ${T.border}`, paddingBottom: 16 }}>
             <FF label="Type de mise en bouteille">
@@ -556,10 +678,10 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
             <div style={{ background:T.red+"15", border:`1px solid ${T.red}55`, borderRadius:4, padding:14 }}>
               <div style={{ color:T.red, fontSize:12, fontWeight:"bold", marginBottom:6 }}>⚠️ Stock insuffisant pour tirer {btlNeeded.toLocaleString('fr-FR')} bouteilles :</div>
               <ul style={{ color:T.red, fontSize:12, margin:0, paddingLeft:20 }}>
-                {!bottleProduct && <li>Aucune bouteille {tirageFormat} au catalogue.</li>}
+                {packagingStock.missing.map((missingLabel: any) => <li key={missingLabel}>{missingLabel} introuvable au catalogue.</li>)}
                 {isBottleShortage && bottleProduct && <li>Manque {(btlNeeded - bottleStock).toLocaleString('fr-FR')} Bouteilles (En stock: {bottleStock.toLocaleString('fr-FR')})</li>}
-                {!bouchageProduct && <li>Aucun produit {tirageBouchage} au catalogue.</li>}
                 {isBouchageShortage && bouchageProduct && <li>Manque {(btlNeeded - bouchageStock).toLocaleString('fr-FR')} {tirageBouchage}s (En stock: {bouchageStock.toLocaleString('fr-FR')})</li>}
+                {isSecondaryBouchageShortage && secondaryBouchageProduct && <li>Manque {(btlNeeded - secondaryBouchageStock).toLocaleString('fr-FR')} {secondaryBouchageProduct.name} (En stock: {secondaryBouchageStock.toLocaleString('fr-FR')})</li>}
               </ul>
             </div>
           )}
@@ -567,15 +689,30 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
             <FF label="Format bouteille">
               <Select value={tirageFormat} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                const formatKey = e.target.value as keyof typeof fmtHL;
                 setTirageFormat(e.target.value);
-                setTirageCount(plannedVol > 0 ? Math.floor(plannedVol / fmtHL[formatKey]).toString() : "");
+                const nextPlan = calculateTiragePlan({
+                  requestedVolumeHl: requestedTirageVolume,
+                  formatCode: e.target.value,
+                });
+                setTirageCount(nextPlan.bottleCount.toString());
               }}>
                 {["37.5cl","75cl","150cl"].map(f => <option key={f}>{f}</option>)}
               </Select>
             </FF>
-            <FF label="Nombre de bouteilles réel">
-              <Input type="number" value={tirageCount} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageCount(e.target.value)} disabled={isSubmitting} />
+            <FF label="Volume à tirer (hL)">
+              <Input type="number" step="0.001" value={volMain} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVolMain(e.target.value)} disabled={isSubmitting} />
+            </FF>
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12 }}>
+            <FF label="Bouteilles calculées">
+              <Input value={btlNeeded ? btlNeeded.toLocaleString('fr-FR') : "0"} disabled={true} />
+            </FF>
+            <FF label="Volume consommé réel">
+              <Input value={`${(tiragePlanPreview?.consumedVolumeHl ?? 0).toFixed(3)} hL`} disabled={true} />
+            </FF>
+            <FF label="Reliquat théorique">
+              <Input value={`${(tiragePlanPreview?.remainderVolumeHl ?? 0).toFixed(3)} hL`} disabled={true} />
             </FF>
           </div>
 
@@ -646,7 +783,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
         <Btn 
           onClick={execute} 
-          disabled={isSubmitting || isTankCapacityIssue || isStockShortage || isTirageBlockedAOC || isChaptalisationBlocked || isAcidificationBlocked || (parseFloat(remVol) > 0 && !remTargetId) || (task.recette === "TIRAGE" && !tirageCount)}
+          disabled={isSubmitting || isTankCapacityIssue || isStockShortage || isTirageBlockedAOC || isChaptalisationBlocked || isAcidificationBlocked || (parseFloat(remVol) > 0 && !remTargetId) || (task.recette === "TIRAGE" && (!volMain || !isLotTirageEligible))}
         >
           {isSubmitting ? "Traitement Serveur..." : "Valider la tâche"}
         </Btn>
@@ -4416,6 +4553,7 @@ function Lots({ onSelectLot }: { onSelectLot: any }) {
 // =============================================================================
 function PlanificateurTirage() {
   const T = useTheme();
+  const { user } = useAuth();
   const { state, dispatch, refreshData } = useStore();
 
   const [activeTab, setActiveTab] = useState("MIXTION");
@@ -4439,6 +4577,42 @@ function PlanificateurTirage() {
     bouchonsLiege: 5000, agrafes: 5000
   });
 
+  useEffect(() => {
+    const products = state.products || [];
+    if (products.length === 0) return;
+
+    const findStock = (predicate: (product: any) => boolean) => {
+      const product = products.find(predicate);
+      return product ? toSafeNumber(product.currentStock) : 0;
+    };
+
+    setTirageStocks({
+      bouteilles: findStock((product: any) => product.subCategory === "Bouteilles" && (product.name || "").includes("75cl")),
+      magnums: findStock((product: any) => product.subCategory === "Bouteilles" && (product.name || "").includes("150cl")),
+      bidules: findStock((product: any) => product.subCategory === "Bidules"),
+      capsules: findStock((product: any) => product.subCategory === "Capsules"),
+      bouchonsLiege: findStock((product: any) => product.subCategory === "Bouchons"),
+      agrafes: findStock((product: any) => product.subCategory === "Agrafes"),
+    });
+  }, [state.products]);
+
+  useEffect(() => {
+    const products = state.products || [];
+    if (products.length === 0) return;
+
+    const sugarProduct = products.find((product: any) => product.subCategory === "Sucres");
+    const yeastProduct = products.find((product: any) => product.subCategory === "Levures" && (product.name || "").toLowerCase().includes("prise de mousse"))
+      || products.find((product: any) => product.subCategory === "Levures");
+    const adjuvantProduct = products.find((product: any) => product.subCategory === "Adjuvants");
+
+    setPlanningForm((prev) => ({
+      ...prev,
+      sugarProductId: prev.sugarProductId || (sugarProduct ? String(sugarProduct.id) : ""),
+      yeastProductId: prev.yeastProductId || (yeastProduct ? String(yeastProduct.id) : ""),
+      adjuvantProductId: prev.adjuvantProductId || (adjuvantProduct ? String(adjuvantProduct.id) : ""),
+    }));
+  }, [state.products]);
+
   const [config, setConfig] = useState({
     mixTargetPressure: 6.0, mixLevainPct: 3.0, mixLevainSugar: 20,
     mixSugarSource: "LIQUEUR", mixLiqueurSugar: 530,
@@ -4459,11 +4633,51 @@ function PlanificateurTirage() {
   const [createLevainSourceId, setCreateLevainSourceId] = useState("");
   const [alimSourceTankId, setAlimSourceTankId] = useState("");
   const [alimLevainTankId, setAlimLevainTankId] = useState("");
+  const [planningForm, setPlanningForm] = useState({
+    sourceContainerId: "",
+    requestedVolumeHl: "1",
+    format: "75cl",
+    bouchage: "CAPSULE",
+    pressureTargetBars: "6",
+    wineTemperatureC: "",
+    residualSugarGPerL: "",
+    note: "",
+    includeSugar: true,
+    sugarProductId: "",
+    includeYeast: false,
+    yeastProductId: "",
+    yeastDose: "10",
+    yeastDoseUnit: "g/hL",
+    includeAdjuvant: false,
+    adjuvantProductId: "",
+    adjuvantDose: "10",
+    adjuvantDoseUnit: "mL/hL",
+  });
+  const [planningLastSuccess, setPlanningLastSuccess] = useState<any | null>(null);
+  const [planningLastError, setPlanningLastError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPlanningLastError(null);
+  }, [
+    planningForm.sourceContainerId,
+    planningForm.requestedVolumeHl,
+    planningForm.format,
+    planningForm.bouchage,
+    planningForm.pressureTargetBars,
+    planningForm.sugarProductId,
+    planningForm.yeastProductId,
+    planningForm.yeastDose,
+    planningForm.adjuvantProductId,
+    planningForm.adjuvantDose,
+  ]);
 
   // ===========================================================================
   // FILTRAGE DES CUVES
   // ===========================================================================
-  const getContainerLot = (c: any) => state.lots?.find((l: any) => String(l.id) === String(c.lotId));
+  const getContainerLot = (c: any) =>
+    state.lots?.find((l: any) =>
+      String(l.id) === String(c.lotId || c.currentLots?.[0]?.id || c.currentContainerId),
+    );
 
   const cuvesVinBase = (state.containers || []).filter((c: any) => {
     if (parseFloat(c.currentVolume) <= 0) return false;
@@ -4473,7 +4687,7 @@ function PlanificateurTirage() {
     if (n.includes("BOURBE") || n.includes("LIE") || n.includes("REBECHE")) return false;
     const lot = getContainerLot(c);
     if (!lot) return false;
-    if (lot.status !== "VIN_CLAIR" && lot.status !== "ASSEMBLAGE" && lot.status !== "ASSEMBLE") return false;
+    if (!isTirageEligibleLotStatus(lot.status)) return false;
     return true;
   });
 
@@ -4501,37 +4715,28 @@ function PlanificateurTirage() {
   // ===========================================================================
   const selectedBaseTank = cuvesVinBase.find((c: any) => String(c.id) === String(mixBaseTankId));
   const baseVol = mixVolVinSaisi !== "" ? parseFloat(mixVolVinSaisi) : (selectedBaseTank ? parseFloat(selectedBaseTank.currentVolume) : 0);
-  const getTargetSugar = (bars: any) => (bars * 4) * (25.4 / 24.0); 
 
   const calcMixtionPreview = () => {
     if (!baseVol || baseVol <= 0) return null;
-    const baseSugar = 1.0; 
-    const targetSugarGF = getTargetSugar(config.mixTargetPressure);
-    const volLevain = baseVol * (config.mixLevainPct / 100);
-    const volVinLevain = baseVol + volLevain;
-    const sucreVinLevain = ((baseVol * baseSugar) + (volLevain * config.mixLevainSugar)) / volVinLevain;
-    const sucreManquant = targetSugarGF - sucreVinLevain;
-    
-    if (sucreManquant <= 0) return { error: "Le vin contient déjà trop de sucre pour cette pression." };
+    const mixResult = calculateMixtionVolumes({
+      baseVolumeHl: baseVol,
+      targetPressureBars: parseFloat(String(config.mixTargetPressure)),
+      levainPct: parseFloat(String(config.mixLevainPct)),
+      levainSugarGPerL: parseFloat(String(config.mixLevainSugar)),
+      sugarSource: (config.mixSugarSource === "LIQUEUR" ? "LIQUEUR" : "SUCRE") as "LIQUEUR" | "SUCRE",
+      liqueurSugarGPerL: parseFloat(String(config.mixLiqueurSugar)),
+    });
 
-    let volLiqueur = 0, poidsSucre = 0, volMixtion = 0;
-    if (config.mixSugarSource === "LIQUEUR") {
-      volLiqueur = (volVinLevain * sucreManquant) / (config.mixLiqueurSugar - sucreManquant);
-      volMixtion = volVinLevain + volLiqueur;
-    } else {
-      poidsSucre = (volVinLevain * sucreManquant) / (1 - (sucreManquant * 0.00063));
-      volMixtion = volVinLevain + (poidsSucre * 0.00063);
-    }
+    if ('error' in mixResult) return { error: mixResult.error };
 
-    const deltaRho = (targetSugarGF - baseSugar) / 2.5;
-    const nbCols = Math.floor((volMixtion * 100) / config.tirageFormat);
+    const nbCols = calculateBottleCount(mixResult.volMixtion, config.tirageFormat === 0.75 ? "75cl" : "150cl");
 
     return {
-      volVin: baseVol.toFixed(2), volLevain: volLevain.toFixed(2),
-      volLiqueur: volLiqueur > 0 ? volLiqueur.toFixed(3) : null,
-      poidsSucre: poidsSucre > 0 ? poidsSucre.toFixed(1) : null,
-      volMixtion: volMixtion.toFixed(2), deltaRho: deltaRho.toFixed(1),
-      targetSugar: targetSugarGF.toFixed(1), nbCols
+      volVin: baseVol.toFixed(2), volLevain: mixResult.volLevain.toFixed(2),
+      volLiqueur: mixResult.volLiqueur > 0 ? mixResult.volLiqueur.toFixed(3) : null,
+      poidsSucre: mixResult.poidsSucre > 0 ? mixResult.poidsSucre.toFixed(1) : null,
+      volMixtion: mixResult.volMixtion.toFixed(2), deltaRho: mixResult.deltaRho.toFixed(1),
+      targetSugar: mixResult.targetSugarGF.toFixed(1), nbCols
     };
   };
   const resMix = calcMixtionPreview();
@@ -4543,9 +4748,6 @@ function PlanificateurTirage() {
     let taux = 0.78; 
     if (config.levainTemp === 20) taux = 0.70;
     if (config.levainTemp === 13) taux = 0.87;
-
-    const baseSugar = 1.0; 
-    const targetSugarGF = getTargetSugar(config.mixTargetPressure);
 
     const cascadeResult: any[] = [];
     let volNextDayLevain = 0; 
@@ -4567,20 +4769,23 @@ function PlanificateurTirage() {
     levainNeeds.forEach((day: any) => {
       const vVin = parseFloat(String(day.vinBaseVolume)) || 0;
       const vLevain = day.besoinLevain;
-      const volVinLevain = vVin + vLevain;
       let volMixtion = 0;
       
       if (vVin > 0) {
-        const sucreVinLevain = ((vVin * baseSugar) + (vLevain * config.mixLevainSugar)) / volVinLevain;
-        const sucreManquant = targetSugarGF - sucreVinLevain;
-        if (config.mixSugarSource === "LIQUEUR") {
-          volMixtion = volVinLevain + ((volVinLevain * sucreManquant) / (config.mixLiqueurSugar - sucreManquant));
-        } else {
-          volMixtion = volVinLevain + (((volVinLevain * sucreManquant) / (1 - (sucreManquant * 0.00063))) * 0.00063);
+        const mixResult = calculateMixtionVolumes({
+          baseVolumeHl: vVin,
+          targetPressureBars: parseFloat(String(config.mixTargetPressure)),
+          levainPct: parseFloat(String(config.mixLevainPct)),
+          levainSugarGPerL: parseFloat(String(config.mixLevainSugar)),
+          sugarSource: (config.mixSugarSource === "LIQUEUR" ? "LIQUEUR" : "SUCRE") as "LIQUEUR" | "SUCRE",
+          liqueurSugarGPerL: parseFloat(String(config.mixLiqueurSugar)),
+        });
+        if (!('error' in mixResult)) {
+          volMixtion = mixResult.volMixtion;
         }
       }
 
-      const nbColsTires = Math.floor((volMixtion * 100) / config.tirageFormat);
+      const nbColsTires = calculateBottleCount(volMixtion, config.tirageFormat === 0.75 ? "75cl" : "150cl");
       cBtls -= nbColsTires; cF1 -= nbColsTires; cF2 -= nbColsTires;
 
       cascadeResult.push({
@@ -4592,6 +4797,299 @@ function PlanificateurTirage() {
   };
   const cascade = calcWeeklyPlanning();
   const maxLevainVol = cascade.length > 0 ? Math.max(...cascade.map(r => r.totalLevainCuveMatin)) : 0;
+
+  const tiragePlanningProducts = state.products || [];
+  const sugarProducts = tiragePlanningProducts.filter((product: any) => product.subCategory === "Sucres");
+  const yeastProducts = tiragePlanningProducts.filter((product: any) => product.subCategory === "Levures");
+  const adjuvantProducts = tiragePlanningProducts.filter((product: any) => product.subCategory === "Adjuvants");
+  const levainStockProduct = tiragePlanningProducts.find((product: any) => (product.name || "").toLowerCase().includes("levain")) || null;
+
+  const planningSourceContainer = cuvesVinBase.find((container: any) => String(container.id) === String(planningForm.sourceContainerId));
+  const planningSourceLot = planningSourceContainer ? getContainerLot(planningSourceContainer) : null;
+  const planningSourceLotCode = planningSourceLot ? getLotCode(planningSourceLot) : "";
+  const planningSourceLotAnalyses = planningSourceLot
+    ? (state.analyses || [])
+        .filter((analysis: any) => String(analysis.lotId) === String(planningSourceLot.id))
+        .sort((a: any, b: any) => new Date(b.analysisDate).getTime() - new Date(a.analysisDate).getTime())
+    : [];
+  const planningLatestAnalysis = planningSourceLotAnalyses[0] || null;
+  const planningAnalysisResidualSugar = planningLatestAnalysis?.extraData?.sucresResiduel != null
+    ? toSafeNumber(planningLatestAnalysis.extraData.sucresResiduel)
+    : null;
+
+  const planningRequestedVolumeHl = toSafeNumber(planningForm.requestedVolumeHl);
+  const planningAvailableVolumeHl = planningSourceLot ? toSafeNumber(planningSourceLot.currentVolume ?? planningSourceLot.volume) : 0;
+  const planningPressureTargetBars = planningForm.pressureTargetBars === "" ? 0 : toSafeNumber(planningForm.pressureTargetBars);
+  const planningWineTemperatureC = planningForm.wineTemperatureC === "" ? null : toSafeNumber(planningForm.wineTemperatureC);
+  const planningResidualSugarGPerL = planningForm.residualSugarGPerL !== ""
+    ? toSafeNumber(planningForm.residualSugarGPerL)
+    : planningAnalysisResidualSugar;
+  const planningPlanPreview = calculateTiragePlan({
+    requestedVolumeHl: planningRequestedVolumeHl,
+    formatCode: planningForm.format,
+  });
+  const planningBottleCount = planningPlanPreview.bottleCount;
+  const planningPackagingStock = buildTirageStockItems(
+    tiragePlanningProducts,
+    planningForm.format,
+    planningForm.bouchage,
+    planningBottleCount,
+  );
+  const planningSugarProduct = sugarProducts.find((product: any) => String(product.id) === String(planningForm.sugarProductId)) || null;
+  const planningYeastProduct = yeastProducts.find((product: any) => String(product.id) === String(planningForm.yeastProductId)) || null;
+  const planningAdjuvantProduct = adjuvantProducts.find((product: any) => String(product.id) === String(planningForm.adjuvantProductId)) || null;
+  const planningLevainPct = toSafeNumber(config.mixLevainPct);
+  const planningLevainVolumeHl = calculateLevainVolume(planningRequestedVolumeHl, planningLevainPct);
+  const planningSugarCalculation =
+    planningForm.includeSugar && planningSugarProduct && planningPressureTargetBars > 0
+      ? calculateSugarDose({
+          volumeHl: planningRequestedVolumeHl,
+          targetPressureBars: planningPressureTargetBars,
+          residualSugarGPerL: planningResidualSugarGPerL ?? 0,
+          quantityUnit: planningSugarProduct.unit,
+        })
+      : null;
+  const planningYeastDose = toSafeNumber(planningForm.yeastDose);
+  const planningYeastQuantity =
+    planningForm.includeYeast && planningYeastProduct && planningYeastDose > 0
+      ? calculateYeastQuantity({
+          treatedVolumeHl: planningRequestedVolumeHl,
+          dose: planningYeastDose,
+          doseUnit: planningForm.yeastDoseUnit,
+          quantityUnit: planningYeastProduct.unit,
+        })
+      : 0;
+  const planningAdjuvantDose = toSafeNumber(planningForm.adjuvantDose);
+  const planningAdjuvantQuantity =
+    planningForm.includeAdjuvant && planningAdjuvantProduct && planningAdjuvantDose > 0
+      ? calculateAdjuvantQuantity({
+          treatedVolumeHl: planningRequestedVolumeHl,
+          dose: planningAdjuvantDose,
+          doseUnit: planningForm.adjuvantDoseUnit,
+          quantityUnit: planningAdjuvantProduct.unit,
+        })
+      : 0;
+
+  const planningCalculatedItems = [
+    planningPackagingStock.bottleProduct && planningBottleCount > 0
+      ? {
+          kind: "PACKAGING_BOTTLE",
+          productId: planningPackagingStock.bottleProduct.id,
+          quantity: planningBottleCount,
+          unit: planningPackagingStock.bottleProduct.unit,
+          label: `Bouteilles ${planningForm.format}`,
+          treatedVolumeHl: planningRequestedVolumeHl,
+          consumeStock: true,
+        }
+      : null,
+    planningPackagingStock.primaryClosureProduct && planningBottleCount > 0
+      ? {
+          kind: "PACKAGING_PRIMARY_CLOSURE",
+          productId: planningPackagingStock.primaryClosureProduct.id,
+          quantity: planningBottleCount,
+          unit: planningPackagingStock.primaryClosureProduct.unit,
+          label: planningForm.bouchage === "CAPSULE" ? "Capsules tirage" : "Bouchons liege tirage",
+          treatedVolumeHl: planningRequestedVolumeHl,
+          consumeStock: true,
+        }
+      : null,
+    planningPackagingStock.secondaryClosureProduct && planningBottleCount > 0
+      ? {
+          kind: "PACKAGING_SECONDARY_CLOSURE",
+          productId: planningPackagingStock.secondaryClosureProduct.id,
+          quantity: planningBottleCount,
+          unit: planningPackagingStock.secondaryClosureProduct.unit,
+          label: planningForm.bouchage === "CAPSULE" ? "Bidules" : "Agrafes tirage",
+          treatedVolumeHl: planningRequestedVolumeHl,
+          consumeStock: true,
+        }
+      : null,
+    planningSugarCalculation && planningSugarProduct && planningSugarCalculation.quantityTotal > 0
+      ? {
+          kind: "SUGAR",
+          productId: planningSugarProduct.id,
+          quantity: planningSugarCalculation.quantityTotal,
+          unit: planningSugarProduct.unit,
+          label: planningSugarProduct.name,
+          dose: planningSugarCalculation.additionDoseGPerL,
+          doseUnit: "g/L",
+          treatedVolumeHl: planningRequestedVolumeHl,
+          consumeStock: true,
+        }
+      : null,
+    planningForm.includeYeast && planningYeastProduct && planningYeastQuantity > 0
+      ? {
+          kind: "YEAST",
+          productId: planningYeastProduct.id,
+          quantity: planningYeastQuantity,
+          unit: planningYeastProduct.unit,
+          label: planningYeastProduct.name,
+          dose: planningYeastDose,
+          doseUnit: planningForm.yeastDoseUnit,
+          treatedVolumeHl: planningRequestedVolumeHl,
+          consumeStock: true,
+        }
+      : null,
+    planningForm.includeAdjuvant && planningAdjuvantProduct && planningAdjuvantQuantity > 0
+      ? {
+          kind: "ADJUVANT",
+          productId: planningAdjuvantProduct.id,
+          quantity: planningAdjuvantQuantity,
+          unit: planningAdjuvantProduct.unit,
+          label: planningAdjuvantProduct.name,
+          dose: planningAdjuvantDose,
+          doseUnit: planningForm.adjuvantDoseUnit,
+          treatedVolumeHl: planningRequestedVolumeHl,
+          consumeStock: true,
+        }
+      : null,
+    planningRequestedVolumeHl > 0 && planningLevainPct > 0
+      ? {
+          kind: "LEVAIN",
+          quantity: planningLevainVolumeHl,
+          unit: "hL",
+          label: levainStockProduct ? levainStockProduct.name : "Levain de process",
+          dose: planningLevainPct,
+          doseUnit: "%",
+          treatedVolumeHl: planningRequestedVolumeHl,
+          consumeStock: false,
+          note: levainStockProduct
+            ? "TODO métier: produit levain détecté mais non branché au stock de tirage."
+            : "Levain calculé mais non consommé faute de produit stock dédié.",
+        }
+      : null,
+  ].filter(Boolean);
+
+  const planningStockItems = planningCalculatedItems
+    .filter((item: any) => item.consumeStock !== false && item.productId)
+    .map((item: any) => ({
+      productId: item.productId,
+      kind: item.kind,
+      quantity: item.quantity,
+      unit: item.unit,
+      label: item.label,
+      dose: item.dose ?? null,
+      doseUnit: item.doseUnit ?? null,
+      treatedVolumeHl: item.treatedVolumeHl ?? null,
+    }));
+
+  const planningStockShortages = planningStockItems
+    .map((item: any) => {
+      const product = tiragePlanningProducts.find((candidate: any) => String(candidate.id) === String(item.productId));
+      const available = product ? toSafeNumber(product.currentStock) : 0;
+      return {
+        ...item,
+        product,
+        available,
+        missingQuantity: Math.max(0, item.quantity - available),
+        isShortage: available + 0.0001 < item.quantity,
+      };
+    })
+    .filter((item: any) => item.isShortage);
+
+  const planningIssues = [
+    !planningForm.sourceContainerId ? "Sélectionnez une cuve source pour préparer le tirage." : null,
+    planningSourceLot == null ? "La cuve sélectionnée ne contient aucun lot éligible au tirage." : null,
+    planningSourceLot && !isTirageEligibleLotStatus(planningSourceLot.status)
+      ? `Ce lot n'est pas éligible au tirage. Statut actuel : ${planningSourceLot.status}.`
+      : null,
+    planningRequestedVolumeHl <= 0 ? "Saisissez un volume à tirer strictement positif." : null,
+    planningSourceLot && planningRequestedVolumeHl > planningAvailableVolumeHl
+      ? `Le volume demandé dépasse le disponible du lot (${planningAvailableVolumeHl.toFixed(3)} hL).`
+      : null,
+    !planningForm.format ? "Sélectionnez un format bouteille valide." : null,
+    planningBottleCount <= 0 ? "Le volume saisi ne permet pas de produire de bouteilles avec ce format." : null,
+    planningPackagingStock.missing.length > 0
+      ? `Produits d'emballage introuvables: ${planningPackagingStock.missing.join(", ")}.`
+      : null,
+    planningForm.includeSugar && !planningSugarProduct ? "Sélectionnez un produit sucre de tirage." : null,
+    planningForm.includeSugar && planningPressureTargetBars <= 0 ? "La pression cible est requise pour calculer le sucre de tirage." : null,
+    planningForm.includeYeast && !planningYeastProduct ? "Sélectionnez une levure de prise de mousse." : null,
+    planningForm.includeYeast && planningYeastDose <= 0 ? "Saisissez une dose levure valide." : null,
+    planningForm.includeAdjuvant && !planningAdjuvantProduct ? "Sélectionnez un adjuvant de remuage." : null,
+    planningForm.includeAdjuvant && planningAdjuvantDose <= 0 ? "Saisissez une dose adjuvant valide." : null,
+    planningStockShortages.length > 0 ? "Les stocks disponibles sont insuffisants pour au moins un intrant du tirage." : null,
+  ].filter((issue): issue is string => Boolean(issue));
+  const planningPrimaryIssue = planningIssues[0] || null;
+  const planningIsReady =
+    !isSubmitting &&
+    planningIssues.length === 0 &&
+    planningSourceLot != null &&
+    planningSourceContainer != null &&
+    planningBottleCount > 0;
+
+  const handleCreateTirageFromPlanning = async () => {
+    if (planningIssues.length > 0 || !planningSourceLot || !planningSourceContainer) {
+      setPlanningLastError(planningIssues[0] || "La planification n'est pas encore prête pour un tirage réel.");
+      dispatch({ type: "TOAST_ADD", payload: { msg: planningIssues[0] || "La planification n'est pas encore prête pour un tirage réel.", color: T.red } });
+      return;
+    }
+
+    setIsSubmitting(true);
+    setPlanningLastSuccess(null);
+    setPlanningLastError(null);
+
+    try {
+      const payload = {
+        lotId: planningSourceLot.id,
+        sourceContainerId: planningSourceContainer.id,
+        format: planningForm.format,
+        count: planningBottleCount,
+        volume: planningRequestedVolumeHl,
+        bouchage: planningForm.bouchage,
+        zone: planningSourceContainer.zone || null,
+        tirageDate: new Date().toISOString(),
+        note: planningForm.note?.trim() || `Créé depuis la planification tirage (${planningSourceLotCode})`,
+        isTranquille: false,
+        pressureTargetBars: planningPressureTargetBars || null,
+        wineTemperatureC: planningWineTemperatureC,
+        residualSugarGPerL: planningResidualSugarGPerL,
+        stockItems: planningStockItems,
+        calculatedItems: planningCalculatedItems,
+        planningMeta: {
+          source: "PLANNING",
+          requestedVolumeHl: planningRequestedVolumeHl,
+          theoreticalConsumedVolumeHl: planningPlanPreview.consumedVolumeHl,
+          theoreticalRemainderHl: planningPlanPreview.remainderVolumeHl,
+          sourceLotCode: planningSourceLotCode,
+        },
+        idempotencyKey,
+      };
+
+      const res = await fetch('/api/tirage', {
+        method: 'POST',
+        headers: buildApiHeaders(user),
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(extractApiErrorMessage(data, "Erreur lors de la création du tirage depuis la planification."));
+      }
+
+      setPlanningLastSuccess({
+        ...data,
+        sourceLotCode: planningSourceLotCode,
+        requestedVolumeHl: planningRequestedVolumeHl,
+      });
+      setPlanningLastError(null);
+      dispatch({
+        type: "TOAST_ADD",
+        payload: { msg: `Tirage créé depuis la planification: ${data.bottleLotCode}`, color: T.green }
+      });
+      if (refreshData) await refreshData();
+    } catch (error: any) {
+      const message = error?.message || "Erreur lors de la création du tirage planifié.";
+      setPlanningLastError(message);
+      dispatch({
+        type: "TOAST_ADD",
+        payload: { msg: message, color: T.red }
+      });
+    } finally {
+      setIsSubmitting(false);
+      setIdempotencyKey(crypto.randomUUID());
+    }
+  };
 
   // ===========================================================================
   // CALCULS : ALIMENTATION (Page 3)
@@ -4908,6 +5406,259 @@ function PlanificateurTirage() {
 
       {activeTab === "PLANNING" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+          <div style={{ background:T.accent+"11", border:`1px solid ${T.accent}33`, borderRadius:8, padding:"14px 18px" }}>
+            <div style={{ fontSize:12, color:T.textStrong, fontWeight:"bold", marginBottom:4 }}>Planification tirage</div>
+            <div style={{ fontSize:12, color:T.textDim, lineHeight:1.5 }}>
+              Le planning hebdomadaire reste un simulateur de préparation, mais ce module permet désormais de créer un tirage réel vers le même backend sécurisé que le tirage direct depuis un lot.
+            </div>
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"1.2fr 1fr", gap:24 }}>
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:20, display:"flex", flexDirection:"column", gap:16 }}>
+              <div>
+                <div style={{ fontSize:14, fontWeight:"bold", color:T.textStrong, marginBottom:4 }}>Créer le tirage depuis cette planification</div>
+                <div style={{ fontSize:12, color:T.textDim, lineHeight:1.5 }}>
+                  Cette préparation appelle <code>/api/tirage</code> avec les mêmes règles d'éligibilité, de volume et de stock que le tirage direct.
+                </div>
+              </div>
+
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+                <FF label="Cuve source">
+                  <Select
+                    value={planningForm.sourceContainerId}
+                    disabled={isSubmitting}
+                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                      const nextContainerId = e.target.value;
+                      const nextContainer = cuvesVinBase.find((container: any) => String(container.id) === String(nextContainerId));
+                      const nextLot = nextContainer ? getContainerLot(nextContainer) : null;
+                      const nextAnalyses = nextLot
+                        ? (state.analyses || [])
+                            .filter((analysis: any) => String(analysis.lotId) === String(nextLot.id))
+                            .sort((a: any, b: any) => new Date(b.analysisDate).getTime() - new Date(a.analysisDate).getTime())
+                        : [];
+                      const nextResidualSugar = nextAnalyses[0]?.extraData?.sucresResiduel;
+                      setPlanningForm((prev) => ({
+                        ...prev,
+                        sourceContainerId: nextContainerId,
+                        residualSugarGPerL:
+                          nextResidualSugar != null && prev.residualSugarGPerL === ""
+                            ? String(nextResidualSugar)
+                            : prev.residualSugarGPerL,
+                      }));
+                    }}
+                  >
+                    <option value="">-- Sélectionner une cuve source --</option>
+                    {cuvesVinBase.map((container: any) => {
+                      const lot = getContainerLot(container);
+                      return (
+                        <option key={container.id} value={container.id}>
+                          {(container.displayName || container.name)} · {lot ? getLotCode(lot) : "Lot introuvable"} · {parseFloat(container.currentVolume || lot?.currentVolume || 0).toFixed(1)} hL
+                        </option>
+                      );
+                    })}
+                  </Select>
+                </FF>
+                <FF label="Lot source détecté">
+                  <Input value={planningSourceLotCode || "--"} disabled={true} />
+                </FF>
+                <FF label="Volume à tirer (hL)">
+                  <Input type="number" step="0.1" value={planningForm.requestedVolumeHl} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlanningForm((prev) => ({ ...prev, requestedVolumeHl: e.target.value }))} />
+                </FF>
+                <FF label="Volume disponible">
+                  <Input value={planningSourceLot ? `${planningAvailableVolumeHl.toFixed(3)} hL` : "--"} disabled={true} />
+                </FF>
+                <FF label="Format bouteille">
+                  <Select value={planningForm.format} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlanningForm((prev) => ({ ...prev, format: e.target.value }))}>
+                    {["37.5cl", "75cl", "150cl", "300cl"].map((format) => (
+                      <option key={format} value={format}>{getBottleFormatLabel(format)}</option>
+                    ))}
+                  </Select>
+                </FF>
+                <FF label="Type de bouchage">
+                  <Select value={planningForm.bouchage} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlanningForm((prev) => ({ ...prev, bouchage: e.target.value }))}>
+                    <option value="CAPSULE">Capsule + Bidule</option>
+                    <option value="LIEGE">Liège + Agrafe</option>
+                  </Select>
+                </FF>
+                <FF label="Pression cible (bar)">
+                  <Input type="number" step="0.1" value={planningForm.pressureTargetBars} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlanningForm((prev) => ({ ...prev, pressureTargetBars: e.target.value }))} />
+                </FF>
+                <FF label="Température vin (°C)">
+                  <Input type="number" step="0.1" value={planningForm.wineTemperatureC} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlanningForm((prev) => ({ ...prev, wineTemperatureC: e.target.value }))} placeholder="Optionnel" />
+                </FF>
+                <FF label="Sucres résiduels (g/L)">
+                  <Input type="number" step="0.1" value={planningForm.residualSugarGPerL} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlanningForm((prev) => ({ ...prev, residualSugarGPerL: e.target.value }))} placeholder={planningAnalysisResidualSugar != null ? `Analyse: ${planningAnalysisResidualSugar} g/L` : "Optionnel"} />
+                </FF>
+                <FF label="Note opérateur">
+                  <Input value={planningForm.note} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlanningForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Ex: tirage préparé depuis le planning hebdo" />
+                </FF>
+              </div>
+
+              <div style={{ borderTop:`1px solid ${T.border}`, paddingTop:16, display:"flex", flexDirection:"column", gap:12 }}>
+                <div style={{ fontSize:12, textTransform:"uppercase", letterSpacing:1, color:T.textDim, fontWeight:"bold" }}>Intrants calculés et confirmés</div>
+
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr 140px", gap:12, alignItems:"center" }}>
+                  <input type="checkbox" checked={planningForm.includeSugar} disabled={isSubmitting} onChange={(e) => setPlanningForm((prev) => ({ ...prev, includeSugar: e.target.checked }))} />
+                  <Select value={planningForm.sugarProductId} disabled={isSubmitting || !planningForm.includeSugar} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlanningForm((prev) => ({ ...prev, sugarProductId: e.target.value }))}>
+                    <option value="">-- Sucre de tirage --</option>
+                    {sugarProducts.map((product: any) => <option key={product.id} value={product.id}>{product.name} ({toSafeNumber(product.currentStock).toFixed(3)} {product.unit})</option>)}
+                  </Select>
+                  <Input value={planningSugarCalculation ? `${planningSugarCalculation.quantityTotal.toFixed(3)} ${planningSugarProduct?.unit || ""}` : "--"} disabled={true} />
+                </div>
+
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1.2fr 110px 110px 120px", gap:12, alignItems:"center" }}>
+                  <input type="checkbox" checked={planningForm.includeYeast} disabled={isSubmitting} onChange={(e) => setPlanningForm((prev) => ({ ...prev, includeYeast: e.target.checked }))} />
+                  <Select value={planningForm.yeastProductId} disabled={isSubmitting || !planningForm.includeYeast} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlanningForm((prev) => ({ ...prev, yeastProductId: e.target.value }))}>
+                    <option value="">-- Levure prise de mousse --</option>
+                    {yeastProducts.map((product: any) => <option key={product.id} value={product.id}>{product.name} ({toSafeNumber(product.currentStock).toFixed(3)} {product.unit})</option>)}
+                  </Select>
+                  <Input type="number" step="0.1" value={planningForm.yeastDose} disabled={isSubmitting || !planningForm.includeYeast} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlanningForm((prev) => ({ ...prev, yeastDose: e.target.value }))} />
+                  <Select value={planningForm.yeastDoseUnit} disabled={isSubmitting || !planningForm.includeYeast} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlanningForm((prev) => ({ ...prev, yeastDoseUnit: e.target.value }))}>
+                    {["g/hL", "kg/hL", "mL/hL", "L/hL"].map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                  </Select>
+                  <Input value={planningForm.includeYeast && planningYeastQuantity > 0 ? `${planningYeastQuantity.toFixed(3)} ${planningYeastProduct?.unit || ""}` : "--"} disabled={true} />
+                </div>
+
+                <div style={{ display:"grid", gridTemplateColumns:"auto 1.2fr 110px 110px 120px", gap:12, alignItems:"center" }}>
+                  <input type="checkbox" checked={planningForm.includeAdjuvant} disabled={isSubmitting} onChange={(e) => setPlanningForm((prev) => ({ ...prev, includeAdjuvant: e.target.checked }))} />
+                  <Select value={planningForm.adjuvantProductId} disabled={isSubmitting || !planningForm.includeAdjuvant} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlanningForm((prev) => ({ ...prev, adjuvantProductId: e.target.value }))}>
+                    <option value="">-- Adjuvant de remuage --</option>
+                    {adjuvantProducts.map((product: any) => <option key={product.id} value={product.id}>{product.name} ({toSafeNumber(product.currentStock).toFixed(3)} {product.unit})</option>)}
+                  </Select>
+                  <Input type="number" step="0.1" value={planningForm.adjuvantDose} disabled={isSubmitting || !planningForm.includeAdjuvant} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlanningForm((prev) => ({ ...prev, adjuvantDose: e.target.value }))} />
+                  <Select value={planningForm.adjuvantDoseUnit} disabled={isSubmitting || !planningForm.includeAdjuvant} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlanningForm((prev) => ({ ...prev, adjuvantDoseUnit: e.target.value }))}>
+                    {["mL/hL", "L/hL", "g/hL", "kg/hL"].map((unit) => <option key={unit} value={unit}>{unit}</option>)}
+                  </Select>
+                  <Input value={planningForm.includeAdjuvant && planningAdjuvantQuantity > 0 ? `${planningAdjuvantQuantity.toFixed(3)} ${planningAdjuvantProduct?.unit || ""}` : "--"} disabled={true} />
+                </div>
+
+                <div style={{ fontSize:12, color:T.textDim, lineHeight:1.5 }}>
+                  Levain calculé: <strong>{planningLevainVolumeHl.toFixed(3)} hL</strong> à {planningLevainPct.toFixed(1)} %.
+                  {levainStockProduct
+                    ? " Produit levain détecté mais non consommé automatiquement: TODO métier explicite à confirmer."
+                    : " Aucun produit stock dédié n'est présent dans le seed: levain traité comme donnée de process non stockée."}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:20, display:"flex", flexDirection:"column", gap:16 }}>
+              <div style={{ fontSize:14, fontWeight:"bold", color:T.textStrong }}>Synthèse du tirage préparé</div>
+              <div style={{
+                background: planningIsReady ? T.green+"11" : T.surfaceHigh,
+                border: `1px solid ${planningIsReady ? T.green+"33" : planningPrimaryIssue ? T.red+"33" : T.border}`,
+                borderRadius: 6,
+                padding: 14,
+              }}>
+                <div style={{ fontSize:12, fontWeight:"bold", color: planningIsReady ? T.green : planningPrimaryIssue ? T.red : T.textStrong, marginBottom:6 }}>
+                  {isSubmitting
+                    ? "Création du tirage en cours"
+                    : planningIsReady
+                      ? "Planification prête pour un tirage réel"
+                      : "Action en attente de validation"}
+                </div>
+                <div style={{ fontSize:12, color: planningPrimaryIssue ? T.red : T.textDim, lineHeight:1.5 }}>
+                  {isSubmitting
+                    ? "Le bouton reste verrouillé pendant l'enregistrement pour éviter tout double submit."
+                    : planningIsReady
+                      ? `${planningBottleCount.toLocaleString('fr-FR')} bouteilles seront créées et ${planningPlanPreview.consumedVolumeHl.toFixed(3)} hL seront consommés sur ${planningSourceLotCode}.`
+                      : planningPrimaryIssue || "Complétez la planification pour activer la création du tirage."}
+                </div>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                <div><div style={{ fontSize:10, color:T.textDim, textTransform:"uppercase" }}>Cols calculés</div><div style={{ fontSize:20, fontFamily:"monospace", color:T.textStrong }}>{planningBottleCount.toLocaleString('fr-FR')}</div></div>
+                <div><div style={{ fontSize:10, color:T.textDim, textTransform:"uppercase" }}>Volume réel consommé</div><div style={{ fontSize:20, fontFamily:"monospace", color:T.textStrong }}>{planningPlanPreview.consumedVolumeHl.toFixed(3)} hL</div></div>
+                <div><div style={{ fontSize:10, color:T.textDim, textTransform:"uppercase" }}>Reliquat théorique</div><div style={{ fontSize:20, fontFamily:"monospace", color:T.textStrong }}>{planningPlanPreview.remainderVolumeHl.toFixed(3)} hL</div></div>
+                <div><div style={{ fontSize:10, color:T.textDim, textTransform:"uppercase" }}>Bouchage</div><div style={{ fontSize:20, fontFamily:"monospace", color:T.textStrong }}>{normalizeTirageBouchage(planningForm.bouchage)}</div></div>
+              </div>
+
+              <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:"hidden" }}>
+                <div style={{ padding:"10px 14px", background:T.surfaceHigh, fontSize:11, color:T.textDim, textTransform:"uppercase", fontWeight:"bold" }}>Détail des intrants</div>
+                <div style={{ display:"flex", flexDirection:"column" }}>
+                  {planningCalculatedItems.length === 0 ? (
+                    <div style={{ padding:14, fontSize:12, color:T.textDim }}>Aucun intrant calculé pour le moment.</div>
+                  ) : (
+                    planningCalculatedItems.map((item: any, index: number) => {
+                      const product = item.productId ? tiragePlanningProducts.find((candidate: any) => String(candidate.id) === String(item.productId)) : null;
+                      const available = product ? toSafeNumber(product.currentStock) : 0;
+                      const isShortage = !!product && available + 0.0001 < item.quantity;
+                      return (
+                        <div key={`${item.kind}-${index}`} style={{ display:"grid", gridTemplateColumns:"1.4fr 100px 110px 1fr", gap:12, padding:"12px 14px", borderTop:index === 0 ? "none" : `1px solid ${T.border}`, background:isShortage ? T.red+"11" : "transparent" }}>
+                          <div>
+                            <div style={{ fontSize:12, color:T.textStrong, fontWeight:"bold" }}>{item.label}</div>
+                            <div style={{ fontSize:11, color:T.textDim }}>
+                              {item.dose != null && item.doseUnit ? `${item.dose} ${item.doseUnit}` : item.consumeStock === false ? "Process non stocké" : "Consommation stock"}
+                            </div>
+                          </div>
+                          <div style={{ fontSize:12, fontFamily:"monospace", color:T.textStrong }}>{item.quantity.toFixed(3)} {item.unit}</div>
+                          <div style={{ fontSize:12, fontFamily:"monospace", color:product ? (isShortage ? T.red : T.textDim) : T.textDim }}>
+                            {product ? `${available.toFixed(3)} ${product.unit}` : "--"}
+                          </div>
+                          <div style={{ fontSize:11, color:isShortage ? T.red : T.textDim }}>
+                            {item.note || (isShortage ? `Manque ${(item.quantity - available).toFixed(3)} ${item.unit}` : "OK")}
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {planningIssues.length > 0 && (
+                <div style={{ background:T.red+"11", border:`1px solid ${T.red}44`, borderRadius:6, padding:14 }}>
+                  <div style={{ fontSize:12, fontWeight:"bold", color:T.red, marginBottom:8 }}>Planification incomplète</div>
+                  <ul style={{ margin:0, paddingLeft:18, color:T.red, fontSize:12, lineHeight:1.6 }}>
+                    {planningIssues.map((issue: string) => <li key={issue}>{issue}</li>)}
+                  </ul>
+                </div>
+              )}
+
+              {planningStockShortages.length > 0 && (
+                <div style={{ background:T.red+"11", border:`1px solid ${T.red}33`, borderRadius:6, padding:14 }}>
+                  <div style={{ fontSize:12, fontWeight:"bold", color:T.red, marginBottom:8 }}>Stocks insuffisants</div>
+                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                    {planningStockShortages.map((item: any) => (
+                      <div key={`shortage-${item.productId}`} style={{ fontSize:12, color:T.red }}>
+                        {item.label}: disponible {item.available.toFixed(3)} {item.unit}, requis {item.quantity.toFixed(3)} {item.unit}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {planningLastError && (
+                <div style={{ background:T.red+"11", border:`1px solid ${T.red}33`, borderRadius:6, padding:14 }}>
+                  <div style={{ fontSize:12, fontWeight:"bold", color:T.red, marginBottom:6 }}>Dernière erreur backend</div>
+                  <div style={{ fontSize:12, color:T.red, lineHeight:1.5 }}>{planningLastError}</div>
+                </div>
+              )}
+
+              {planningLastSuccess && (
+                <div style={{ background:T.green+"11", border:`1px solid ${T.green}33`, borderRadius:6, padding:14 }}>
+                  <div style={{ fontSize:12, fontWeight:"bold", color:T.green, marginBottom:6 }}>Tirage créé en base</div>
+                  <div style={{ fontSize:12, color:T.textStrong }}>
+                    {planningLastSuccess.bottleLotCode} · {planningLastSuccess.bottleCount} bouteilles · volume restant {planningLastSuccess.remainingVolume?.toFixed ? planningLastSuccess.remainingVolume.toFixed(3) : planningLastSuccess.remainingVolume} hL sur {planningLastSuccess.sourceLotCode}
+                  </div>
+                  <div style={{ fontSize:11, color:T.textDim, marginTop:6 }}>
+                    Les données ont été rafraîchies après création pour remettre à jour le lot source, les stocks et les BottleLots.
+                  </div>
+                </div>
+              )}
+
+              <Btn
+                onClick={handleCreateTirageFromPlanning}
+                disabled={isSubmitting || planningIssues.length > 0}
+                style={{ width:"100%", height:48, fontSize:14 }}
+              >
+                {isSubmitting ? "Création du tirage en cours..." : "Créer le tirage depuis cette planification"}
+              </Btn>
+              <div style={{ fontSize:11, color:planningIsReady ? T.textDim : T.red, lineHeight:1.5 }}>
+                {planningIsReady
+                  ? "Le flux utilisera la même route /api/tirage que le tirage direct depuis un lot."
+                  : `Bouton désactivé tant que la planification n'est pas complète${planningPrimaryIssue ? ` : ${planningPrimaryIssue}` : "."}`}
+              </div>
+            </div>
+          </div>
+
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
             <div style={{ background: T.surfaceHigh, padding: "20px 24px", borderRadius: 8, border: `1px solid ${T.border}`, display: "flex", flexDirection: "column", justifyContent: "space-between" }}>
               <div>
@@ -5896,10 +6647,15 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
   const [rightTab, setRightTab] = useState("analyses"); 
   
   const [tirageForm, setTirageForm] = useState({ typeMise: "EFFERVESCENT", format:"75cl", volume:"", count:"", bouchage:"Capsule", modeleBouchage:"", zone:"", note:"" });
+  const [tirageSubmitError, setTirageSubmitError] = useState<string | null>(null);
   const [statusForm, setStatusForm] = useState({ status: "", note: "" });
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+
+  useEffect(() => {
+    setTirageSubmitError(null);
+  }, [modal, tirageForm.typeMise, tirageForm.format, tirageForm.volume, tirageForm.bouchage, initialLot.id]);
 
   // Helper local :
   const formatVolShort = (vol: any) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
@@ -5952,6 +6708,59 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
 
   const sourceLot = isBottle ? (state.lots || []).find((l: any) => l.id == lot.sourceLotId) : null;
   const container = !isBottle ? (state.containers || []).find((c: any) => c.id === (lot.currentContainerId || lot.containerId)) : null;
+  const tirageRequestedVolume = toSafeNumber(tirageForm.volume);
+  const tiragePlanPreview = calculateTiragePlan({
+    requestedVolumeHl: tirageRequestedVolume,
+    formatCode: tirageForm.format,
+  });
+  const tirageBottleCount = tiragePlanPreview.bottleCount;
+  const tiragePackagingStock = buildTirageStockItems(
+    state.products || [],
+    tirageForm.format,
+    tirageForm.bouchage,
+    tirageBottleCount,
+  );
+  const isLotTirageEligible = isTirageEligibleLotStatus(lot.status);
+  const tirageBottleStock = tiragePackagingStock.bottleProduct ? toSafeNumber(tiragePackagingStock.bottleProduct.currentStock) : 0;
+  const tiragePrimaryClosureStock = tiragePackagingStock.primaryClosureProduct ? toSafeNumber(tiragePackagingStock.primaryClosureProduct.currentStock) : 0;
+  const tirageSecondaryClosureStock = tiragePackagingStock.secondaryClosureProduct ? toSafeNumber(tiragePackagingStock.secondaryClosureProduct.currentStock) : 0;
+  const isBottleStockShortage = tirageBottleCount > tirageBottleStock;
+  const isPrimaryClosureShortage = tirageBottleCount > tiragePrimaryClosureStock;
+  const isSecondaryClosureShortage = tirageBottleCount > tirageSecondaryClosureStock;
+  const isTirageStockShortage =
+    tirageBottleCount > 0 &&
+    (
+      tiragePackagingStock.missing.length > 0 ||
+      isBottleStockShortage ||
+      isPrimaryClosureShortage ||
+      isSecondaryClosureShortage
+    );
+  const tirageForecastItems = [
+    tiragePackagingStock.bottleProduct
+      ? {
+          label: tiragePackagingStock.bottleProduct.name,
+          quantity: tirageBottleCount,
+          unit: tiragePackagingStock.bottleProduct.unit,
+          available: tirageBottleStock,
+        }
+      : null,
+    tiragePackagingStock.primaryClosureProduct
+      ? {
+          label: tiragePackagingStock.primaryClosureProduct.name,
+          quantity: tirageBottleCount,
+          unit: tiragePackagingStock.primaryClosureProduct.unit,
+          available: tiragePrimaryClosureStock,
+        }
+      : null,
+    tiragePackagingStock.secondaryClosureProduct
+      ? {
+          label: tiragePackagingStock.secondaryClosureProduct.name,
+          quantity: tirageBottleCount,
+          unit: tiragePackagingStock.secondaryClosureProduct.unit,
+          available: tirageSecondaryClosureStock,
+        }
+      : null,
+  ].filter(Boolean) as Array<{ label: string; quantity: number; unit: string; available: number }>;
 
   const lotAnalyses = (isBottle && sourceLot)
     ? (state.analyses || []).filter((a: any) => a.lotId === sourceLot.id).sort((a: any,b: any) => new Date(b.analysisDate).getTime() - new Date(a.analysisDate).getTime())
@@ -6163,34 +6972,45 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
   // Ce POST tape sur l'API sécurisée /api/tirage que nous avons faite dans le TirageService
 const submitTirage = async () => {
   setIsSubmitting(true);
+  setTirageSubmitError(null);
   
   try {
+    if (!isLotTirageEligible) {
+      throw new Error(`Ce lot n'est pas éligible au tirage. Statut actuel : ${lot.status}.`);
+    }
+    if (isTirageStockShortage) {
+      throw new Error("Les stocks de tirage sont insuffisants pour cette opération.");
+    }
+
     const isTranquille = tirageForm.typeMise === "TRANQUILLE";
     const finalNote = isTranquille 
       ? `Mise en bouteille tranquille (${tirageForm.bouchage}). ${tirageForm.note || ''}` 
       : `Tirage effervescent (${tirageForm.bouchage}). ${tirageForm.note || ''}`;
 
-    // 1. Calcul automatique du nombre de bouteilles (count)
-    const volumeHL = parseFloat(tirageForm.volume);
-    const formatLiters = tirageForm.format === "75cl" ? 0.75 : (tirageForm.format === "150cl" ? 1.5 : 0.375);
-    const calculatedCount = Math.floor((volumeHL * 100) / formatLiters);
-
-    // 2. On récupère le lot source depuis la cuve sélectionnée
-    const sourceLot = container?.currentLots?.[0];
-    if (!sourceLot) {
-      throw new Error("La cuve sélectionnée est vide. Aucun lot à tirer.");
+    if (!tirageRequestedVolume || tirageRequestedVolume <= 0 || tirageBottleCount <= 0) {
+      throw new Error("Le volume saisi ne permet pas de produire de bouteilles avec ce format.");
     }
 
-    // 3. Préparation du payload STRICTEMENT aligné avec Zod (TirageSchema)
     const payload = {
-      lotId: sourceLot.id,
+      lotId: lot.id,
+      sourceContainerId: lot.currentContainerId || lot.containerId || null,
       format: tirageForm.format,
-      count: calculatedCount,
-      volume: volumeHL,
+      count: tirageBottleCount,
+      volume: tirageRequestedVolume,
+      bouchage: tirageForm.bouchage,
       zone: container?.zone || null, // Optionnel : pour savoir où on range les palettes
       tirageDate: new Date().toISOString(),
       note: finalNote,
       isTranquille: isTranquille,
+      stockItems: tiragePackagingStock.items,
+      calculatedItems: [],
+      planningMeta: {
+        source: "DIRECT",
+        requestedVolumeHl: tirageRequestedVolume,
+        theoreticalConsumedVolumeHl: tiragePlanPreview.consumedVolumeHl,
+        theoreticalRemainderHl: tiragePlanPreview.remainderVolumeHl,
+        sourceLotCode: getLotCode(lot),
+      },
       idempotencyKey: idempotencyKey || crypto.randomUUID()
     };
 
@@ -6205,7 +7025,7 @@ const submitTirage = async () => {
 
     // 5. Gestion des erreurs du Backend (Zod ou BusinessLogicError)
     if (!res.ok) {
-      throw new Error(data.error || "Une erreur est survenue lors du tirage.");
+      throw new Error(data.message || data.error || "Une erreur est survenue lors du tirage.");
     }
 
     // 6. SUCCÈS ! 🎉 Affichage du Toast vert de ton système natif
@@ -6218,10 +7038,12 @@ const submitTirage = async () => {
     if (refreshData) await refreshData(); 
 
   } catch(e: any) {
+    const message = e?.message || "Une erreur est survenue lors du tirage.";
+    setTirageSubmitError(message);
     // 7. ECHEC ! 🛑 Affichage du Toast rouge avec le message d'erreur strict
     dispatch({ 
       type: "TOAST_ADD", 
-      payload: { msg: `Erreur : ${e.message}`, color: "#d93025" } // Code couleur rouge standard
+      payload: { msg: `Erreur : ${message}`, color: "#d93025" } // Code couleur rouge standard
     });
   } finally {
     // 8. On débloque l'UI et on génère une nouvelle clé pour la prochaine tentative
@@ -6257,7 +7079,7 @@ const submitTirage = async () => {
             {!isDeadBulk && (
               <>
                 <Btn variant="secondary" onClick={() => { setStatusForm({ status: lot.status, note: "" }); setModal("status" as any); }}>Modifier Statut</Btn>
-                <Btn variant="ghost" onClick={() => setModal("tirage" as any)} disabled={!["VIN_DE_BASE", "ASSEMBLAGE", "ASSEMBLE", "RESERVE", "VIN_ROUGE"].includes(lot.status)}>
+                <Btn variant="ghost" onClick={() => setModal("tirage" as any)} disabled={!isLotTirageEligible}>
                   Tirer / Mettre en bouteille
                 </Btn>
               </>
@@ -6278,6 +7100,11 @@ const submitTirage = async () => {
             </div>
           ))}
         </div>
+        {!isDeadBulk && !isLotTirageEligible && (
+          <div style={{ marginTop:16, fontSize:12, color:T.red }}>
+            Ce lot n'est pas éligible au tirage. Statut actuel : {lot.status}.
+          </div>
+        )}
       </div>
 
       <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:4, padding:20, marginBottom:16 }}>
@@ -6372,6 +7199,14 @@ const submitTirage = async () => {
 
         return (
           <Modal title={isTranquille ? "Mise en Bouteille (Vin Tranquille)" : "Tirage (Prise de mousse)"} onClose={() => setModal(null)}>
+            {!isLotTirageEligible && (
+              <div style={{ background:T.red+"15", border:`1px solid ${T.red}55`, borderRadius:4, padding:14, marginBottom: 16 }}>
+                <div style={{ color:T.red, fontSize:12, fontWeight:"bold", marginBottom:4 }}>Lot non éligible au tirage</div>
+                <div style={{ color:T.red, fontSize:11, lineHeight:1.4 }}>
+                  Ce lot n'est pas éligible au tirage. Statut actuel : {lot.status}.
+                </div>
+              </div>
+            )}
             
             <div style={{ marginBottom: 20, borderBottom:`1px solid ${T.border}`, paddingBottom: 16 }}>
               <FF label="Type de mise en bouteille">
@@ -6407,6 +7242,18 @@ const submitTirage = async () => {
               </FF>
             </div>
 
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginTop: 8 }}>
+              <FF label="Bouteilles calculées">
+                <Input value={tirageBottleCount ? tirageBottleCount.toLocaleString('fr-FR') : "0"} disabled={true} />
+              </FF>
+              <FF label="Volume consommé réel">
+                <Input value={`${tiragePlanPreview.consumedVolumeHl.toFixed(3)} hL`} disabled={true} />
+              </FF>
+              <FF label="Reliquat théorique">
+                <Input value={`${tiragePlanPreview.remainderVolumeHl.toFixed(3)} hL`} disabled={true} />
+              </FF>
+            </div>
+
             <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12, marginTop: 8 }}>
               <FF label="Type de bouchage">
                 <Select value={tirageForm.bouchage} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTirageForm({...tirageForm, bouchage:e.target.value})} disabled={isSubmitting}>
@@ -6423,9 +7270,52 @@ const submitTirage = async () => {
               <Input value={tirageForm.note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageForm({...tirageForm, note:e.target.value})} disabled={isSubmitting} placeholder="Ex: Ajout de levures spécifiques..." />
             </FF>
 
+            {tirageBottleCount > 0 && (
+              <div style={{ background:T.surfaceHigh, border:`1px solid ${T.border}`, borderRadius:6, padding:14 }}>
+                <div style={{ color:T.textStrong, fontSize:12, fontWeight:"bold", marginBottom:8 }}>Consommation prévue</div>
+                <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+                  {tirageForecastItems.map((item) => {
+                    const remaining = Math.max(0, item.available - item.quantity);
+                    const isShortage = item.available + 0.0001 < item.quantity;
+                    return (
+                      <div key={item.label} style={{ display:"grid", gridTemplateColumns:"1.2fr 120px 140px", gap:12, fontSize:12, color:isShortage ? T.red : T.textDim }}>
+                        <div style={{ color:T.textStrong }}>{item.label}</div>
+                        <div style={{ fontFamily:"monospace" }}>{item.quantity.toLocaleString('fr-FR')} {item.unit}</div>
+                        <div style={{ fontFamily:"monospace" }}>
+                          {item.available.toLocaleString('fr-FR')} {"->"} {remaining.toLocaleString('fr-FR')} {item.unit}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div style={{ fontSize:11, color:T.textDim, marginTop:10, lineHeight:1.5 }}>
+                  Ce tirage utilisera la même route <strong>/api/tirage</strong> que la planification et décrémentera le lot selon le volume réellement consommé.
+                </div>
+              </div>
+            )}
+
+            {isTirageStockShortage && tirageBottleCount > 0 && (
+              <div style={{ background:T.red+"15", border:`1px solid ${T.red}55`, borderRadius:4, padding:14 }}>
+                <div style={{ color:T.red, fontSize:12, fontWeight:"bold", marginBottom:6 }}>Stock insuffisant pour ce tirage :</div>
+                <ul style={{ color:T.red, fontSize:12, margin:0, paddingLeft:20 }}>
+                  {tiragePackagingStock.missing.map((missingLabel: any) => <li key={missingLabel}>{missingLabel} introuvable au catalogue.</li>)}
+                  {isBottleStockShortage && tiragePackagingStock.bottleProduct && <li>Manque {(tirageBottleCount - tirageBottleStock).toLocaleString('fr-FR')} bouteilles (en stock: {tirageBottleStock.toLocaleString('fr-FR')}).</li>}
+                  {isPrimaryClosureShortage && tiragePackagingStock.primaryClosureProduct && <li>Manque {(tirageBottleCount - tiragePrimaryClosureStock).toLocaleString('fr-FR')} {tiragePackagingStock.primaryClosureProduct.name} (en stock: {tiragePrimaryClosureStock.toLocaleString('fr-FR')}).</li>}
+                  {isSecondaryClosureShortage && tiragePackagingStock.secondaryClosureProduct && <li>Manque {(tirageBottleCount - tirageSecondaryClosureStock).toLocaleString('fr-FR')} {tiragePackagingStock.secondaryClosureProduct.name} (en stock: {tirageSecondaryClosureStock.toLocaleString('fr-FR')}).</li>}
+                </ul>
+              </div>
+            )}
+
+            {tirageSubmitError && (
+              <div style={{ background:T.red+"15", border:`1px solid ${T.red}55`, borderRadius:4, padding:14 }}>
+                <div style={{ color:T.red, fontSize:12, fontWeight:"bold", marginBottom:6 }}>Dernière erreur backend</div>
+                <div style={{ color:T.red, fontSize:12, lineHeight:1.5 }}>{tirageSubmitError}</div>
+              </div>
+            )}
+
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
               <Btn variant="secondary" onClick={() => setModal(null)} disabled={isSubmitting}>Annuler</Btn>
-              <Btn onClick={submitTirage} disabled={isSubmitting || !tirageForm.volume || isTirageBlockedAOC}>
+              <Btn onClick={submitTirage} disabled={isSubmitting || !tirageForm.volume || isTirageBlockedAOC || !isLotTirageEligible || isTirageStockShortage || tirageBottleCount <= 0}>
                 {isSubmitting ? "Tirage en cours..." : "Valider le tirage"}
               </Btn>
             </div>

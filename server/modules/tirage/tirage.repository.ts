@@ -12,6 +12,18 @@ const sourceLotInclude = {
       status: true,
     },
   },
+  analyses: {
+    orderBy: {
+      analysisDate: 'desc',
+    },
+    take: 1,
+    select: {
+      id: true,
+      analysisDate: true,
+      alcohol: true,
+      extraData: true,
+    },
+  },
 } satisfies Prisma.LotInclude;
 
 export class TirageRepository {
@@ -67,6 +79,20 @@ export class TirageRepository {
     });
   }
 
+  static updateSourceLotForTirage(
+    tx: TirageTransaction,
+    lotId: number,
+    data: {
+      status?: string;
+      currentContainerId?: number | null;
+    },
+  ) {
+    return tx.lot.update({
+      where: { id: lotId },
+      data,
+    });
+  }
+
   static countBottleLotsByTypeAndYear(tx: TirageTransaction, type: string, year: number) {
     return tx.bottleLot.count({
       where: {
@@ -114,6 +140,17 @@ export class TirageRepository {
     });
   }
 
+  static createLotEventContainerLink(
+    tx: TirageTransaction,
+    data: {
+      eventId: number;
+      containerId: number;
+      roleInEvent: string;
+    },
+  ) {
+    return tx.lotEventContainer.create({ data });
+  }
+
   static createBottleEvent(
     tx: TirageTransaction,
     data: {
@@ -147,5 +184,89 @@ export class TirageRepository {
     },
   ) {
     return tx.auditLog.create({ data });
+  }
+
+  static countActiveLotsInContainer(tx: TirageTransaction, containerId: number) {
+    return tx.lot.count({
+      where: {
+        currentContainerId: containerId,
+        currentVolume: { gt: 0 },
+        status: {
+          notIn: ['TIRE', 'ARCHIVE', 'MIS_EN_BOUTEILLE'],
+        },
+      },
+    });
+  }
+
+  static updateContainerStatus(tx: TirageTransaction, containerId: number, status: string) {
+    return tx.container.update({
+      where: { id: containerId },
+      data: { status },
+    });
+  }
+
+  static findProductsByIds(tx: TirageTransaction, productIds: number[]) {
+    return tx.product.findMany({
+      where: {
+        id: {
+          in: productIds,
+        },
+      },
+    });
+  }
+
+  static decrementProductStock(tx: TirageTransaction, productId: number, quantity: Prisma.Decimal) {
+    return tx.product.updateMany({
+      where: {
+        id: productId,
+        currentStock: { gte: quantity },
+      },
+      data: {
+        currentStock: { decrement: quantity },
+      },
+    });
+  }
+
+  static findIntrantByCode(tx: TirageTransaction, code: string) {
+    return tx.intrant.findUnique({
+      where: { code },
+    });
+  }
+
+  static createIntrant(
+    tx: TirageTransaction,
+    data: {
+      code: string;
+      name: string;
+      category: string;
+      mainUnit: string;
+    },
+  ) {
+    return tx.intrant.create({ data });
+  }
+
+  static createLotEventIntrant(
+    tx: TirageTransaction,
+    data: {
+      eventId: number;
+      intrantId: number;
+      quantity: Prisma.Decimal;
+      unit: string;
+    },
+  ) {
+    return tx.lotEventIntrant.create({ data });
+  }
+
+  static createStockMovement(
+    tx: TirageTransaction,
+    data: {
+      productId: number;
+      type: string;
+      quantity: Prisma.Decimal;
+      note: string;
+      operator: string;
+    },
+  ) {
+    return tx.stockMovement.create({ data });
   }
 }
