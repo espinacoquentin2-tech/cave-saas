@@ -205,6 +205,24 @@ const buildRequestedTypeWarning = (requestedType: AssemblageType | null, suggest
   return `Type demandé: ${requestedType}. Type suggéré: ${suggestedType}.`;
 };
 
+const isConcurrentAssemblageConflict = (error: unknown) => {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return error.code === 'P2034' || error.code === 'P2002';
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('write conflict') ||
+    message.includes('deadlock') ||
+    message.includes('could not serialize access') ||
+    message.includes('transaction failed due to a write conflict')
+  );
+};
+
 export class AssemblageModuleService {
   static readonly client: PrismaClient = prisma;
 
@@ -215,8 +233,9 @@ export class AssemblageModuleService {
       throw new BusinessLogicError('Cuve de destination introuvable.', 400);
     }
 
-    return this.client.$transaction(
-      async (tx) => {
+    try {
+      return await this.client.$transaction(
+        async (tx) => {
         const existingRequest = await tx.idempotencyRecord.findUnique({
           where: { key: normalized.idempotencyKey },
         });
@@ -753,10 +772,20 @@ export class AssemblageModuleService {
           ),
           adjuvants: normalized.adjuvants,
         };
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      },
-    );
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      );
+    } catch (error) {
+      if (isConcurrentAssemblageConflict(error)) {
+        throw new BusinessLogicError(
+          'Un assemblage est déjà en cours sur ces sources. Réessaie dans quelques secondes.',
+          409,
+        );
+      }
+
+      throw error;
+    }
   }
 }

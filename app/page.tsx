@@ -5125,8 +5125,10 @@ function Assemblages() {
   const [notes, setNotes] = useState("");
   const [sourceDrafts, setSourceDrafts] = useState<any>({});
   const [adjuvants, setAdjuvants] = useState<any[]>([]);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCreatingAssemblage, setIsCreatingAssemblage] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const assemblageSubmitLockRef = useRef(false);
+  const isSubmitting = isCreatingAssemblage;
   
   const assemblageLabels: Record<string, string> = {
     BSA: "BSA",
@@ -5417,12 +5419,17 @@ function Assemblages() {
   ];
 
   const submitAssemblage = async () => {
+    if (assemblageSubmitLockRef.current || isCreatingAssemblage) {
+      return;
+    }
+
     if (validationErrors.length > 0) {
       alert(validationErrors[0]);
       return;
     }
 
-    setIsSubmitting(true);
+    assemblageSubmitLockRef.current = true;
+    setIsCreatingAssemblage(true);
 
     try {
       const payload = {
@@ -5473,7 +5480,7 @@ function Assemblages() {
         body: JSON.stringify(payload),
       });
       const apiPayload = await response.json().catch(() => ({}));
-      if (!response.ok) {
+      if (response.status !== 201) {
         throw new Error(extractApiErrorMessage(apiPayload, "Erreur lors de l'enregistrement de l'assemblage."));
       }
 
@@ -5487,7 +5494,8 @@ function Assemblages() {
     } catch (error: any) {
       alert(error?.message || "Erreur lors de l'enregistrement de l'assemblage.");
     } finally {
-      setIsSubmitting(false);
+      assemblageSubmitLockRef.current = false;
+      setIsCreatingAssemblage(false);
     }
   };
 
@@ -5863,9 +5871,9 @@ function Assemblages() {
               </div>
 
               <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:6 }}>
-                <Btn variant="secondary" onClick={() => { if (!isSubmitting) { setShowCreateModal(false); resetForm(); } }} disabled={isSubmitting}>Annuler</Btn>
-                <Btn onClick={submitAssemblage} disabled={isSubmitting || validationErrors.length > 0}>
-                  {isSubmitting ? "Enregistrement..." : "Enregistrer l'assemblage"}
+                <Btn variant="secondary" onClick={() => { if (!isCreatingAssemblage) { setShowCreateModal(false); resetForm(); } }} disabled={isCreatingAssemblage}>Annuler</Btn>
+                <Btn onClick={submitAssemblage} disabled={isCreatingAssemblage || validationErrors.length > 0}>
+                  {isCreatingAssemblage ? "Enregistrement en cours..." : "Enregistrer l'assemblage"}
                 </Btn>
               </div>
             </div>
