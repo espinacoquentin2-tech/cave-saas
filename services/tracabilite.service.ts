@@ -1,5 +1,5 @@
 // services/tracabilite.service.ts
-import { BottleLot, Lot, LotEvent } from '@prisma/client';
+import { BottleLot, Lot } from '@prisma/client';
 import { TraceabilityRequestPayload } from '../validations/tracabilite.schema';
 import { prisma } from '@/server/shared/prisma';
 
@@ -17,7 +17,7 @@ export class TracabiliteService {
     let focusedLot: TraceableLot;
     let parents: TraceableLot[] = [];
     let children: TraceableLot[] = [];
-    let expeditions: LotEvent[] = [];
+    let expeditions: Array<{ id: string; eventDatetime: Date; comment: string }> = [];
 
     // 1. TROUVER LE LOT CIBLE
     if (type === "bulk") {
@@ -31,9 +31,16 @@ export class TracabiliteService {
     }
 
     // 2. RECHERCHE DES PARENTS (Ascendance)
-    if (focusedLot._type === 'bottle' && focusedLot.sourceLotId) {
-      const parent = await prisma.lot.findUnique({ where: { id: focusedLot.sourceLotId } });
-      if (parent) parents.push(toBulkTraceable(parent));
+    if (focusedLot._type === 'bottle') {
+      if (focusedLot.sourceLotId) {
+        const parent = await prisma.lot.findUnique({ where: { id: focusedLot.sourceLotId } });
+        if (parent) parents.push(toBulkTraceable(parent));
+      }
+
+      if (focusedLot.sourceBottleLotId) {
+        const parentBottle = await prisma.bottleLot.findUnique({ where: { id: focusedLot.sourceBottleLotId } });
+        if (parentBottle) parents.push(toBottleTraceable(parentBottle));
+      }
       
     // 👈 CORRECTION : On vérifie bien que notes existe ET que c'est une string
     } else if (focusedLot._type === 'bulk' && focusedLot.notes && focusedLot.notes.includes("Sources:")) {
@@ -60,9 +67,12 @@ export class TracabiliteService {
     // Recherche des Bouteilles enfants
     let childBottles: BottleLot[] = [];
     if (type === "bulk") {
-      // Uniquement si le parent est un vrac, il peut avoir des bouteilles enfants via sourceLotId
       childBottles = await prisma.bottleLot.findMany({
         where: { sourceLotId: focusedLot.id }
+      });
+    } else {
+      childBottles = await prisma.bottleLot.findMany({
+        where: { sourceBottleLotId: focusedLot.id }
       });
     }
 
@@ -72,12 +82,51 @@ export class TracabiliteService {
     ];
 
     // Recherche des expéditions
-    const allExpeditions = await prisma.lotEvent.findMany({
-      where: { eventType: "EXPEDITION" } 
-    });
+    if (focusedLot._type === 'bottle') {
+      const [shipmentLines, bottleEventLinks] = await Promise.all([
+        prisma.shipmentLine.findMany({
+          where: { bottleLotId: focusedLot.id },
+          include: { shipment: true },
+          orderBy: { id: 'desc' },
+        }),
+        prisma.bottleEventLink.findMany({
+          where: {
+            bottleLotId: focusedLot.id,
+            event: {
+              eventType: 'EXPEDITION',
+            },
+          },
+          include: {
+            event: true,
+          },
+          orderBy: { id: 'desc' },
+        }),
+      ]);
 
-    // Filtre des expéditions liées au lot ciblé
-    expeditions = allExpeditions.filter(e => e.comment && e.comment.includes(focusedLot.businessCode));
+      expeditions = [
+        ...shipmentLines.map((line) => ({
+          id: `shipment-${line.id}`,
+          eventDatetime: line.shipment.shipmentDate,
+          comment: `${line.bottleCount} btl · ${line.shipment.customerName || 'Client non renseigné'}${line.shipment.comment ? ` · ${line.shipment.comment}` : ''}`,
+        })),
+        ...bottleEventLinks.map((link) => ({
+          id: `event-${link.eventId}-${link.id}`,
+          eventDatetime: link.event.eventDatetime,
+          comment: `${link.bottleCount} btl · ${link.event.comment || 'Expédition'}`,
+        })),
+      ];
+    } else {
+      const allExpeditions = await prisma.lotEvent.findMany({
+        where: { eventType: "EXPEDITION" } 
+      });
+      expeditions = allExpeditions
+        .filter((e) => e.comment && e.comment.includes(focusedLot.businessCode))
+        .map((e) => ({
+          id: `bulk-event-${e.id}`,
+          eventDatetime: e.eventDatetime,
+          comment: e.comment || 'Expédition',
+        }));
+    }
 
     // 4. FORMATAGE ET RETOUR
     return {

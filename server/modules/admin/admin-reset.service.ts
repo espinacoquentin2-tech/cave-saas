@@ -174,6 +174,9 @@ export class AdminResetService {
   static async resetBusinessData(tx: Tx): Promise<AdminResetCounts> {
     const counts = createEmptyResetCounts();
 
+    await tx.idempotencyRecord.deleteMany();
+    await tx.auditLog.deleteMany();
+
     counts.shipmentLines = (await tx.shipmentLine.deleteMany()).count;
     counts.shipments = (await tx.shipment.deleteMany()).count;
 
@@ -798,6 +801,8 @@ export class AdminResetService {
       { name: 'Bidules', category: 'Bouchage', subCategory: 'Bidules', unit: 'unites', minStock: 8000, currentStock: 36000 },
       { name: 'Bouchons liege tirage', category: 'Bouchage', subCategory: 'Bouchons', unit: 'unites', minStock: 1200, currentStock: 6400 },
       { name: 'Agrafes tirage', category: 'Bouchage', subCategory: 'Agrafes', unit: 'unites', minStock: 1200, currentStock: 6400 },
+      { name: 'Bouchons liege expédition', category: 'Bouchage', subCategory: 'Bouchons', unit: 'unites', minStock: 1800, currentStock: 12000 },
+      { name: 'Muselets expédition', category: 'Bouchage', subCategory: 'Muselets', unit: 'unites', minStock: 1800, currentStock: 12000 },
       { name: 'SO2 solution 6 %', category: 'Intrants', subCategory: 'Sulfites', unit: 'L', minStock: 20, currentStock: 48 },
       { name: 'Levure prise de mousse', category: 'Intrants', subCategory: 'Levures', unit: 'kg', minStock: 5, currentStock: 15 },
       { name: 'Levure fermentation alcoolique', category: 'Intrants', subCategory: 'Levures', unit: 'kg', minStock: 6, currentStock: 18 },
@@ -808,6 +813,12 @@ export class AdminResetService {
       { name: 'Enzyme de débourbage', category: 'Intrants', subCategory: 'Enzymes', unit: 'kg', minStock: 4, currentStock: 12 },
       { name: 'Sucre de tirage', category: 'Intrants', subCategory: 'Sucres', unit: 'kg', minStock: 150, currentStock: 650 },
       { name: 'Adjuvant de remuage', category: 'Intrants', subCategory: 'Adjuvants', unit: 'L', minStock: 4, currentStock: 10 },
+      { name: 'Liqueur de dosage Brut', category: 'Intrants', subCategory: 'Liqueurs de dosage', unit: 'L', minStock: 30, currentStock: 180 },
+      { name: 'Liqueur de dosage Extra-Brut', category: 'Intrants', subCategory: 'Liqueurs de dosage', unit: 'L', minStock: 20, currentStock: 120 },
+      { name: 'Coiffes Brut Classique', category: 'Habillage', subCategory: 'Coiffes', unit: 'unites', minStock: 1800, currentStock: 12000 },
+      { name: 'Étiquettes Brut Classique', category: 'Habillage', subCategory: 'Étiquettes', unit: 'unites', minStock: 1800, currentStock: 12000 },
+      { name: 'Contre-étiquettes Brut Classique', category: 'Habillage', subCategory: 'Contre-étiquettes', unit: 'unites', minStock: 1800, currentStock: 12000 },
+      { name: 'Cartons 6 bouteilles', category: 'Matières Sèches', subCategory: 'Cartons', unit: 'unites', minStock: 400, currentStock: 2400 },
     ] as const;
 
     const productInsert = await tx.product.createMany({
@@ -1012,9 +1023,21 @@ export class AdminResetService {
       throw new Error('Lots nécessaires au seed bouteilles/dégustations introuvables.');
     }
 
+    const shiftMonths = (baseDate: Date, monthOffset: number) => {
+      const nextDate = new Date(baseDate);
+      nextDate.setUTCMonth(nextDate.getUTCMonth() + monthOffset);
+      return nextDate;
+    };
+    const shiftDays = (baseDate: Date, dayOffset: number) => {
+      const nextDate = new Date(baseDate);
+      nextDate.setUTCDate(nextDate.getUTCDate() + dayOffset);
+      return nextDate;
+    };
+
+    const today = new Date();
     const reserveBottleDefinitions = [
       {
-        technicalCode: 'BL-RES-2026-0001',
+        technicalCode: 'BL-RESERVE-0001',
         businessCode: 'Réserve 2025 75cl',
         sourceLotId: reserve2025,
         formatCode: '75cl',
@@ -1025,7 +1048,7 @@ export class AdminResetService {
         locationPalette: 'PAL-RES-75',
       },
       {
-        technicalCode: 'BL-RES-2026-0002',
+        technicalCode: 'BL-RESERVE-0002',
         businessCode: 'Réserve 2025 Magnum',
         sourceLotId: reserve2025,
         formatCode: '150cl',
@@ -1054,51 +1077,44 @@ export class AdminResetService {
     });
     counts.bottleLots += reserveBottleInsert.count;
 
+    const tirageOldDate = shiftMonths(today, -18);
+    const tirageRecentDate = shiftMonths(today, -10);
+    const degorgementDate = shiftDays(shiftMonths(today, -1), -7);
+    const habillageDate = shiftDays(today, -14);
+
     const tirageDefinitions = [
       {
-        technicalCode: 'BL-TIRAGE-2027-0001',
-        businessCode: 'Tirage BSA Brut Lot 1',
+        technicalCode: 'BL-TIRAGE-ELIGIBLE-0001',
+        businessCode: 'Tirage BSA Brut Élevage long',
         sourceLotId: bsaBrut,
         formatCode: '75cl',
-        initialBottleCount: 3600,
-        currentBottleCount: 3600,
-        tirageDate: new Date('2027-03-06T09:00:00.000Z'),
+        initialBottleCount: 600,
+        currentBottleCount: 360,
+        tirageDate: tirageOldDate,
         locationZone: 'Cellier A',
         locationRack: 'Rack 01',
         locationPalette: 'PAL-001',
       },
       {
-        technicalCode: 'BL-TIRAGE-2027-0002',
-        businessCode: 'Tirage BSA Brut Lot 2',
+        technicalCode: 'BL-TIRAGE-RECENT-0002',
+        businessCode: 'Tirage BSA Brut Récent',
         sourceLotId: bsaBrut,
         formatCode: '75cl',
-        initialBottleCount: 3200,
-        currentBottleCount: 3200,
-        tirageDate: new Date('2027-03-06T10:30:00.000Z'),
+        initialBottleCount: 420,
+        currentBottleCount: 420,
+        tirageDate: tirageRecentDate,
         locationZone: 'Cellier A',
         locationRack: 'Rack 02',
         locationPalette: 'PAL-002',
       },
       {
-        technicalCode: 'BL-TIRAGE-2027-0003',
-        businessCode: 'Tirage BSA Brut Lot 3',
-        sourceLotId: bsaBrut,
-        formatCode: '75cl',
-        initialBottleCount: 2800,
-        currentBottleCount: 2800,
-        tirageDate: new Date('2027-03-07T08:45:00.000Z'),
-        locationZone: 'Cellier B',
-        locationRack: 'Rack 03',
-        locationPalette: 'PAL-003',
-      },
-      {
-        technicalCode: 'BL-TIRAGE-2027-ROSE-0001',
+        technicalCode: 'BL-TIRAGE-ROSE-0003',
         businessCode: 'Tirage Base Rosé',
         sourceLotId: baseRose,
         formatCode: '75cl',
-        initialBottleCount: 600,
-        currentBottleCount: 600,
-        tirageDate: new Date('2027-03-07T11:00:00.000Z'),
+        initialBottleCount: 180,
+        currentBottleCount: 180,
+        tirageDate: shiftMonths(today, -16),
         locationZone: 'Cellier Rose',
         locationRack: 'Rack 01',
         locationPalette: 'PAL-ROSE-01',
@@ -1136,68 +1152,47 @@ export class AdminResetService {
     });
     const tirageMap = new Map(tirageLots.map((lot) => [lot.technicalCode, lot] as const));
 
-    const tirage1 = tirageMap.get('BL-TIRAGE-2027-0001');
-    const tirage2 = tirageMap.get('BL-TIRAGE-2027-0002');
-    const tirage3 = tirageMap.get('BL-TIRAGE-2027-0003');
-    const tirageRose = tirageMap.get('BL-TIRAGE-2027-ROSE-0001');
+    const tirageEligible = tirageMap.get('BL-TIRAGE-ELIGIBLE-0001');
+    const tirageRecent = tirageMap.get('BL-TIRAGE-RECENT-0002');
+    const tirageRose = tirageMap.get('BL-TIRAGE-ROSE-0003');
 
-    if (!tirage1 || !tirage2 || !tirage3 || !tirageRose) {
+    if (!tirageEligible || !tirageRecent || !tirageRose) {
       throw new Error('Lots bouteilles de tirage introuvables après insertion.');
     }
 
     const degorge1 = await tx.bottleLot.create({
       data: {
-        technicalCode: 'BL-DEG-2028-0001',
-        businessCode: 'Dégorgé BSA Brut Lot 1',
+        technicalCode: 'BL-DEG-0001',
+        businessCode: 'DEG-LOT-0001',
         type: 'DEGORGE',
         sourceLotId: bsaBrut,
-        sourceBottleLotId: tirage1.id,
+        sourceBottleLotId: tirageEligible.id,
         formatCode: '75cl',
-        initialBottleCount: 1600,
-        currentBottleCount: 1568,
+        initialBottleCount: 240,
+        currentBottleCount: 140,
         status: 'DEGORGE',
-        tirageDate: tirage1.tirageDate,
-        degorgementDate: new Date('2028-06-14T08:30:00.000Z'),
-        dosageValue: decimal(7, 1),
+        tirageDate: tirageEligible.tirageDate,
+        degorgementDate,
+        dosageValue: decimal(8, 1),
         dosageUnit: 'g/L',
         locationZone: 'Habillage',
         locationRack: 'Poste 01',
         locationPalette: 'PAL-DEG-01',
       },
     });
-    const degorge2 = await tx.bottleLot.create({
-      data: {
-        technicalCode: 'BL-DEG-2028-0002',
-        businessCode: 'Dégorgé BSA Brut Lot 2',
-        type: 'DEGORGE',
-        sourceLotId: bsaBrut,
-        sourceBottleLotId: tirage2.id,
-        formatCode: '75cl',
-        initialBottleCount: 1400,
-        currentBottleCount: 1376,
-        status: 'DEGORGE',
-        tirageDate: tirage2.tirageDate,
-        degorgementDate: new Date('2028-06-15T08:45:00.000Z'),
-        dosageValue: decimal(8, 1),
-        dosageUnit: 'g/L',
-        locationZone: 'Habillage',
-        locationRack: 'Poste 02',
-        locationPalette: 'PAL-DEG-02',
-      },
-    });
     const pretExpedition = await tx.bottleLot.create({
       data: {
-        technicalCode: 'BL-HAB-2028-0001',
-        businessCode: 'Brut prêt expédition',
+        technicalCode: 'BL-HAB-0001',
+        businessCode: 'HAB-LOT-0001',
         type: 'HABILLE',
         sourceLotId: bsaBrut,
         sourceBottleLotId: degorge1.id,
         formatCode: '75cl',
-        initialBottleCount: 1000,
-        currentBottleCount: 990,
+        initialBottleCount: 100,
+        currentBottleCount: 88,
         status: 'PRET_EXPEDITION',
-        tirageDate: tirage3.tirageDate,
-        degorgementDate: new Date('2028-06-20T07:30:00.000Z'),
+        tirageDate: tirageEligible.tirageDate,
+        degorgementDate,
         dosageValue: decimal(8, 1),
         dosageUnit: 'g/L',
         locationZone: 'Expédition',
@@ -1205,19 +1200,19 @@ export class AdminResetService {
         locationPalette: 'PAL-EXP-01',
       },
     });
-    counts.bottleLots += 3;
+    counts.bottleLots += 2;
 
     const bottleEvent1 = await tx.bottleEvent.create({
       data: {
         eventType: 'CREATION_TIRAGE',
-        eventDatetime: new Date('2027-03-07T12:00:00.000Z'),
+        eventDatetime: shiftDays(tirageOldDate, 1),
         operatorUserId: operator.id,
-        comment: `${DEMO_CAVE_NAME} · tirage campagne 2027`,
+        comment: `${DEMO_CAVE_NAME} · tirage campagne démo bouteilles`,
       },
     });
     counts.bottleEvents += 1;
     const bottleEvent1Links = await tx.bottleEventLink.createMany({
-      data: [tirage1, tirage2, tirage3, tirageRose].map((bottleLot) => ({
+      data: [tirageEligible, tirageRecent, tirageRose].map((bottleLot) => ({
         eventId: bottleEvent1.id,
         bottleLotId: bottleLot.id,
         roleInEvent: 'CIBLE',
@@ -1229,28 +1224,36 @@ export class AdminResetService {
     const bottleEvent2 = await tx.bottleEvent.create({
       data: {
         eventType: 'DEGORGEMENT',
-        eventDatetime: new Date('2028-06-15T09:15:00.000Z'),
+        eventDatetime: degorgementDate,
         operatorUserId: operator.id,
-        comment: `${DEMO_CAVE_NAME} · dégorgement deux lots BSA`,
+        comment: `${DEMO_CAVE_NAME} · dégorgement partiel lot BSA`,
       },
     });
     counts.bottleEvents += 1;
     const bottleEvent2Links = await tx.bottleEventLink.createMany({
-      data: [degorge1, degorge2].map((bottleLot) => ({
-        eventId: bottleEvent2.id,
-        bottleLotId: bottleLot.id,
-        roleInEvent: 'CIBLE',
-        bottleCount: bottleLot.currentBottleCount,
-      })),
+      data: [
+        {
+          eventId: bottleEvent2.id,
+          bottleLotId: tirageEligible.id,
+          roleInEvent: 'SOURCE',
+          bottleCount: 240,
+        },
+        {
+          eventId: bottleEvent2.id,
+          bottleLotId: degorge1.id,
+          roleInEvent: 'CIBLE',
+          bottleCount: 240,
+        },
+      ],
     });
     counts.bottleEventLinks += bottleEvent2Links.count;
 
     const bottleEvent3 = await tx.bottleEvent.create({
       data: {
         eventType: 'HABILLAGE',
-        eventDatetime: new Date('2028-06-21T08:00:00.000Z'),
+        eventDatetime: habillageDate,
         operatorUserId: operator.id,
-        comment: `${DEMO_CAVE_NAME} · lot prêt à expédier`,
+        comment: `${DEMO_CAVE_NAME} · habillage partiel lot dégorgé`,
       },
     });
     counts.bottleEvents += 1;
@@ -1258,9 +1261,15 @@ export class AdminResetService {
       data: [
         {
           eventId: bottleEvent3.id,
+          bottleLotId: degorge1.id,
+          roleInEvent: 'SOURCE',
+          bottleCount: 100,
+        },
+        {
+          eventId: bottleEvent3.id,
           bottleLotId: pretExpedition.id,
           roleInEvent: 'CIBLE',
-          bottleCount: pretExpedition.currentBottleCount,
+          bottleCount: 100,
         },
       ],
     });

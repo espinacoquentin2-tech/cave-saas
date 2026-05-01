@@ -1,246 +1,808 @@
-// services/bottles.service.ts
 import { Prisma } from '@prisma/client';
-import { UpdateBottleStatusSchema, DegorgerSchema, HabillerSchema, ExpedierSchema } from '../validations/bottles.schema';
-import { z } from 'zod';
+import { BusinessLogicError } from '@/lib/errors';
+import {
+  calculateBottleLotAgeMonths,
+  getDegorgementEligibility,
+  getExpeditionEligibility,
+  getHabillageEligibility,
+} from '@/lib/bottles';
+import {
+  DegorgerInput,
+  ExpedierInput,
+  HabillerInput,
+  UpdateBottleStatusInput,
+} from '@/server/modules/bottles/bottle.schemas';
 import { prisma } from '@/server/shared/prisma';
 
+type Tx = Prisma.TransactionClient;
+
+const round = (value: number, precision = 3) => {
+  const factor = 10 ** precision;
+  return Math.round(value * factor) / factor;
+};
+
+const normalizeText = (value: string | null | undefined) =>
+  (value ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+const ensureValidDate = (value: string, label: string) => {
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    throw new BusinessLogicError(`${label} invalide.`, 400);
+  }
+
+  return parsedDate;
+};
+
+const buildComment = (...parts: Array<string | null | undefined>) =>
+  parts
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part))
+    .join(' ');
+
+const isConcurrentBottleConflict = (error: unknown) => {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    return error.code === 'P2034' || error.code === 'P2002';
+  }
+
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('write conflict') ||
+    message.includes('deadlock') ||
+    message.includes('could not serialize access') ||
+    message.includes('transaction failed due to a write conflict')
+  );
+};
+
+const makeLotCode = async (tx: Tx, prefix: 'DEG' | 'HAB', operationDate: Date, idempotencyKey: string) => {
+  const year = operationDate.getUTCFullYear();
+  const startsWith = `${prefix}-${year}-`;
+  const existingCount = await tx.bottleLot.count({
+    where: {
+      technicalCode: {
+        startsWith,
+      },
+    },
+  });
+  const sequence = String(existingCount + 1).padStart(4, '0');
+  const publicCode = `${prefix}-${year}-${sequence}`;
+
+  return {
+    technicalCode: `${publicCode}-${idempotencyKey.slice(0, 8)}`,
+    businessCode: publicCode,
+  };
+};
+
+const assertPositiveStock = (stock: number, requested: number, message: string) => {
+  if (stock < requested) {
+    throw new BusinessLogicError(message, 409);
+  }
+};
+
+const assertSubCategory = (
+  product: { name: string; category: string; subCategory: string; unit: string },
+  expected: string[],
+  message: string,
+) => {
+  const productSubCategory = normalizeText(product.subCategory);
+  if (!expected.some((candidate) => productSubCategory === normalizeText(candidate))) {
+    throw new BusinessLogicError(message, 400);
+  }
+};
+
+const assertLiqueurProduct = (product: { name: string; category: string; subCategory: string; unit: string }) => {
+  const category = normalizeText(product.category);
+  const subCategory = normalizeText(product.subCategory);
+  const name = normalizeText(product.name);
+
+  if (
+    category !== 'intrants' &&
+    !subCategory.includes('liqueur') &&
+    !name.includes('liqueur')
+  ) {
+    throw new BusinessLogicError(
+      `Le produit ${product.name} n'est pas reconnu comme une liqueur de dosage.`,
+      400,
+    );
+  }
+
+  if (!['l', 'litre', 'litres'].includes(normalizeText(product.unit))) {
+    throw new BusinessLogicError(
+      `Le produit ${product.name} doit être stocké en litres pour la liqueur de dosage.`,
+      400,
+    );
+  }
+};
+
+const consumeProduct = async (
+  tx: Tx,
+  {
+    actorEmail,
+    productId,
+    quantity,
+    note,
+    validate,
+  }: {
+    actorEmail: string;
+    productId?: number | null;
+    quantity: number;
+    note: string;
+    validate?: (product: { name: string; category: string; subCategory: string; unit: string }) => void;
+  },
+) => {
+  if (!productId || quantity <= 0) {
+    return null;
+  }
+
+  const product = await tx.product.findUnique({ where: { id: productId } });
+  if (!product) {
+    throw new BusinessLogicError(`Produit introuvable (#${productId}).`, 404);
+  }
+
+  validate?.(product);
+  assertPositiveStock(
+    Number(product.currentStock),
+    quantity,
+    `Stock insuffisant pour ${product.name}. Disponible: ${Number(product.currentStock).toFixed(3)} ${product.unit}.`,
+  );
+
+  const decrementResult = await tx.product.updateMany({
+    where: {
+      id: product.id,
+      currentStock: {
+        gte: new Prisma.Decimal(quantity.toFixed(3)),
+      },
+    },
+    data: {
+      currentStock: {
+        decrement: new Prisma.Decimal(quantity.toFixed(3)),
+      },
+    },
+  });
+
+  if (decrementResult.count !== 1) {
+    throw new BusinessLogicError(
+      `Le stock du produit ${product.name} a changé pendant l'opération. Rechargez puis réessayez.`,
+      409,
+    );
+  }
+
+  const movement = await tx.stockMovement.create({
+    data: {
+      productId: product.id,
+      type: 'OUT',
+      quantity: new Prisma.Decimal(quantity.toFixed(3)),
+      note,
+      operator: actorEmail,
+    },
+  });
+
+  return {
+    productId: product.id,
+    productName: product.name,
+    quantity: round(quantity),
+    unit: product.unit,
+    movementId: movement.id,
+  };
+};
+
 export class BottlesService {
-  
-  // Fonction utilitaire pour récupérer l'ID utilisateur (sécurité)
-  private static async getUserId(tx: Prisma.TransactionClient, email: string) {
+  private static async getUserId(tx: Tx, email: string) {
     const user = await tx.user.findUnique({ where: { email } });
-    if (!user) throw new Error("Utilisateur non autorisé.");
+    if (!user) {
+      throw new BusinessLogicError('Utilisateur non autorisé.', 401);
+    }
+
     return user.id;
   }
 
-  // =========================================================================
-  // 1. CHANGEMENT DE STATUT (Remuage / Pointes)
-  // =========================================================================
-  static async updateStatus(data: z.infer<typeof UpdateBottleStatusSchema>, userEmail: string) {
-    return await prisma.$transaction(async (tx) => {
-      const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
-      if (existingTx) throw new Error("ALREADY_APPLIED: Opération déjà effectuée.");
-
-      const bottleLot = await tx.bottleLot.findUnique({ where: { id: data.blId } });
-      if (!bottleLot) throw new Error("Lot introuvable.");
-
-      const operatorId = await this.getUserId(tx, userEmail);
-
-      const updated = await tx.bottleLot.update({
-        where: { id: data.blId },
-        data: { status: data.status, locationZone: data.location || bottleLot.locationZone }
-      });
-
-      const event = await tx.bottleEvent.create({
-        data: { eventType: data.status, operatorUserId: operatorId, comment: data.note }
-      });
-
-      await tx.bottleEventLink.create({
-        data: { eventId: event.id, bottleLotId: bottleLot.id, roleInEvent: "STATUS_CHANGE", bottleCount: bottleLot.currentBottleCount }
-      });
-
-      await tx.idempotencyRecord.create({ data: { key: data.idempotencyKey, action: "BOTTLE_STATUS", userId: userEmail } });
-      return { status: "SUCCESS", updated };
-    });
-  }
-
-  // =========================================================================
-  // 2. DÉGORGEMENT (Création du lot "Bouteilles Nues")
-  // =========================================================================
-  static async degorger(data: z.infer<typeof DegorgerSchema>, userEmail: string) {
-    return await prisma.$transaction(async (tx) => {
-      const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
-      if (existingTx) throw new Error("ALREADY_APPLIED: Dégorgement déjà enregistré.");
-
-      const sourceLot = await tx.bottleLot.findUnique({ where: { id: data.blId } });
-      if (!sourceLot || sourceLot.currentBottleCount < data.count) throw new Error("Stock sur lattes insuffisant.");
-
-      const operatorId = await this.getUserId(tx, userEmail);
-
-      // 1. Déduire du lot d'origine
-      const newCount = sourceLot.currentBottleCount - data.count;
-      await tx.bottleLot.update({
-        where: { id: sourceLot.id },
-        data: { 
-          currentBottleCount: newCount,
-          status: newCount <= 0 ? 'DEGORGE_TOTALEMENT' : sourceLot.status
+  static async updateStatus(data: UpdateBottleStatusInput, userEmail: string) {
+    return prisma.$transaction(
+      async (tx) => {
+        const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
+        if (existingTx) {
+          throw new BusinessLogicError('Cette opération a déjà été traitée.', 409);
         }
-      });
 
-      // 2. Créer le lot dégorgé
-      let dosageValue = 0;
-      const match = data.dosage.match(/(\d+(?:\.\d+)?) g\/L/);
-      if (match) dosageValue = parseFloat(match[1]);
-
-      const targetCode = `${sourceLot.businessCode.replace('-TIR', '')}-DEG${data.suffix}-${Date.now().toString().slice(-4)}`;
-      
-      const newLot = await tx.bottleLot.create({
-        data: {
-          technicalCode: `DEG-${Date.now()}`,
-          businessCode: targetCode,
-          type: "DEGORGE",
-          sourceLotId: sourceLot.sourceLotId,
-          sourceBottleLotId: sourceLot.id,
-          formatCode: sourceLot.formatCode,
-          initialBottleCount: data.count,
-          currentBottleCount: data.count,
-          status: "EN_CAVE",
-          degorgementDate: new Date(),
-          dosageValue: dosageValue,
-          dosageUnit: "g/L",
-          locationZone: sourceLot.locationZone
+        const bottleLot = await tx.bottleLot.findUnique({ where: { id: data.blId } });
+        if (!bottleLot) {
+          throw new BusinessLogicError('Lot introuvable.', 404);
         }
-      });
 
-      // 3. Événements
-      const event = await tx.bottleEvent.create({
-        data: { eventType: "DEGORGEMENT", operatorUserId: operatorId, comment: data.note }
-      });
-
-      await tx.bottleEventLink.createMany({
-        data: [
-          { eventId: event.id, bottleLotId: sourceLot.id, roleInEvent: "SOURCE", bottleCount: data.count },
-          { eventId: event.id, bottleLotId: newLot.id, roleInEvent: "CIBLE", bottleCount: data.count }
-        ]
-      });
-
-      await tx.idempotencyRecord.create({ data: { key: data.idempotencyKey, action: "DEGORGEMENT", userId: userEmail } });
-      return { status: "SUCCESS", newLot };
-    });
-  }
-
-  // =========================================================================
-  // 3. HABILLAGE (Création du lot "Produit Fini" + Déduction Stocks Secs)
-  // =========================================================================
-  static async habiller(data: z.infer<typeof HabillerSchema>, userEmail: string) {
-    return await prisma.$transaction(async (tx) => {
-      const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
-      if (existingTx) throw new Error("ALREADY_APPLIED: Habillage déjà enregistré.");
-
-      const sourceLot = await tx.bottleLot.findUnique({ where: { id: data.blId } });
-      if (!sourceLot || sourceLot.currentBottleCount < data.count) throw new Error("Stock de bouteilles nues insuffisant.");
-
-      const operatorId = await this.getUserId(tx, userEmail);
-
-      // 1. Déduire du lot nu
-      const newCount = sourceLot.currentBottleCount - data.count;
-      await tx.bottleLot.update({
-        where: { id: sourceLot.id },
-        data: { 
-          currentBottleCount: newCount,
-          status: newCount <= 0 ? 'HABILLE_TOTALEMENT' : sourceLot.status
-        }
-      });
-
-      // 2. Créer le lot Habillé
-      const totalLots = await tx.bottleLot.count();
-      const code = `HAB-${new Date().getFullYear()}-${String(totalLots + 1).padStart(3, "0")}`;
-
-      const habLot = await tx.bottleLot.create({
-        data: {
-          technicalCode: `HAB-${Date.now()}`,
-          businessCode: code,
-          type: 'HABILLAGE',
-          sourceLotId: sourceLot.sourceLotId,
-          sourceBottleLotId: sourceLot.id,
-          formatCode: sourceLot.formatCode,
-          initialBottleCount: data.count,
-          currentBottleCount: data.count,
-          status: 'PRET_EXPEDITION',
-          tirageDate: sourceLot.tirageDate,
-          degorgementDate: sourceLot.degorgementDate,
-          dosageValue: sourceLot.dosageValue,
-          dosageUnit: sourceLot.dosageUnit,
-          locationZone: sourceLot.locationZone
-        }
-      });
-
-      // 3. Déduction Matières Sèches
-      const deductProd = async (id: number | null | undefined, qty: number, note: string) => {
-        if (!id) return;
-        const prod = await tx.product.findUnique({ where: { id } });
-        if (!prod || Number(prod.currentStock) < qty) throw new Error(`Stock insuffisant pour la matière sèche ID ${id}`);
-        await tx.product.update({ where: { id }, data: { currentStock: Number(prod.currentStock) - qty } });
-        await tx.stockMovement.create({
-          data: { productId: id, type: "OUT", quantity: qty, note, operator: userEmail }
+        const operatorId = await this.getUserId(tx, userEmail);
+        const updated = await tx.bottleLot.update({
+          where: { id: data.blId },
+          data: {
+            status: data.status,
+            locationZone: data.location || bottleLot.locationZone,
+          },
         });
-      };
 
-      await deductProd(data.coiffeId, data.count, `Habillage ${sourceLot.businessCode}`);
-      await deductProd(data.etiquetteId, data.count, `Habillage ${sourceLot.businessCode}`);
-      if (data.cartonId) {
-        const cartonQty = Math.ceil(data.count / data.cartonSize);
-        await deductProd(data.cartonId, cartonQty, `Cartons (${data.cartonSize}) ${sourceLot.businessCode}`);
+        const event = await tx.bottleEvent.create({
+          data: {
+            eventType: data.status,
+            operatorUserId: operatorId,
+            comment: data.note,
+          },
+        });
+
+        await tx.bottleEventLink.create({
+          data: {
+            eventId: event.id,
+            bottleLotId: bottleLot.id,
+            roleInEvent: 'STATUS_CHANGE',
+            bottleCount: bottleLot.currentBottleCount,
+          },
+        });
+
+        await tx.idempotencyRecord.create({
+          data: {
+            key: data.idempotencyKey,
+            action: 'BOTTLE_STATUS',
+            userId: userEmail,
+          },
+        });
+        await tx.auditLog.create({
+          data: {
+            action: 'BOTTLE_STATUS_UPDATED',
+            details: `Lot ${bottleLot.businessCode} passé en ${data.status} par ${userEmail}.`,
+            userId: userEmail,
+          },
+        });
+
+        return { status: 'SUCCESS', updated };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  static async degorger(data: DegorgerInput, userEmail: string) {
+    try {
+      return await prisma.$transaction(
+        async (tx) => {
+          const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
+          if (existingTx) {
+            throw new BusinessLogicError('Ce dégorgement a déjà été traité.', 409);
+          }
+
+          const sourceLot = await tx.bottleLot.findUnique({ where: { id: data.blId } });
+          if (!sourceLot) {
+            throw new BusinessLogicError('Lot bouteille source introuvable.', 404);
+          }
+
+          const operatorId = await this.getUserId(tx, userEmail);
+          const degorgementDate = ensureValidDate(data.degorgementDate, 'Date de dégorgement');
+          const eligibility = getDegorgementEligibility(sourceLot, degorgementDate);
+
+          if (!eligibility.eligible) {
+            throw new BusinessLogicError(
+              `Le lot ${sourceLot.businessCode} ne peut pas être dégorgé: ${eligibility.reason}.`,
+              409,
+            );
+          }
+
+          const totalSourceDecrease = data.count + data.lossCount;
+          assertPositiveStock(
+            sourceLot.currentBottleCount,
+            totalSourceDecrease,
+            `Stock insuffisant sur ${sourceLot.businessCode}. Disponible: ${sourceLot.currentBottleCount} btl, requis: ${totalSourceDecrease} btl.`,
+          );
+
+          const decrementResult = await tx.bottleLot.updateMany({
+            where: {
+              id: sourceLot.id,
+              currentBottleCount: {
+                gte: totalSourceDecrease,
+              },
+            },
+            data: {
+              currentBottleCount: {
+                decrement: totalSourceDecrease,
+              },
+            },
+          });
+          if (decrementResult.count !== 1) {
+            throw new BusinessLogicError(
+              "Le stock bouteilles a changé pendant le dégorgement. Rechargez les données puis réessayez.",
+              409,
+            );
+          }
+
+          const remainingSourceCount = sourceLot.currentBottleCount - totalSourceDecrease;
+          await tx.bottleLot.update({
+            where: { id: sourceLot.id },
+            data: {
+              status: remainingSourceCount <= 0 ? 'ARCHIVE' : 'SUR_LATTES',
+            },
+          });
+
+          const code = await makeLotCode(tx, 'DEG', degorgementDate, data.idempotencyKey);
+          const destinationLot = await tx.bottleLot.create({
+            data: {
+              technicalCode: code.technicalCode,
+              businessCode: code.businessCode,
+              type: 'DEGORGE',
+              sourceLotId: sourceLot.sourceLotId,
+              sourceBottleLotId: sourceLot.id,
+              formatCode: sourceLot.formatCode,
+              initialBottleCount: data.count,
+              currentBottleCount: data.count,
+              status: 'DEGORGE',
+              tirageDate: sourceLot.tirageDate,
+              degorgementDate,
+              dosageValue: new Prisma.Decimal(data.dosageGramsPerLiter.toFixed(3)),
+              dosageUnit: 'g/L',
+              locationZone: sourceLot.locationZone ?? 'Habillage',
+              locationRack: sourceLot.locationRack,
+              locationPalette: sourceLot.locationPalette,
+            },
+          });
+
+          const bottleEvent = await tx.bottleEvent.create({
+            data: {
+              eventType: 'DEGORGEMENT',
+              operatorUserId: operatorId,
+              eventDatetime: degorgementDate,
+              comment: buildComment(
+                `Dégorgement de ${data.count} btl.`,
+                `Âge sur lattes: ${calculateBottleLotAgeMonths(sourceLot.tirageDate, degorgementDate)} mois.`,
+                `Dosage: ${data.dosageLabel || `${data.dosageGramsPerLiter} g/L`} (${data.dosageGramsPerLiter} g/L).`,
+                `Liqueur: ${data.liqueurType}.`,
+                data.liqueurVolumeLiters != null && data.liqueurVolumeLiters > 0
+                  ? `Volume liqueur: ${data.liqueurVolumeLiters.toFixed(3)} L.`
+                  : null,
+                data.lossCount > 0 ? `Pertes: ${data.lossCount} btl.` : null,
+                data.note ?? null,
+              ),
+            },
+          });
+
+          await tx.bottleEventLink.createMany({
+            data: [
+              {
+                eventId: bottleEvent.id,
+                bottleLotId: sourceLot.id,
+                roleInEvent: 'SOURCE',
+                bottleCount: totalSourceDecrease,
+              },
+              {
+                eventId: bottleEvent.id,
+                bottleLotId: destinationLot.id,
+                roleInEvent: 'CIBLE',
+                bottleCount: data.count,
+              },
+            ],
+          });
+
+          const stockMovements = [];
+          for (const stockItem of [
+            {
+              productId: data.bouchonProductId,
+              quantity: data.count,
+              note: `Dégorgement ${destinationLot.businessCode} · bouchons expédition`,
+              validate: (product: { name: string; category: string; subCategory: string; unit: string }) =>
+                assertSubCategory(
+                  product,
+                  ['Bouchons'],
+                  `Le produit ${product.name} n'est pas un bouchon de dégorgement.`,
+                ),
+            },
+            {
+              productId: data.museletProductId,
+              quantity: data.count,
+              note: `Dégorgement ${destinationLot.businessCode} · muselets`,
+              validate: (product: { name: string; category: string; subCategory: string; unit: string }) =>
+                assertSubCategory(
+                  product,
+                  ['Muselets'],
+                  `Le produit ${product.name} n'est pas un muselet.`,
+                ),
+            },
+            {
+              productId: data.liqueurProductId,
+              quantity: data.liqueurVolumeLiters ?? 0,
+              note: `Dégorgement ${destinationLot.businessCode} · liqueur ${data.liqueurType}`,
+              validate: assertLiqueurProduct,
+            },
+          ]) {
+            const movement = await consumeProduct(tx, {
+              actorEmail: userEmail,
+              productId: stockItem.productId,
+              quantity: stockItem.quantity,
+              note: stockItem.note,
+              validate: stockItem.validate,
+            });
+            if (movement) {
+              stockMovements.push(movement);
+            }
+          }
+
+          await tx.idempotencyRecord.create({
+            data: {
+              key: data.idempotencyKey,
+              action: 'DEGORGEMENT',
+              userId: userEmail,
+            },
+          });
+          await tx.auditLog.create({
+            data: {
+              action: 'BOTTLE_DEGORGEMENT_EXECUTED',
+              details: `Dégorgement ${destinationLot.businessCode} créé depuis ${sourceLot.businessCode}: ${data.count} btl bonnes, ${data.lossCount} pertes, reste source ${remainingSourceCount} btl.`,
+              userId: userEmail,
+            },
+          });
+
+          return {
+            status: 'SUCCESS',
+            sourceBottleLotId: sourceLot.id,
+            sourceBottleLotCode: sourceLot.businessCode,
+            sourceRemainingCount: remainingSourceCount,
+            destinationBottleLotId: destinationLot.id,
+            destinationBottleLotCode: destinationLot.businessCode,
+            destinationCount: destinationLot.currentBottleCount,
+            destinationStatus: destinationLot.status,
+            lossCount: data.lossCount,
+            ageMonths: eligibility.ageMonths,
+            bottleEventId: bottleEvent.id,
+            stockMovements,
+          };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (isConcurrentBottleConflict(error)) {
+        throw new BusinessLogicError(
+          'Un autre opérateur a modifié le lot ou un consommable pendant le dégorgement. Rechargez puis réessayez.',
+          409,
+        );
       }
 
-      // 4. Événements
-      const event = await tx.bottleEvent.create({
-        data: { eventType: "HABILLAGE", operatorUserId: operatorId, comment: `Habillage de ${data.count} btl` }
-      });
-      await tx.bottleEventLink.createMany({
-        data: [
-          { eventId: event.id, bottleLotId: sourceLot.id, roleInEvent: "SOURCE", bottleCount: data.count },
-          { eventId: event.id, bottleLotId: habLot.id, roleInEvent: "CIBLE", bottleCount: data.count }
-        ]
-      });
-
-      await tx.idempotencyRecord.create({ data: { key: data.idempotencyKey, action: "HABILLAGE", userId: userEmail } });
-      return { status: "SUCCESS", habLot };
-    });
+      throw error;
+    }
   }
 
-  // =========================================================================
-  // 4. EXPÉDITION (Création du Shipment)
-  // =========================================================================
-  static async expedier(data: z.infer<typeof ExpedierSchema>, userEmail: string) {
-    return await prisma.$transaction(async (tx) => {
-      const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
-      if (existingTx) throw new Error("ALREADY_APPLIED: Expédition déjà enregistrée.");
+  static async habiller(data: HabillerInput, userEmail: string) {
+    try {
+      return await prisma.$transaction(
+        async (tx) => {
+          const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
+          if (existingTx) {
+            throw new BusinessLogicError("Cet habillage a déjà été traité.", 409);
+          }
 
-      const lot = await tx.bottleLot.findUnique({ where: { id: data.blId } });
-      if (!lot || lot.currentBottleCount < data.count) throw new Error("Stock insuffisant pour cette expédition.");
+          const sourceLot = await tx.bottleLot.findUnique({ where: { id: data.blId } });
+          if (!sourceLot) {
+            throw new BusinessLogicError('Lot dégorgé introuvable.', 404);
+          }
 
-      const operatorId = await this.getUserId(tx, userEmail);
+          const operatorId = await this.getUserId(tx, userEmail);
+          const habillageDate = ensureValidDate(data.habillageDate, "Date d'habillage");
+          const eligibility = getHabillageEligibility(sourceLot);
 
-      // 1. Déduire le stock
-      const newCount = lot.currentBottleCount - data.count;
-      await tx.bottleLot.update({
-        where: { id: lot.id },
-        data: { 
-          currentBottleCount: newCount,
-          status: newCount <= 0 ? 'EXPEDIE_TOTALEMENT' : lot.status
-        }
-      });
+          if (!eligibility.eligible) {
+            throw new BusinessLogicError(
+              `Le lot ${sourceLot.businessCode} ne peut pas être habillé: ${eligibility.reason}.`,
+              409,
+            );
+          }
 
-      // 2. Créer l'expédition dans la table dédiée Shipment
-      const shipment = await tx.shipment.create({
-        data: {
-          shipmentDate: new Date(),
-          customerName: data.clientName,
-          comment: `Expédié par ${userEmail}`
-        }
-      });
+          assertPositiveStock(
+            sourceLot.currentBottleCount,
+            data.count,
+            `Stock insuffisant sur ${sourceLot.businessCode}. Disponible: ${sourceLot.currentBottleCount} btl, requis: ${data.count} btl.`,
+          );
 
-      await tx.shipmentLine.create({
-        data: {
-          shipmentId: shipment.id,
-          bottleLotId: lot.id,
-          bottleCount: data.count
-        }
-      });
+          const decrementResult = await tx.bottleLot.updateMany({
+            where: {
+              id: sourceLot.id,
+              currentBottleCount: {
+                gte: data.count,
+              },
+            },
+            data: {
+              currentBottleCount: {
+                decrement: data.count,
+              },
+            },
+          });
+          if (decrementResult.count !== 1) {
+            throw new BusinessLogicError(
+              "Le stock bouteilles a changé pendant l'habillage. Rechargez les données puis réessayez.",
+              409,
+            );
+          }
 
-      // 3. Traçabilité Événement Bouteille
-      const event = await tx.bottleEvent.create({
-        data: { eventType: "EXPEDITION", operatorUserId: operatorId, comment: `Expédition à ${data.clientName}` }
-      });
+          const remainingSourceCount = sourceLot.currentBottleCount - data.count;
+          await tx.bottleLot.update({
+            where: { id: sourceLot.id },
+            data: {
+              status: remainingSourceCount <= 0 ? 'ARCHIVE' : 'DEGORGE',
+            },
+          });
 
-      await tx.bottleEventLink.create({
-        data: { eventId: event.id, bottleLotId: lot.id, roleInEvent: "SOURCE", bottleCount: data.count }
-      });
+          const code = await makeLotCode(tx, 'HAB', habillageDate, data.idempotencyKey);
+          const destinationLot = await tx.bottleLot.create({
+            data: {
+              technicalCode: code.technicalCode,
+              businessCode: code.businessCode,
+              type: 'HABILLE',
+              sourceLotId: sourceLot.sourceLotId,
+              sourceBottleLotId: sourceLot.id,
+              formatCode: sourceLot.formatCode,
+              initialBottleCount: data.count,
+              currentBottleCount: data.count,
+              status: 'PRET_EXPEDITION',
+              tirageDate: sourceLot.tirageDate,
+              degorgementDate: sourceLot.degorgementDate,
+              dosageValue: sourceLot.dosageValue,
+              dosageUnit: sourceLot.dosageUnit,
+              locationZone: 'Expédition',
+              locationRack: sourceLot.locationRack,
+              locationPalette: sourceLot.locationPalette,
+            },
+          });
 
-      await tx.idempotencyRecord.create({ data: { key: data.idempotencyKey, action: "EXPEDITION", userId: userEmail } });
-      return { status: "SUCCESS", shipment };
-    });
+          const bottleEvent = await tx.bottleEvent.create({
+            data: {
+              eventType: 'HABILLAGE',
+              operatorUserId: operatorId,
+              eventDatetime: habillageDate,
+              comment: buildComment(
+                `Habillage de ${data.count} btl.`,
+                data.cartonId ? `Cartonnage ${data.cartonSize}.` : null,
+                data.note ?? null,
+              ),
+            },
+          });
+
+          await tx.bottleEventLink.createMany({
+            data: [
+              {
+                eventId: bottleEvent.id,
+                bottleLotId: sourceLot.id,
+                roleInEvent: 'SOURCE',
+                bottleCount: data.count,
+              },
+              {
+                eventId: bottleEvent.id,
+                bottleLotId: destinationLot.id,
+                roleInEvent: 'CIBLE',
+                bottleCount: data.count,
+              },
+            ],
+          });
+
+          const stockMovements = [];
+          for (const stockItem of [
+            {
+              productId: data.coiffeId,
+              quantity: data.count,
+              note: `Habillage ${destinationLot.businessCode} · coiffes`,
+              validate: (product: { name: string; category: string; subCategory: string; unit: string }) =>
+                assertSubCategory(product, ['Coiffes'], `Le produit ${product.name} n'est pas une coiffe.`),
+            },
+            {
+              productId: data.etiquetteId,
+              quantity: data.count,
+              note: `Habillage ${destinationLot.businessCode} · étiquettes`,
+              validate: (product: { name: string; category: string; subCategory: string; unit: string }) =>
+                assertSubCategory(product, ['Étiquettes'], `Le produit ${product.name} n'est pas une étiquette.`),
+            },
+            {
+              productId: data.contreEtiquetteId,
+              quantity: data.count,
+              note: `Habillage ${destinationLot.businessCode} · contre-étiquettes`,
+              validate: (product: { name: string; category: string; subCategory: string; unit: string }) =>
+                assertSubCategory(
+                  product,
+                  ['Contre-étiquettes', 'Contre etiquettes'],
+                  `Le produit ${product.name} n'est pas une contre-étiquette.`,
+                ),
+            },
+            {
+              productId: data.cartonId,
+              quantity: Math.ceil(data.count / data.cartonSize),
+              note: `Habillage ${destinationLot.businessCode} · cartons x${data.cartonSize}`,
+              validate: (product: { name: string; category: string; subCategory: string; unit: string }) =>
+                assertSubCategory(product, ['Cartons'], `Le produit ${product.name} n'est pas un carton.`),
+            },
+          ]) {
+            const movement = await consumeProduct(tx, {
+              actorEmail: userEmail,
+              productId: stockItem.productId,
+              quantity: stockItem.quantity,
+              note: stockItem.note,
+              validate: stockItem.validate,
+            });
+            if (movement) {
+              stockMovements.push(movement);
+            }
+          }
+
+          await tx.idempotencyRecord.create({
+            data: {
+              key: data.idempotencyKey,
+              action: 'HABILLAGE',
+              userId: userEmail,
+            },
+          });
+          await tx.auditLog.create({
+            data: {
+              action: 'BOTTLE_HABILLAGE_EXECUTED',
+              details: `Habillage ${destinationLot.businessCode} créé depuis ${sourceLot.businessCode}: ${data.count} btl, reste source ${remainingSourceCount} btl.`,
+              userId: userEmail,
+            },
+          });
+
+          return {
+            status: 'SUCCESS',
+            sourceBottleLotId: sourceLot.id,
+            sourceBottleLotCode: sourceLot.businessCode,
+            sourceRemainingCount: remainingSourceCount,
+            destinationBottleLotId: destinationLot.id,
+            destinationBottleLotCode: destinationLot.businessCode,
+            destinationCount: destinationLot.currentBottleCount,
+            destinationStatus: destinationLot.status,
+            bottleEventId: bottleEvent.id,
+            stockMovements,
+          };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (isConcurrentBottleConflict(error)) {
+        throw new BusinessLogicError(
+          'Un autre opérateur a modifié le lot ou un consommable pendant l\'habillage. Rechargez puis réessayez.',
+          409,
+        );
+      }
+
+      throw error;
+    }
+  }
+
+  static async expedier(data: ExpedierInput, userEmail: string) {
+    try {
+      return await prisma.$transaction(
+        async (tx) => {
+          const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
+          if (existingTx) {
+            throw new BusinessLogicError('Cette expédition a déjà été traitée.', 409);
+          }
+
+          const sourceLot = await tx.bottleLot.findUnique({ where: { id: data.blId } });
+          if (!sourceLot) {
+            throw new BusinessLogicError("Lot prêt à l'expédition introuvable.", 404);
+          }
+
+          const operatorId = await this.getUserId(tx, userEmail);
+          const expeditionDate = ensureValidDate(data.expeditionDate, "Date d'expédition");
+          const eligibility = getExpeditionEligibility(sourceLot);
+
+          if (!eligibility.eligible) {
+            throw new BusinessLogicError(
+              `Le lot ${sourceLot.businessCode} ne peut pas être expédié: ${eligibility.reason}.`,
+              409,
+            );
+          }
+
+          assertPositiveStock(
+            sourceLot.currentBottleCount,
+            data.count,
+            `Stock insuffisant sur ${sourceLot.businessCode}. Disponible: ${sourceLot.currentBottleCount} btl, requis: ${data.count} btl.`,
+          );
+
+          const decrementResult = await tx.bottleLot.updateMany({
+            where: {
+              id: sourceLot.id,
+              currentBottleCount: {
+                gte: data.count,
+              },
+            },
+            data: {
+              currentBottleCount: {
+                decrement: data.count,
+              },
+            },
+          });
+          if (decrementResult.count !== 1) {
+            throw new BusinessLogicError(
+              "Le stock bouteilles a changé pendant l'expédition. Rechargez les données puis réessayez.",
+              409,
+            );
+          }
+
+          const remainingSourceCount = sourceLot.currentBottleCount - data.count;
+          await tx.bottleLot.update({
+            where: { id: sourceLot.id },
+            data: {
+              status: remainingSourceCount <= 0 ? 'EXPEDIE' : 'PRET_EXPEDITION',
+            },
+          });
+
+          const shipment = await tx.shipment.create({
+            data: {
+              shipmentDate: expeditionDate,
+              customerName: data.clientName,
+              comment: buildComment(
+                data.destination ? `Destination: ${data.destination}.` : null,
+                data.note ?? null,
+              ),
+            },
+          });
+          await tx.shipmentLine.create({
+            data: {
+              shipmentId: shipment.id,
+              bottleLotId: sourceLot.id,
+              bottleCount: data.count,
+            },
+          });
+
+          const bottleEvent = await tx.bottleEvent.create({
+            data: {
+              eventType: 'EXPEDITION',
+              operatorUserId: operatorId,
+              eventDatetime: expeditionDate,
+              comment: buildComment(
+                `Expédition de ${data.count} btl vers ${data.clientName}.`,
+                data.destination ? `Destination: ${data.destination}.` : null,
+                data.note ?? null,
+              ),
+            },
+          });
+          await tx.bottleEventLink.create({
+            data: {
+              eventId: bottleEvent.id,
+              bottleLotId: sourceLot.id,
+              roleInEvent: 'SOURCE',
+              bottleCount: data.count,
+            },
+          });
+
+          await tx.idempotencyRecord.create({
+            data: {
+              key: data.idempotencyKey,
+              action: 'EXPEDITION',
+              userId: userEmail,
+            },
+          });
+          await tx.auditLog.create({
+            data: {
+              action: 'BOTTLE_EXPEDITION_EXECUTED',
+              details: `Expédition du lot ${sourceLot.businessCode} vers ${data.clientName}: ${data.count} btl, reste ${remainingSourceCount} btl.`,
+              userId: userEmail,
+            },
+          });
+
+          return {
+            status: 'SUCCESS',
+            shipmentId: shipment.id,
+            sourceBottleLotId: sourceLot.id,
+            sourceBottleLotCode: sourceLot.businessCode,
+            sourceRemainingCount: remainingSourceCount,
+            sourceStatus: remainingSourceCount <= 0 ? 'EXPEDIE' : 'PRET_EXPEDITION',
+            bottleEventId: bottleEvent.id,
+            shippedCount: data.count,
+          };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (isConcurrentBottleConflict(error)) {
+        throw new BusinessLogicError(
+          "Un autre opérateur a modifié le lot pendant l'expédition. Rechargez puis réessayez.",
+          409,
+        );
+      }
+
+      throw error;
+    }
   }
 }
-

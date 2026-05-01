@@ -34,6 +34,16 @@ import {
   isTirageEligibleLotStatus,
   normalizeTirageBouchage,
 } from "@/lib/tirage";
+import {
+  calculateBottleLotAgeMonths,
+  getBottleLotCount,
+  getBottleStatusLabel,
+  getDegorgementEligibility,
+  getExpeditionEligibility,
+  getHabillageEligibility,
+  MIN_SUR_LATTES_MONTHS,
+  normalizeBottleLotStatus,
+} from "@/lib/bottles";
 
 // =============================================================================
 // HELPERS & COMPOSANTS SUR-MESURE
@@ -820,8 +830,8 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh, canShowDataba
   const cuvesVides    = containers.filter((c: any) => toNum(c.currentVolume) === 0).length;
   
   // Utilisation des bons champs BDD (currentBottleCount)
-  const surLattes     = bottleLots.filter((b: any) => b.status === "SUR_LATTES" || b.status === "A_DEGORGER").reduce((s: any, b: any) => s + (b.currentBottleCount || b.currentCount || 0), 0);
-  const prodFinis     = bottleLots.filter((b: any) => b.status === "PRET_EXPEDITION").reduce((s: any, b: any) => s + (b.currentBottleCount || b.currentCount || 0), 0);
+  const surLattes     = bottleLots.filter((b: any) => normalizeBottleLotStatus(b.status, b.type) === "SUR_LATTES").reduce((s: any, b: any) => s + getBottleLotCount(b), 0);
+  const prodFinis     = bottleLots.filter((b: any) => normalizeBottleLotStatus(b.status, b.type) === "PRET_EXPEDITION").reduce((s: any, b: any) => s + getBottleLotCount(b), 0);
   
   const fillRate      = totalCapacity > 0 ? Math.round(totalVol / totalCapacity * 100) : 0;
   const lotsByStatus  = LOT_STATUSES.map((s: any) => ({ s, count: lots.filter((l: any) => l.status === s).length })).filter((x: any) => x.count > 0);
@@ -838,7 +848,9 @@ function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh, canShowDataba
     ...containers.filter((c: any) => c.status === "VIDE" && c.notes).map((c: any) => ({ level:"warn", msg:`${c.displayName || c.name} : ${c.notes}`, nav:"cuverie" })),
     ...containers.filter((c: any) => c.status === "NETTOYAGE").map((c: any) => ({ level:"info", msg:`${c.displayName || c.name} en nettoyage`, nav:"cuverie" })),
     ...lots.filter((l: any) => l.notes && l.notes.includes("sans suivi")).map((l: any) => ({ level:"warn", msg:`${l.businessCode || l.code} : ${l.notes}`, nav:"lots" })),
-    ...bottleLots.filter((b: any) => b.status === "A_DEGORGER").map((b: any) => ({ level:"action", msg:`${b.businessCode || b.code} prêt à dégorger (${((b.currentBottleCount || b.currentCount) || 0).toLocaleString("fr-FR")} btl)`, nav:"stock" })),
+    ...bottleLots
+      .filter((b: any) => getDegorgementEligibility(b).eligible)
+      .map((b: any) => ({ level:"action", msg:`${b.businessCode || b.code} prêt à dégorger (${getBottleLotCount(b).toLocaleString("fr-FR")} btl)`, nav:"stock" })),
   ];
 
   // 📦 2. ALERTES MATIÈRES SÈCHES (NOUVEAU)
@@ -3977,16 +3989,31 @@ function RemuageModal({ bl, actionType, onClose }: { bl: any; actionType: any; o
 
 function DegorgerModal({ bl, onClose }: { bl: any; onClose: any }) {
   const T = useTheme(); 
-  const { dispatch, refreshData } = useStore(); 
+  const { state, dispatch, refreshData } = useStore(); 
   const { user } = useAuth();
   
   const [count, setCount] = useState(""); 
+  const [degorgementDate, setDegorgementDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [sugar, setSugar] = useState(""); 
-  const [modeleBouchon, setModeleBouchon] = useState(""); 
+  const [liqueurType, setLiqueurType] = useState("Brut");
+  const [liqueurVolumeLiters, setLiqueurVolumeLiters] = useState("");
+  const [bouchonProductId, setBouchonProductId] = useState("");
+  const [museletProductId, setMuseletProductId] = useState("");
+  const [liqueurProductId, setLiqueurProductId] = useState("");
+  const [lossCount, setLossCount] = useState("0");
+  const [note, setNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   
-  const max = bl.currentBottleCount || bl.currentCount || 0;
+  const max = getBottleLotCount(bl);
+  const eligibility = getDegorgementEligibility(bl);
+  const bouchons = (state.products || []).filter((p: any) => p.subCategory === "Bouchons");
+  const muselets = (state.products || []).filter((p: any) => p.subCategory === "Muselets");
+  const liqueurs = (state.products || []).filter((p: any) => {
+    const subCategory = String(p.subCategory || "").toLowerCase();
+    const name = String(p.name || "").toLowerCase();
+    return subCategory.includes("liqueur") || name.includes("liqueur");
+  });
 
   const getDosageInfo = (val: string) => {
     if (val === "") return { label: "--", suffix: "", color: T.textDim };
@@ -4005,7 +4032,14 @@ function DegorgerModal({ bl, onClose }: { bl: any; onClose: any }) {
 
   const submit = async () => {
     const qtyNum = parseInt(count);
+    const lossNum = parseInt(lossCount || "0") || 0;
+    const sugarNum = parseFloat(sugar);
     if (!qtyNum || qtyNum <= 0 || qtyNum > max) return alert("Quantité invalide.");
+    if (lossNum < 0) return alert("Pertes invalides.");
+    if (qtyNum + lossNum > max) return alert("Quantité + pertes supérieures au stock disponible.");
+    if (Number.isNaN(sugarNum) || sugarNum < 0) return alert("Dosage invalide.");
+    if (!degorgementDate) return alert("Date de dégorgement requise.");
+    if (!eligibility.eligible) return alert(`Lot non éligible: ${eligibility.reason}`);
 
     setIsSubmitting(true);
     try {
@@ -4015,16 +4049,26 @@ function DegorgerModal({ bl, onClose }: { bl: any; onClose: any }) {
         body: JSON.stringify({ 
           blId: parseInt(bl.id), 
           count: qtyNum, 
-          dosage: finalDosageString, 
-          suffix: dosageInfo.suffix, 
-          note: `Dégorgement. Bouchage: ${modeleBouchon || "Non précisé"}`,
+          degorgementDate,
+          dosageGramsPerLiter: sugarNum,
+          dosageLabel: dosageInfo.label,
+          liqueurType,
+          liqueurProductId: liqueurProductId ? parseInt(liqueurProductId) : null,
+          liqueurVolumeLiters: liqueurVolumeLiters ? parseFloat(liqueurVolumeLiters) : null,
+          bouchonProductId: bouchonProductId ? parseInt(bouchonProductId) : null,
+          museletProductId: museletProductId ? parseInt(museletProductId) : null,
+          lossCount: lossNum,
+          note: note || `Dégorgement ${finalDosageString}`,
           idempotencyKey 
         }) 
       });
       
-      if (!res.ok) throw new Error((await res.json()).error || "Erreur de dégorgement");
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || errorData.error || "Erreur de dégorgement");
+      }
 
-      dispatch({ type:"TOAST_ADD", payload:{ msg:`${qtyNum} btl dégorgées ! (Création lot Produits Finis)`, color:T.green } }); 
+      dispatch({ type:"TOAST_ADD", payload:{ msg:`${qtyNum} btl dégorgées${lossNum > 0 ? `, ${lossNum} pertes` : ""} !`, color:T.green } }); 
       if (refreshData) await refreshData();
       onClose(); 
     } catch(e: any) { 
@@ -4036,6 +4080,11 @@ function DegorgerModal({ bl, onClose }: { bl: any; onClose: any }) {
 
   return (
     <Modal title="Dégorgement" onClose={onClose}>
+      <div style={{ background: eligibility.eligible ? T.green+"11" : T.red+"11", border: `1px solid ${eligibility.eligible ? T.green+"33" : T.red+"33"}`, color: eligibility.eligible ? T.textStrong : T.red, borderRadius: 4, padding: 12, marginBottom: 16, fontSize: 12 }}>
+        {eligibility.eligible
+          ? `Lot éligible au dégorgement: ${eligibility.ageMonths} mois sur lattes.`
+          : `Lot bloqué: ${eligibility.reason}${eligibility.reasonCode === "TOO_YOUNG" ? ` (minimum ${MIN_SUR_LATTES_MONTHS} mois)` : ""}.`}
+      </div>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
         <FF label={`Nombre de btl (max ${max})`}>
           <div style={{ display: "flex", gap: 8 }}>
@@ -4043,8 +4092,17 @@ function DegorgerModal({ bl, onClose }: { bl: any; onClose: any }) {
             <Btn variant="secondary" onClick={() => setCount(max.toString())} disabled={isSubmitting}>MAX</Btn>
           </div>
         </FF>
+        <FF label="Date de dégorgement">
+          <Input type="date" value={degorgementDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDegorgementDate(e.target.value)} disabled={isSubmitting} />
+        </FF>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
         <FF label="Sucre ajouté (g/L)">
           <Input type="number" step="0.1" placeholder="Ex: 8" value={sugar} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSugar(e.target.value)} disabled={isSubmitting} />
+        </FF>
+        <FF label="Pertes bouteilles">
+          <Input type="number" min="0" value={lossCount} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLossCount(e.target.value)} disabled={isSubmitting} />
         </FF>
       </div>
 
@@ -4052,15 +4110,45 @@ function DegorgerModal({ bl, onClose }: { bl: any; onClose: any }) {
         {sugar !== "" && <div style={{ fontSize: 11, color: T.textDim }}>Catégorie AOC : <Badge label={dosageInfo.label} color={dosageInfo.color} /></div>}
       </div>
       
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginTop: 8 }}>
+        <FF label="Type de liqueur">
+          <Input value={liqueurType} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLiqueurType(e.target.value)} disabled={isSubmitting} placeholder="Ex: Brut" />
+        </FF>
+        <FF label="Volume liqueur (L)">
+          <Input type="number" step="0.1" value={liqueurVolumeLiters} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLiqueurVolumeLiters(e.target.value)} disabled={isSubmitting} placeholder="Optionnel" />
+        </FF>
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginTop: 8 }}>
+        <FF label="Bouchon expédition">
+          <Select value={bouchonProductId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setBouchonProductId(e.target.value)} disabled={isSubmitting}>
+            <option value="">-- Aucun --</option>
+            {bouchons.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
+          </Select>
+        </FF>
+        <FF label="Muselet">
+          <Select value={museletProductId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMuseletProductId(e.target.value)} disabled={isSubmitting}>
+            <option value="">-- Aucun --</option>
+            {muselets.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
+          </Select>
+        </FF>
+        <FF label="Liqueur stock">
+          <Select value={liqueurProductId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setLiqueurProductId(e.target.value)} disabled={isSubmitting}>
+            <option value="">-- Non gérée en stock --</option>
+            {liqueurs.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
+          </Select>
+        </FF>
+      </div>
+
       <div style={{ marginTop: 8 }}>
-        <FF label="Modèle de Bouchon Liège (Optionnel)">
-          <Input value={modeleBouchon} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setModeleBouchon(e.target.value)} disabled={isSubmitting} placeholder="Ex: Mytik - MD5" />
+        <FF label="Notes">
+          <Input value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} disabled={isSubmitting} placeholder="Commentaires opérateur, lot liqueur, anomalies..." />
         </FF>
       </div>
 
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:24 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
-        <Btn onClick={submit} disabled={isSubmitting || !count || sugar === ""} style={{ background: isSubmitting ? T.textDim : T.accent }}>
+        <Btn onClick={submit} disabled={isSubmitting || !count || sugar === "" || !degorgementDate || !eligibility.eligible} style={{ background: isSubmitting ? T.textDim : T.accent }}>
           {isSubmitting ? "Traitement..." : "Valider le dégorgement"}
         </Btn>
       </div>
@@ -4074,22 +4162,29 @@ function HabillerModal({ bl, onClose }: { bl: any; onClose: any }) {
   const { user } = useAuth();
   
   const [count, setCount] = useState(""); 
+  const [habillageDate, setHabillageDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [coiffeId, setCoiffeId] = useState("");
   const [etiquetteId, setEtiquetteId] = useState("");
+  const [contreEtiquetteId, setContreEtiquetteId] = useState("");
   const [cartonId, setCartonId] = useState("");
   const [cartonSize, setCartonSize] = useState("6");
+  const [note, setNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
   
-  const max = bl.currentBottleCount || bl.currentCount || 0;
+  const max = getBottleLotCount(bl);
+  const eligibility = getHabillageEligibility(bl);
 
   const coiffes = (state.products || []).filter((p: any) => p.subCategory === "Coiffes");
-  const etiquettes = (state.products || []).filter((p: any) => p.subCategory === "Étiquettes" || p.subCategory === "Contre-étiquettes");
+  const etiquettes = (state.products || []).filter((p: any) => p.subCategory === "Étiquettes");
+  const contreEtiquettes = (state.products || []).filter((p: any) => p.subCategory === "Contre-étiquettes");
   const cartons = (state.products || []).filter((p: any) => p.subCategory === "Cartons");
 
   const submit = async () => {
     const qtyNum = parseInt(count);
     if (!qtyNum || qtyNum <= 0 || qtyNum > max) return alert("Quantité invalide.");
+    if (!habillageDate) return alert("Date d'habillage requise.");
+    if (!eligibility.eligible) return alert(`Lot non éligible: ${eligibility.reason}`);
 
     setIsSubmitting(true);
     try {
@@ -4098,15 +4193,21 @@ function HabillerModal({ bl, onClose }: { bl: any; onClose: any }) {
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
           blId: parseInt(bl.id), count: qtyNum, 
+          habillageDate,
           coiffeId: coiffeId ? parseInt(coiffeId) : null,
           etiquetteId: etiquetteId ? parseInt(etiquetteId) : null,
+          contreEtiquetteId: contreEtiquetteId ? parseInt(contreEtiquetteId) : null,
           cartonId: cartonId ? parseInt(cartonId) : null,
           cartonSize: parseInt(cartonSize),
+          note,
           idempotencyKey 
         }) 
       });
 
-      if (!res.ok) throw new Error((await res.json()).error || "Erreur d'habillage");
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || errorData.error || "Erreur d'habillage");
+      }
 
       dispatch({ type:"TOAST_ADD", payload:{ msg:`${qtyNum} btl habillées. Stocks déduits !`, color:"#9960aa" } }); 
       if (refreshData) await refreshData();
@@ -4117,11 +4218,17 @@ function HabillerModal({ bl, onClose }: { bl: any; onClose: any }) {
 
   return (
     <Modal title={`Habillage & Mise en carton`} onClose={onClose}>
+      <div style={{ background: eligibility.eligible ? T.green+"11" : T.red+"11", border: `1px solid ${eligibility.eligible ? T.green+"33" : T.red+"33"}`, color: eligibility.eligible ? T.textStrong : T.red, borderRadius: 4, padding: 12, marginBottom: 16, fontSize: 12 }}>
+        {eligibility.eligible ? "Lot éligible à l'habillage." : `Lot bloqué: ${eligibility.reason}.`}
+      </div>
       <FF label={`Nombre de bouteilles à habiller (max ${max})`}>
         <div style={{ display: "flex", gap: 8 }}>
           <Input type="number" value={count} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }} />
           <Btn variant="secondary" onClick={() => setCount(max.toString())} disabled={isSubmitting}>MAX</Btn>
         </div>
+      </FF>
+      <FF label="Date d'habillage">
+        <Input type="date" value={habillageDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setHabillageDate(e.target.value)} disabled={isSubmitting} />
       </FF>
 
       <div style={{ border:`1px solid ${T.border}`, borderRadius:4, padding:16, marginBottom:16, marginTop: 16 }}>
@@ -4137,6 +4244,14 @@ function HabillerModal({ bl, onClose }: { bl: any; onClose: any }) {
             <Select value={etiquetteId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEtiquetteId(e.target.value)} disabled={isSubmitting}>
               <option value="">-- Sans étiquette --</option>
               {etiquettes.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
+            </Select>
+          </FF>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <FF label="Contre-étiquette">
+            <Select value={contreEtiquetteId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setContreEtiquetteId(e.target.value)} disabled={isSubmitting}>
+              <option value="">-- Sans contre-étiquette --</option>
+              {contreEtiquettes.map((p: any) => <option key={p.id} value={p.id}>{p.name} ({p.currentStock} dispo)</option>)}
             </Select>
           </FF>
         </div>
@@ -4159,9 +4274,13 @@ function HabillerModal({ bl, onClose }: { bl: any; onClose: any }) {
         </div>
       </div>
 
+      <FF label="Notes">
+        <Input value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} disabled={isSubmitting} placeholder="Commentaires opérateur" />
+      </FF>
+
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
-        <Btn onClick={submit} disabled={isSubmitting || !count} style={{ background: "#9960aa", borderColor: "#9960aa", color: "#fff" }}>
+        <Btn onClick={submit} disabled={isSubmitting || !count || !habillageDate || !eligibility.eligible} style={{ background: "#9960aa", borderColor: "#9960aa", color: "#fff" }}>
           {isSubmitting ? "Traitement..." : "Valider l'habillage"}
         </Btn>
       </div>
@@ -4175,16 +4294,22 @@ function ExpedierModal({ bl, onClose }: { bl: any; onClose: any }) {
   const { user } = useAuth();
   
   const [count, setCount] = useState(""); 
+  const [expeditionDate, setExpeditionDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [clientName, setClientName] = useState("");
+  const [destination, setDestination] = useState("");
+  const [note, setNote] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
-  const max = bl.currentBottleCount || bl.currentCount || 0;
+  const max = getBottleLotCount(bl);
+  const eligibility = getExpeditionEligibility(bl);
 
   const submit = async () => {
     const qtyNum = parseInt(count);
     if (!qtyNum || qtyNum <= 0 || qtyNum > max) return alert("Quantité invalide.");
     if (!clientName.trim()) return alert("Nom du client requis.");
+    if (!expeditionDate) return alert("Date d'expédition requise.");
+    if (!eligibility.eligible) return alert(`Lot non éligible: ${eligibility.reason}`);
 
     setIsSubmitting(true);
     try {
@@ -4192,11 +4317,14 @@ function ExpedierModal({ bl, onClose }: { bl: any; onClose: any }) {
         method: 'POST', 
         headers: buildApiHeaders(user), 
         body: JSON.stringify({ 
-          blId: parseInt(bl.id), count: qtyNum, clientName, idempotencyKey 
+          blId: parseInt(bl.id), count: qtyNum, expeditionDate, clientName, destination, note, idempotencyKey 
         }) 
       });
       
-      if (!res.ok) throw new Error((await res.json()).error || "Erreur d'expédition");
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || errorData.error || "Erreur d'expédition");
+      }
 
       dispatch({ type:"TOAST_ADD", payload:{ msg:`${qtyNum} expédiées à ${clientName}`, color:T.green } }); 
       if (refreshData) await refreshData();
@@ -4207,18 +4335,30 @@ function ExpedierModal({ bl, onClose }: { bl: any; onClose: any }) {
 
   return (
     <Modal title="Expédition" onClose={onClose}>
+      <div style={{ background: eligibility.eligible ? T.green+"11" : T.red+"11", border: `1px solid ${eligibility.eligible ? T.green+"33" : T.red+"33"}`, color: eligibility.eligible ? T.textStrong : T.red, borderRadius: 4, padding: 12, marginBottom: 16, fontSize: 12 }}>
+        {eligibility.eligible ? "Lot éligible à l'expédition." : `Lot bloqué: ${eligibility.reason}.`}
+      </div>
       <FF label={`Nombre (max ${max})`}>
         <div style={{ display: "flex", gap: 8 }}>
           <Input type="number" value={count} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }} />
           <Btn variant="secondary" onClick={() => setCount(max.toString())} disabled={isSubmitting}>MAX</Btn>
         </div>
       </FF>
+      <FF label="Date d'expédition">
+        <Input type="date" value={expeditionDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setExpeditionDate(e.target.value)} disabled={isSubmitting} />
+      </FF>
       <FF label="Nom du Client / Acheteur">
         <Input value={clientName} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setClientName(e.target.value)} disabled={isSubmitting} />
       </FF>
+      <FF label="Destination">
+        <Input value={destination} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDestination(e.target.value)} disabled={isSubmitting} placeholder="Optionnel" />
+      </FF>
+      <FF label="Notes">
+        <Input value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} disabled={isSubmitting} placeholder="Optionnel" />
+      </FF>
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
-        <Btn onClick={submit} disabled={isSubmitting || !count || !clientName}>
+        <Btn onClick={submit} disabled={isSubmitting || !count || !clientName || !expeditionDate || !eligibility.eligible}>
           {isSubmitting ? "Traitement..." : "Valider l'expédition"}
         </Btn>
       </div>
@@ -4237,19 +4377,11 @@ function StockBouteilles({ onSelectLot }: { onSelectLot?: any }) {
   const [modal, setModal] = useState<string | null>(null); 
   const [selBl, setSelBl] = useState<any>(null);
   
-  const vieillissement = (state.bottleLots || []).filter((b: any) => ["SUR_LATTES", "EN_REMUAGE", "SUR_POINTES", "A_DEGORGER"].includes(b.status));
-  const aHabiller = (state.bottleLots || []).filter((b: any) => b.status === "EN_CAVE" || b.status === "DEGORGE");
-  const finis = (state.bottleLots || []).filter((b: any) => b.status === "PRET_EXPEDITION");
-  const reserves = (state.bottleLots || []).filter((b: any) => b.status === "RESERVE");
-
-  const getAgingMonths = (dateStr: any) => {
-    if (!dateStr) return 0;
-    const tirageDate = new Date(dateStr);
-    const diffTime = Math.abs(new Date().getTime() - tirageDate.getTime());
-    return Math.floor(diffTime / (1000 * 60 * 60 * 24 * 30.44));
-  };
-
-  const formatStatus = (s: any) => s ? s.replace(/_/g, ' ') : "INCONNU";
+  const bottleLots = (state.bottleLots || []).filter((b: any) => getBottleLotCount(b) > 0);
+  const vieillissement = bottleLots.filter((b: any) => normalizeBottleLotStatus(b.status, b.type) === "SUR_LATTES");
+  const aHabiller = bottleLots.filter((b: any) => normalizeBottleLotStatus(b.status, b.type) === "DEGORGE");
+  const finis = bottleLots.filter((b: any) => normalizeBottleLotStatus(b.status, b.type) === "PRET_EXPEDITION");
+  const reserves = bottleLots.filter((b: any) => normalizeBottleLotStatus(b.status, b.type) === "RESERVE");
 
   return (
     <div>
@@ -4274,34 +4406,32 @@ function StockBouteilles({ onSelectLot }: { onSelectLot?: any }) {
             <div>Code Tirage</div><div>Format</div><div>Stock</div><div>Statut</div><div>Emplacement</div><div>Tirage (Âge)</div><div>Action (Cycle)</div>
           </div>
           {vieillissement.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucune bouteille en vieillissement.</div> : vieillissement.map((b: any, i: number) => {
-            const age = getAgingMonths(b.tirageDate);
-            const isReady = age >= 15;
-            const btlCount = b.currentBottleCount || b.currentCount || 0;
+            const eligibility = getDegorgementEligibility(b);
+            const age = eligibility.ageMonths;
+            const btlCount = getBottleLotCount(b);
             
             return (
               <div key={b.id} style={{ display:"grid", gridTemplateColumns:"2fr 70px 90px 100px 1fr 100px 180px", padding:"14px 16px", alignItems:"center", borderBottom:i<vieillissement.length-1?`1px solid ${T.border}`:"none" }}>
                 <div onClick={() => onSelectLot && onSelectLot(b)} style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, cursor:"pointer", textDecoration:"underline" }}>{b.code || b.businessCode}</div>
                 <div style={{ fontSize:13, color:T.text }}>{b.format || b.formatCode}</div>
                 <div style={{ fontSize:14, color:T.textStrong, fontWeight:"bold" }}>{btlCount}</div>
-                <div><Badge label={formatStatus(b.status)} color={BOTTLE_STATUS_COLORS[b.status] || T.textDim} /></div>
+                <div><Badge label={getBottleStatusLabel(b.status, b.type)} color={BOTTLE_STATUS_COLORS[normalizeBottleLotStatus(b.status, b.type)] || T.textDim} /></div>
                 <div style={{ fontSize:12, color:T.textDim }}>{b.zone || b.locationZone || "--"}</div>
-                <div style={{ fontSize:12, color: isReady ? T.accent : T.textDim, fontWeight: isReady ? "bold" : "normal" }}>{b.tirageDate ? `${age} mois` : "--"}</div>
+                <div style={{ fontSize:12, color: eligibility.eligible ? T.accent : T.textDim, fontWeight: eligibility.eligible ? "bold" : "normal" }}>{b.tirageDate ? `${age} mois` : "--"}</div>
                 
-                <div style={{ display: "flex", gap: 6 }}>
-                  {b.status === "SUR_LATTES" && (
-                    <Btn variant="secondary" style={{ fontSize:10, padding:"6px 8px", flex: 1, opacity: isReady ? 1 : 0.6, borderColor: T.accent, color: T.accent }} disabled={!isReady} onClick={() => { setSelBl(b); setModal("remuage_start"); }}>
-                      {isReady ? "REMUAGE" : "🔒 < 15 MOIS"}
-                    </Btn>
-                  )}
-                  {b.status === "EN_REMUAGE" && (
-                    <Btn variant="secondary" style={{ fontSize:10, padding:"6px 8px", flex: 1, borderColor: "#e6a15c", color: "#e6a15c" }} onClick={() => { setSelBl(b); setModal("pointes_start"); }}>
-                      S/ POINTES
-                    </Btn>
-                  )}
-                  {(b.status === "SUR_POINTES" || b.status === "A_DEGORGER") && (
-                    <Btn variant="primary" style={{ fontSize:10, padding:"6px 8px", flex: 1 }} onClick={() => { setSelBl(b); setModal("degorger"); }}>
-                      DÉGORGER
-                    </Btn>
+                <div style={{ display: "flex", flexDirection:"column", gap: 6 }}>
+                  <Btn
+                    variant={eligibility.eligible ? "primary" : "secondary"}
+                    style={{ fontSize:10, padding:"6px 8px", width:"100%", opacity: eligibility.eligible ? 1 : 0.65 }}
+                    disabled={!eligibility.eligible}
+                    onClick={() => { setSelBl(b); setModal("degorger"); }}
+                  >
+                    {eligibility.eligible ? "DÉGORGER" : eligibility.reason}
+                  </Btn>
+                  {!eligibility.eligible && (
+                    <div style={{ fontSize:10, color:T.textDim }}>
+                      {eligibility.reasonCode === "TOO_YOUNG" ? `Minimum ${MIN_SUR_LATTES_MONTHS} mois` : "Action bloquée"}
+                    </div>
                   )}
                 </div>
               </div>
@@ -4315,20 +4445,22 @@ function StockBouteilles({ onSelectLot }: { onSelectLot?: any }) {
           <div style={{ display:"grid", gridTemplateColumns:"2fr 80px 120px 140px 1fr 110px", padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
             <div>Code Lot</div><div>Format</div><div>Stock (Nues)</div><div>Emplacement</div><div>Statut</div><div>Action</div>
           </div>
-          {aHabiller.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucune bouteille nue en attente d'habillage.</div> : aHabiller.map((b: any, i: number) => (
+          {aHabiller.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucune bouteille nue en attente d'habillage.</div> : aHabiller.map((b: any, i: number) => {
+            const eligibility = getHabillageEligibility(b);
+            return (
             <div key={b.id} style={{ display:"grid", gridTemplateColumns:"2fr 80px 120px 140px 1fr 110px", padding:"14px 16px", alignItems:"center", borderBottom:i<aHabiller.length-1?`1px solid ${T.border}`:"none" }}>
               <div onClick={() => onSelectLot && onSelectLot(b)} style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, cursor:"pointer", textDecoration:"underline" }}>{b.code || b.businessCode}</div>
               <div style={{ fontSize:13, color:T.text }}>{b.format || b.formatCode}</div>
-              <div style={{ fontSize:15, color:T.textStrong, fontWeight:"bold" }}>{b.currentBottleCount || b.currentCount} btl</div>
+              <div style={{ fontSize:15, color:T.textStrong, fontWeight:"bold" }}>{getBottleLotCount(b)} btl</div>
               <div style={{ fontSize:12, color:T.textDim }}>{b.zone || b.locationZone || "--"}</div>
-              <div><Badge label={formatStatus(b.status)} color={BOTTLE_STATUS_COLORS[b.status]} /></div>
+              <div><Badge label={getBottleStatusLabel(b.status, b.type)} color={BOTTLE_STATUS_COLORS[normalizeBottleLotStatus(b.status, b.type)]} /></div>
               <div>
-                <Btn variant="primary" style={{ fontSize:10, padding:"6px 12px", width:"100%", background:"#9960aa", borderColor:"#9960aa" }} onClick={() => { setSelBl(b); setModal("habiller"); }}>
+                <Btn variant="primary" disabled={!eligibility.eligible} style={{ fontSize:10, padding:"6px 12px", width:"100%", background:"#9960aa", borderColor:"#9960aa", opacity: eligibility.eligible ? 1 : 0.65 }} onClick={() => { setSelBl(b); setModal("habiller"); }}>
                   HABILLER
                 </Btn>
               </div>
             </div>
-          ))}
+          )})}
         </div>
       )}
 
@@ -4337,16 +4469,18 @@ function StockBouteilles({ onSelectLot }: { onSelectLot?: any }) {
           <div style={{ display:"grid", gridTemplateColumns:"2fr 80px 120px 140px 1fr 110px", padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
             <div>Code Dégorgement</div><div>Format</div><div>Stock Dispo</div><div>Date Dégorg.</div><div>Dosage</div><div>Action</div>
           </div>
-          {finis.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucun produit fini prêt à l'expédition.</div> : finis.map((b: any, i: number) => (
+          {finis.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucun produit fini prêt à l'expédition.</div> : finis.map((b: any, i: number) => {
+            const eligibility = getExpeditionEligibility(b);
+            return (
             <div key={b.id} style={{ display:"grid", gridTemplateColumns:"2fr 80px 120px 140px 1fr 110px", padding:"14px 16px", alignItems:"center", borderBottom:i<finis.length-1?`1px solid ${T.border}`:"none" }}>
               <div onClick={() => onSelectLot && onSelectLot(b)} style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, cursor:"pointer", textDecoration:"underline" }}>{b.code || b.businessCode}</div>
               <div style={{ fontSize:13, color:T.text }}>{b.format || b.formatCode}</div>
-              <div style={{ fontSize:15, color:T.textStrong, fontWeight:"bold" }}>{b.currentBottleCount || b.currentCount} btl</div>
+              <div style={{ fontSize:15, color:T.textStrong, fontWeight:"bold" }}>{getBottleLotCount(b)} btl</div>
               <div style={{ fontSize:11, color:T.textDim, fontFamily:"monospace" }}>{b.degorgDate || b.degorgementDate ? new Date(b.degorgDate || b.degorgementDate).toLocaleDateString('fr-FR') : "--"}</div>
               <div style={{ fontSize:12, color:T.textDim }}>{b.dosage || (b.dosageValue ? `${b.dosageValue} g/L` : "--")}</div>
-              <div><Btn variant="primary" style={{ fontSize:10, padding:"6px 12px", width:"100%" }} onClick={() => { setSelBl(b); setModal("expedier"); }}>EXPÉDIER</Btn></div>
+              <div><Btn variant="primary" disabled={!eligibility.eligible} style={{ fontSize:10, padding:"6px 12px", width:"100%", opacity: eligibility.eligible ? 1 : 0.65 }} onClick={() => { setSelBl(b); setModal("expedier"); }}>EXPÉDIER</Btn></div>
             </div>
-          ))}
+          )})}
         </div>
       )}
 
@@ -4361,7 +4495,7 @@ function StockBouteilles({ onSelectLot }: { onSelectLot?: any }) {
             <div key={b.id} style={{ display:"grid", gridTemplateColumns:"2fr 80px 120px 140px 1fr", padding:"14px 16px", alignItems:"center", borderBottom:i<reserves.length-1?`1px solid ${T.border}`:"none" }}>
               <div onClick={() => onSelectLot && onSelectLot(b)} style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, cursor:"pointer", textDecoration:"underline" }}>{b.code || b.businessCode}</div>
               <div style={{ fontSize:13, color:T.text }}>{b.format || b.formatCode}</div>
-              <div style={{ fontSize:15, color:T.textStrong, fontWeight:"bold" }}>{b.currentBottleCount || b.currentCount} btl</div>
+              <div style={{ fontSize:15, color:T.textStrong, fontWeight:"bold" }}>{getBottleLotCount(b)} btl</div>
               <div style={{ fontSize:11, color:T.textDim, fontFamily:"monospace" }}>{b.tirageDate ? new Date(b.tirageDate).toLocaleDateString('fr-FR') : "--"}</div>
               <div style={{ fontSize:12, color:T.textDim }}>{b.zone || b.locationZone || "--"}</div>
             </div>
@@ -6780,13 +6914,6 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
     }
   }
 
-  const getAgingMonths = (dateStr: any) => {
-    if (!dateStr) return 0;
-    const tirageDate = new Date(dateStr);
-    const diffTime = Math.abs(new Date().getTime() - tirageDate.getTime());
-    return Math.floor(diffTime / (1000 * 60 * 60 * 24 * 30.44));
-  };
-
   const handlePrintPDF = () => {
     const pdfVol = isBottle ? `${lot.currentBottleCount || lot.currentCount} btl (${lot.formatCode || lot.format})` : formatVolShort(lot.currentVolume || lot.volume);
     const pdfCont = isBottle ? (lot.locationZone || lot.zone || "Stock Cave") : (container ? (container.displayName || container.name) : "Vrac");
@@ -6848,9 +6975,10 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
   // =========================================================
   if (isBottle) {
     const statusC = T.accent; 
-    const btlCount = lot.currentBottleCount || lot.currentCount || 0;
+    const btlCount = getBottleLotCount(lot);
     const isDeadBottle = btlCount <= 0;
-    const ageMois = getAgingMonths(lot.tirageDate);
+    const ageMois = calculateBottleLotAgeMonths(lot.tirageDate);
+    const normalizedBottleStatus = normalizeBottleLotStatus(lot.status, lot.type);
 
     return (
       <div>
@@ -6873,10 +7001,10 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
               <Btn variant="secondary" onClick={handlePrintPDF}>📄 Générer PDF</Btn>
               {!isDeadBottle && (
                 <>
-                  {["DEGORGE", "EN_CAVE"].includes(lot.status) && (
+                  {normalizedBottleStatus === "DEGORGE" && (
                     <Btn variant="primary" onClick={() => setModal("habiller" as any)} style={{ background: "#9960aa", borderColor: "#9960aa", color: "#fff" }}>👗 Habiller</Btn>
                   )}
-                  {lot.status === "PRET_EXPEDITION" && (
+                  {normalizedBottleStatus === "PRET_EXPEDITION" && (
                      <Btn variant="primary" onClick={() => setModal("expedier" as any)}>📦 Expédier</Btn>
                   )}
                 </>
@@ -8155,7 +8283,9 @@ function Tracabilite({ onSelectLot }: { onSelectLot: any }) {
     if (status === "FERMENTATION_ALCOOLIQUE") return "FA";
     if (status === "MOUT_NON_DEBOURBE") return "MOÛT BRUT";
     if (status === "MOUT_DEBOURBE") return "JUS CLAIR";
-    if (status === "A_DEGORGER") return "SUR LATTES";
+    if (["SUR_LATTES", "A_DEGORGER", "DEGORGE", "PRET_EXPEDITION", "EXPEDIE", "ARCHIVE"].includes(status)) {
+      return getBottleStatusLabel(status);
+    }
     return status.replace(/_/g, ' ');
   };
 
@@ -11410,8 +11540,12 @@ export default function App() {
             zone: b.locationZone || "",
             palette: b.locationPalette || "",
             tirageDate: b.tirageDate ? new Date(b.tirageDate).toISOString().split('T')[0] : "",
-            status: b.status,
+            degorgementDate: b.degorgementDate ? new Date(b.degorgementDate).toISOString().split('T')[0] : "",
+            rawStatus: b.status,
+            status: normalizeBottleLotStatus(b.status, b.type),
             dosage: b.dosageValue ? `${b.dosageValue} ${b.dosageUnit}` : "",
+            dosageValue: b.dosageValue != null ? Number(b.dosageValue) : null,
+            dosageUnit: b.dosageUnit || "",
             notes: "",
           })),
         });
@@ -11511,7 +11645,9 @@ export default function App() {
     process.env.NODE_ENV === "development" &&
     process.env.NEXT_PUBLIC_ALLOW_DATABASE_RESET === "true" &&
     roleMatches(currentUser?.roleKey ?? currentUser?.role, ["ADMIN"]);
-  const alertCount = state.containers.filter((c: any) => c.status === "VIDE" && c.notes).length + state.lots.filter((l: any) => l.notes && l.notes.includes("sans suivi")).length + state.bottleLots.filter((b: any) => b.status === "A_DEGORGER").length;
+  const alertCount = state.containers.filter((c: any) => c.status === "VIDE" && c.notes).length
+    + state.lots.filter((l: any) => l.notes && l.notes.includes("sans suivi")).length
+    + state.bottleLots.filter((b: any) => getDegorgementEligibility(b).eligible).length;
 
   const handleSelectLot = (lotObj: any) => {
     setSelCont(null);  

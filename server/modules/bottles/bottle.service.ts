@@ -12,9 +12,23 @@ import { RequestActor } from '@/server/shared/request-context';
 import { prisma } from '@/server/shared/prisma';
 
 const mapBottleError = (error: unknown): never => {
+  if (error instanceof BusinessLogicError) {
+    throw error;
+  }
+
   const message = error instanceof Error ? error.message : 'Erreur serveur';
 
   if (message.includes('ALREADY_APPLIED')) {
+    throw new BusinessLogicError(message, 409);
+  }
+
+  if (
+    message.includes('a déjà été traité') ||
+    message.includes('a changé pendant') ||
+    message.includes('rechargez') ||
+    message.includes('concurrent') ||
+    message.includes('parallèle')
+  ) {
     throw new BusinessLogicError(message, 409);
   }
 

@@ -4,6 +4,9 @@ export const listBottleLotsQuerySchema = z.object({
   id: z.coerce.number().int().positive().optional(),
 });
 
+const optionalPositiveId = z.coerce.number().int().positive().optional().nullable();
+const isoDateString = z.string().trim().min(10);
+
 export const updateBottleStatusSchema = z.object({
   blId: z.coerce.number().int().positive(),
   status: z.enum(['EN_REMUAGE', 'SUR_POINTES', 'A_DEGORGER']),
@@ -15,8 +18,15 @@ export const updateBottleStatusSchema = z.object({
 export const degorgerSchema = z.object({
   blId: z.coerce.number().int().positive(),
   count: z.coerce.number().int().positive(),
-  dosage: z.string().trim().min(1),
-  suffix: z.string().trim(),
+  degorgementDate: isoDateString,
+  dosageGramsPerLiter: z.coerce.number().min(0),
+  dosageLabel: z.string().trim().optional().nullable(),
+  liqueurType: z.string().trim().min(1),
+  liqueurProductId: optionalPositiveId,
+  liqueurVolumeLiters: z.coerce.number().min(0).optional().nullable(),
+  bouchonProductId: optionalPositiveId,
+  museletProductId: optionalPositiveId,
+  lossCount: z.coerce.number().int().min(0).default(0),
   note: z.string().trim().optional().nullable(),
   idempotencyKey: z.string().trim().min(10),
 });
@@ -24,17 +34,23 @@ export const degorgerSchema = z.object({
 export const habillerSchema = z.object({
   blId: z.coerce.number().int().positive(),
   count: z.coerce.number().int().positive(),
-  coiffeId: z.coerce.number().int().positive().optional().nullable(),
-  etiquetteId: z.coerce.number().int().positive().optional().nullable(),
-  cartonId: z.coerce.number().int().positive().optional().nullable(),
+  habillageDate: isoDateString,
+  coiffeId: optionalPositiveId,
+  etiquetteId: optionalPositiveId,
+  contreEtiquetteId: optionalPositiveId,
+  cartonId: optionalPositiveId,
   cartonSize: z.coerce.number().int().positive().default(6),
+  note: z.string().trim().optional().nullable(),
   idempotencyKey: z.string().trim().min(10),
 });
 
 export const expedierSchema = z.object({
   blId: z.coerce.number().int().positive(),
   count: z.coerce.number().int().positive(),
+  expeditionDate: isoDateString,
   clientName: z.string().trim().min(2, 'Le nom du client est requis'),
+  destination: z.string().trim().optional().nullable(),
+  note: z.string().trim().optional().nullable(),
   idempotencyKey: z.string().trim().min(10),
 });
 
