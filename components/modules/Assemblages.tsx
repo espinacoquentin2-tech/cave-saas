@@ -2,21 +2,19 @@
 // @ts-nocheck
 
 import React, { useRef, useState } from "react";
-import { Badge, Btn, FF, Input, Modal, Select } from "@/components/ui";
-import { LOT_STATUS_COLORS, useAuth, useStore, useTheme } from "@/lib/store";
-import { buildApiHeaders, extractApiErrorMessage, getLotCode, toSafeNumber } from "@/lib/client-app-helpers";
+import { Btn } from "@/components/ui";
+import { useAuth, useStore, useTheme } from "@/lib/store";
+import { buildApiHeaders, extractApiErrorMessage } from "@/lib/client-app-helpers";
 import {
-  ASSEMBLAGE_TYPES,
-  BOTTLE_FORMAT_TO_HL,
   convertBottleCountToHl,
-  convertHlToBottleCount,
   evaluateAssemblageDecision,
   getBottleFormatLabel,
-  isAssemblageEligibleLotStatus,
   isAssemblageMainEligibleLotStatus,
   isAssemblageReserveEligibleLotStatus,
   isAssemblageRoseEligibleLotStatus,
 } from "@/lib/assemblage";
+import { AssemblageSourceSections } from "@/components/modules/assemblages/AssemblageSourceSections";
+import { CreateAssemblageModal } from "@/components/modules/assemblages/CreateAssemblageModal";
 
 export function Assemblages() {
   const T = useTheme(); 
@@ -437,45 +435,11 @@ export function Assemblages() {
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"1.3fr 1fr", gap:16 }}>
-        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:4, overflow:"hidden" }}>
-          <div style={{ padding:"14px 16px", borderBottom:`1px solid ${T.border}`, fontSize:11, textTransform:"uppercase", color:T.textDim, letterSpacing:1 }}>Lots disponibles par famille</div>
-          {sourceCandidates.length === 0 ? (
-            <div style={{ padding:"36px 20px", textAlign:"center", color:T.textDim }}>Aucune source n'est actuellement exploitable pour un assemblage.</div>
-          ) : (
-            <div style={{ display:"grid", gap:16, padding:16 }}>
-              {sourceSections.map((section) => (
-                <div key={section.key} style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:"hidden" }}>
-                  <div style={{ padding:"12px 14px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
-                    <div>
-                      <div style={{ fontSize:12, color:T.textStrong, fontWeight:700 }}>{section.title}</div>
-                      <div style={{ fontSize:11, color:T.textDim, marginTop:4 }}>{section.helper}</div>
-                    </div>
-                    <Badge label={String(section.items.length)} color={T.accent} />
-                  </div>
-                  {section.items.length === 0 ? (
-                    <div style={{ padding:"14px", fontSize:12, color:T.textDim }}>Aucune source dans cette section.</div>
-                  ) : (
-                    <div>
-                      {section.items.slice(0, 4).map((source: any, index: number) => (
-                        <div key={buildSourceKey(source)} style={{ display:"grid", gridTemplateColumns:"1.5fr 90px 90px 1fr 1fr 100px", gap:10, padding:"12px 14px", borderTop:index === 0 ? "none" : `1px solid ${T.border}`, alignItems:"center" }}>
-                          <div>
-                            <div style={{ fontSize:12, color:T.accent, fontFamily:"monospace", fontWeight:700 }}>{source.code}</div>
-                            {source._type === "bottle" && <div style={{ fontSize:11, color:T.textDim, marginTop:4 }}>{source.formatLabel} - conversion {BOTTLE_FORMAT_TO_HL[source.formatCode] || 0} hL / unité</div>}
-                          </div>
-                          <div style={{ fontSize:12, color:T.text }}>{source.cepage || source.mainGrapeCode || source.sourceLot?.mainGrapeCode || "--"}</div>
-                          <div style={{ fontSize:12, color:T.text }}>{source.millesime || source.year || "--"}</div>
-                          <div style={{ fontSize:12, color:T.textStrong }}>{source._type === "bottle" ? `${source.availableVolumeHl.toFixed(3)} hL` : `${Number(source.availableVolumeHl).toFixed(2)} hL`}</div>
-                          <div style={{ fontSize:12, color:T.text }}>{source.currentContainerLabel || "--"}</div>
-                          <div><Badge label={source.status} color={LOT_STATUS_COLORS[source.status] || T.textDim} /></div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+        <AssemblageSourceSections
+          sourceCandidates={sourceCandidates}
+          sourceSections={sourceSections}
+          buildSourceKey={buildSourceKey}
+        />
 
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:4, padding:18 }}>
           <div style={{ fontSize:11, textTransform:"uppercase", color:T.textDim, letterSpacing:1, marginBottom:14 }}>Règles de décision visibles</div>
@@ -490,299 +454,37 @@ export function Assemblages() {
       </div>
 
       {showCreateModal && (
-        <Modal title="Créer un assemblage" onClose={() => { if (!isSubmitting) { setShowCreateModal(false); resetForm(); } }}>
-          <div style={{ maxHeight:"78vh", overflowY:"auto", paddingRight:4 }}>
-            <div style={{ display:"grid", gap:18 }}>
-              <div style={{ background:T.surfaceHigh, border:`1px solid ${T.border}`, borderRadius:6, padding:16 }}>
-                <div style={{ fontSize:12, fontWeight:700, color:T.textStrong, marginBottom:12 }}>A. Type d'assemblage souhaité</div>
-                <Select value={assemblageType} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAssemblageType(e.target.value)} disabled={isSubmitting}>
-                  {ASSEMBLAGE_TYPES.map((type) => (
-                    <option key={type} value={type}>{assemblageLabels[type]}</option>
-                  ))}
-                </Select>
-              </div>
-
-              <div style={{ background:T.surfaceHigh, border:`1px solid ${T.border}`, borderRadius:6, padding:16 }}>
-                <div style={{ fontSize:12, fontWeight:700, color:T.textStrong, marginBottom:12 }}>B. Lots sources disponibles</div>
-                <div style={{ display:"grid", gap:14, marginTop:12 }}>
-                  {sourceSections.map((section) => (
-                    <div key={`modal-${section.key}`} style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:"hidden" }}>
-                      <div style={{ padding:"12px 14px", borderBottom:`1px solid ${T.border}`, background:T.surface, display:"flex", justifyContent:"space-between", alignItems:"center", gap:12 }}>
-                        <div>
-                          <div style={{ fontSize:12, color:T.textStrong, fontWeight:700 }}>{section.title}</div>
-                          <div style={{ fontSize:11, color:T.textDim, marginTop:4 }}>{section.helper}</div>
-                        </div>
-                        <Badge label={String(section.items.length)} color={T.accent} />
-                      </div>
-                      <div style={{ display:"grid", gridTemplateColumns:"48px 1.5fr 90px 90px 90px 1fr 120px 1.1fr", gap:10, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1, padding:"10px 14px", borderBottom:`1px solid ${T.border}` }}>
-                        <div>Sélec.</div>
-                        <div>Lot</div>
-                        <div>Cépage</div>
-                        <div>Millésime</div>
-                        <div>Type</div>
-                        <div>Volume dispo</div>
-                        <div>Contenant</div>
-                        <div>Analyse</div>
-                      </div>
-                      <div style={{ display:"grid", gap:0 }}>
-                        {section.items.length === 0 ? (
-                          <div style={{ padding:"14px", fontSize:12, color:T.textDim }}>Aucune source disponible dans cette section.</div>
-                        ) : section.items.map((source: any) => {
-                          const draft = readSourceDraft(source);
-                          const latestAnalysis = source.analyses?.[0];
-                          const isBottle = source._type === "bottle";
-
-                          return (
-                            <div key={buildSourceKey(source)} style={{ display:"grid", gridTemplateColumns:"48px 1.5fr 90px 90px 90px 1fr 120px 1.1fr", gap:10, alignItems:"center", padding:"12px 14px", borderBottom:`1px solid ${T.border}66` }}>
-                              <div>
-                                <input
-                                  type="checkbox"
-                                  checked={!!draft.selected}
-                                  disabled={isSubmitting}
-                                  onChange={() => setSourceDrafts((prev: any) => ({
-                                    ...prev,
-                                    [buildSourceKey(source)]: {
-                                      ...readSourceDraft(source),
-                                      selected: !draft.selected,
-                                    },
-                                  }))}
-                                  style={{ accentColor: T.accent }}
-                                />
-                              </div>
-                              <div>
-                                <div style={{ fontSize:12, color:T.accent, fontFamily:"monospace", fontWeight:700 }}>{source.code}</div>
-                                <div style={{ fontSize:11, color:T.textDim, marginTop:4 }}>
-                                  {isBottle ? `${source.availableCount} unités ${source.formatLabel}` : source.qualiteLot || source.notes || source.sourceCategoryLabel}
-                                </div>
-                              </div>
-                              <div style={{ fontSize:12, color:T.text }}>{source.cepage || source.mainGrapeCode || "--"}</div>
-                              <div style={{ fontSize:12, color:T.text }}>{source.millesime || source.year || "--"}</div>
-                              <div style={{ fontSize:12, color:T.text }}>{isBottle ? "Réserve btle" : source.sourceCategoryLabel}</div>
-                              <div style={{ fontSize:12, color:T.textStrong }}>
-                                {isBottle ? `${source.availableVolumeHl.toFixed(3)} hL` : `${Number(source.availableVolumeHl).toFixed(2)} hL`}
-                              </div>
-                              <div style={{ fontSize:12, color:T.text }}>{source.currentContainerLabel || "--"}</div>
-                              <div style={{ fontSize:11, color:T.textDim, lineHeight:1.4 }}>
-                                {latestAnalysis
-                                  ? `alc. ${latestAnalysis.alcohol ?? "--"} | pH ${latestAnalysis.ph ?? "--"} | AT ${latestAnalysis.at ?? "--"}`
-                                  : "Aucune analyse"}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ background:T.surfaceHigh, border:`1px solid ${T.border}`, borderRadius:6, padding:16 }}>
-                <div style={{ fontSize:12, fontWeight:700, color:T.textStrong, marginBottom:12 }}>C. Sélection des volumes</div>
-                {selectedSources.length === 0 ? (
-                  <div style={{ fontSize:12, color:T.textDim }}>Sélectionnez au moins une source dans la liste ci-dessus.</div>
-                ) : (
-                  <div style={{ display:"grid", gap:12 }}>
-                    {selectedSourceRows.map((row: any) => (
-                      <div key={buildSourceKey(row.source)} style={{ border:`1px solid ${row.isOverAvailable ? T.red : T.border}`, borderRadius:6, padding:12 }}>
-                        <div style={{ display:"flex", justifyContent:"space-between", gap:12, marginBottom:10 }}>
-                          <div>
-                            <div style={{ fontSize:12, color:T.accent, fontFamily:"monospace", fontWeight:700 }}>{row.source.code}</div>
-                            <div style={{ fontSize:11, color:T.textDim, marginTop:4 }}>
-                              Disponible: {row.isBottle ? `${row.source.availableCount} unités / ${row.availableVolumeHl.toFixed(3)} hL` : `${row.availableVolumeHl.toFixed(2)} hL`}
-                            </div>
-                          </div>
-                          {row.isBottle && <Badge label={row.source.formatLabel} color={T.accentLight} />}
-                        </div>
-
-                        {row.isBottle ? (
-                          <div style={{ display:"grid", gridTemplateColumns:"1fr 140px", gap:12 }}>
-                            <FF label="Quantité source">
-                              <Input
-                                type="number"
-                                step="1"
-                                min="0"
-                                value={readSourceDraft(row.source).countUsed || ""}
-                                disabled={isSubmitting}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateSourceDraft(row.source, { countUsed: e.target.value })}
-                                placeholder="Nombre de bouteilles / magnums"
-                              />
-                            </FF>
-                            <FF label="Volume prélevé (hL)">
-                              <Input value={row.volumeHl ? row.volumeHl.toFixed(4) : ""} disabled />
-                            </FF>
-                          </div>
-                        ) : (
-                          <div style={{ display:"grid", gridTemplateColumns:"1fr 140px", gap:12 }}>
-                            <FF label="Volume prélevé (hL)">
-                              <Input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={readSourceDraft(row.source).volumeHl || ""}
-                                disabled={isSubmitting}
-                                onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateSourceDraft(row.source, { volumeHl: e.target.value })}
-                                placeholder="Volume à prélever"
-                              />
-                            </FF>
-                            <FF label="Disponible">
-                              <Input value={row.availableVolumeHl.toFixed(2)} disabled />
-                            </FF>
-                          </div>
-                        )}
-
-                        {row.isBottle && row.countUsed > 0 && (
-                          <div style={{ fontSize:11, color:T.textDim, marginTop:8 }}>
-                            Conversion: {row.countUsed} x {row.source.formatLabel} = {row.volumeHl.toFixed(4)} hL.
-                          </div>
-                        )}
-                        {row.isOverAvailable && (
-                          <div style={{ fontSize:11, color:T.red, marginTop:8 }}>
-                            Le volume demandé dépasse le stock disponible.
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ background:T.surfaceHigh, border:`1px solid ${T.border}`, borderRadius:6, padding:16 }}>
-                <div style={{ fontSize:12, fontWeight:700, color:T.textStrong, marginBottom:12 }}>D. Cuve destination</div>
-                <FF label="Choisir une cuve d'assemblage">
-                  <Select value={destinationContainerId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setDestinationContainerId(e.target.value)} disabled={isSubmitting}>
-                    <option value="">-- Choisir une cuve de réception --</option>
-                    {destinationCandidates.map((container: any) => (
-                      <option key={container.id} value={container.id} disabled={!!container.disabledReason}>
-                        {(container.displayName || container.name)} - cap. {container.capacity} hL - libre {container.availableVolume.toFixed(2)} hL{container.disabledReason ? ` - ${container.disabledReason}` : ""}
-                      </option>
-                    ))}
-                  </Select>
-                </FF>
-                <div style={{ display:"grid", gap:10, marginTop:12 }}>
-                  {destinationCandidates.map((container: any) => (
-                    <div key={`dest-${container.id}`} style={{ padding:"10px 12px", border:`1px solid ${String(container.id) === String(destinationContainerId) ? T.accent : T.border}`, borderRadius:4, background:String(container.id) === String(destinationContainerId) ? `${T.accent}11` : "transparent", opacity: container.disabledReason ? 0.65 : 1 }}>
-                      <div style={{ display:"flex", justifyContent:"space-between", gap:12 }}>
-                        <div>
-                          <div style={{ fontSize:12, color:T.textStrong }}>{container.displayName || container.name}</div>
-                          <div style={{ fontSize:11, color:T.textDim, marginTop:4 }}>
-                            Capacité {container.capacity} hL | Volume actuel {container.currentVolume.toFixed(2)} hL | Disponible {container.availableVolume.toFixed(2)} hL
-                          </div>
-                        </div>
-                        <Badge label={container.status} color={container.disabledReason ? T.textDim : T.accent} />
-                      </div>
-                      {container.disabledReason && <div style={{ fontSize:11, color:T.red, marginTop:8 }}>{container.disabledReason}</div>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div style={{ background:T.surfaceHigh, border:`1px solid ${T.border}`, borderRadius:6, padding:16 }}>
-                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12, gap:12 }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:T.textStrong }}>E. Adjuvants</div>
-                  <Btn variant="secondary" onClick={() => setAdjuvants((prev: any[]) => [...prev, { productId:"", dose:"", doseUnit:"g/hL", treatedVolumeHl: totalVolumeHl ? totalVolumeHl.toFixed(2) : "", quantityUnit:"" }])} disabled={isSubmitting}>
-                    Ajouter un adjuvant
-                  </Btn>
-                </div>
-                {adjuvantRows.length === 0 ? (
-                  <div style={{ fontSize:12, color:T.textDim }}>Aucun adjuvant prévu pour cet assemblage.</div>
-                ) : (
-                  <div style={{ display:"grid", gap:12 }}>
-                    {adjuvantRows.map((row: any) => (
-                      <div key={`adjuvant-${row.index}`} style={{ border:`1px solid ${row.stockShortage ? T.red : T.border}`, borderRadius:6, padding:12 }}>
-                        <div style={{ display:"grid", gridTemplateColumns:"1.5fr 100px 110px 110px 130px 48px", gap:10, alignItems:"end" }}>
-                          <FF label="Produit">
-                            <Select
-                              value={row.productId || ""}
-                              disabled={isSubmitting}
-                              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                                const product = (state.products || []).find((candidate: any) => String(candidate.id) === e.target.value);
-                                setAdjuvants((prev: any[]) => prev.map((candidate, idx) => idx === row.index ? { ...candidate, productId: e.target.value, quantityUnit: product?.unit || "" } : candidate));
-                              }}
-                            >
-                              <option value="">-- Produit œnologique --</option>
-                              {(state.products || []).filter((product: any) => product.category === "Intrants").map((product: any) => (
-                                <option key={product.id} value={product.id}>{product.name} ({Number(product.currentStock || 0).toFixed(2)} {product.unit})</option>
-                              ))}
-                            </Select>
-                          </FF>
-                          <FF label="Dose">
-                            <Input type="number" step="0.01" value={row.dose || ""} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAdjuvants((prev: any[]) => prev.map((candidate, idx) => idx === row.index ? { ...candidate, dose: e.target.value } : candidate))} />
-                          </FF>
-                          <FF label="Unité dose">
-                            <Select value={row.doseUnit || "g/hL"} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAdjuvants((prev: any[]) => prev.map((candidate, idx) => idx === row.index ? { ...candidate, doseUnit: e.target.value } : candidate))}>
-                              {["g/hL", "kg/hL", "mL/hL", "L/hL"].map((unit) => <option key={unit} value={unit}>{unit}</option>)}
-                            </Select>
-                          </FF>
-                          <FF label="Volume traité">
-                            <Input type="number" step="0.01" value={row.treatedVolumeHl || ""} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAdjuvants((prev: any[]) => prev.map((candidate, idx) => idx === row.index ? { ...candidate, treatedVolumeHl: e.target.value } : candidate))} />
-                          </FF>
-                          <FF label={`Qté totale (${row.quantityUnit || "--"})`}>
-                            <Input value={row.quantityTotal ? row.quantityTotal.toFixed(4) : ""} disabled />
-                          </FF>
-                          <Btn variant="ghost" onClick={() => setAdjuvants((prev: any[]) => prev.filter((_, idx) => idx !== row.index))} disabled={isSubmitting} style={{ color:T.red, padding:"0 8px" }}>x</Btn>
-                        </div>
-                        {row.product && (
-                          <div style={{ fontSize:11, color:row.stockShortage ? T.red : T.textDim, marginTop:8 }}>
-                            Stock disponible: {row.stockAvailable.toFixed(2)} {row.product.unit}{row.stockShortage ? " - stock insuffisant" : ""}
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ background:T.surfaceHigh, border:`1px solid ${T.border}`, borderRadius:6, padding:16 }}>
-                <div style={{ fontSize:12, fontWeight:700, color:T.textStrong, marginBottom:12 }}>F. Résultat calculé</div>
-                <div style={{ display:"grid", gridTemplateColumns:"160px 1fr", gap:18 }}>
-                  <div>
-                    <div style={{ fontSize:30, color:T.textStrong, fontFamily:"Georgia, serif" }}>{totalVolumeHl.toFixed(2)} hL</div>
-                    <div style={{ fontSize:11, color:T.textDim, marginTop:6 }}>Volume final total</div>
-                    <div style={{ fontSize:12, color:T.accent, fontFamily:"monospace", fontWeight:700, marginTop:14, wordBreak:"break-all" }}>{proposedCode}</div>
-                  </div>
-                  <div style={{ display:"grid", gap:10 }}>
-                    <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                      <Badge label={`Demandé: ${assemblageLabels[assemblageType]}`} color={T.textDim} />
-                      <Badge label={`Suggéré: ${assemblageLabels[decision.suggestedType]}`} color={T.accent} />
-                      {decision.isBlancDeBlancs && <Badge label="Blanc de blancs" color="#e6c27a" />}
-                      {decision.isBlancDeNoirs && <Badge label="Blanc de noirs" color="#8c7355" />}
-                      {decision.isRoseCandidate && <Badge label="Rosé d'assemblage" color={T.red} />}
-                      {decision.isMillesimeCandidate && vintageEntries.length === 1 && <Badge label={`Millésime ${vintageEntries[0][0]}`} color={T.blue} />}
-                    </div>
-                    <div style={{ fontSize:12, color:T.text }}>
-                      <strong>Pourcentage par cépage:</strong> {compositionEntries.length > 0 ? compositionEntries.map(([grape, pct]: any) => `${grape} ${Number(pct).toFixed(2)} %`).join(" / ") : "--"}
-                    </div>
-                    <div style={{ fontSize:12, color:T.text }}>
-                      <strong>Pourcentage par millésime:</strong> {vintageEntries.length > 0 ? vintageEntries.map(([year, pct]: any) => `${year} ${Number(pct).toFixed(2)} %`).join(" / ") : "--"}
-                    </div>
-                    <div style={{ fontSize:12, color:T.text }}>
-                      <strong>Vin de réserve:</strong> {decision.reserveShare.toFixed(2)} % | <strong>Vin rouge:</strong> {decision.redWineShare.toFixed(2)} %
-                    </div>
-                    <FF label="Notes opérateur">
-                      <Input value={notes} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNotes(e.target.value)} disabled={isSubmitting} placeholder="Commentaires, consignes cave, objectif du lot..." />
-                    </FF>
-                  </div>
-                </div>
-
-                {(decision.warnings.length > 0 || validationErrors.length > 0) && (
-                  <div style={{ marginTop:14, padding:14, borderRadius:6, border:`1px solid ${T.red}44`, background:`${T.red}11` }}>
-                    <div style={{ fontSize:11, textTransform:"uppercase", color:T.red, fontWeight:700, marginBottom:8 }}>Alertes métier</div>
-                    {[...decision.warnings, ...validationErrors].map((warning: any, index: number) => (
-                      <div key={`warning-${index}`} style={{ fontSize:12, color:T.text, lineHeight:1.5 }}>{warning}</div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:6 }}>
-                <Btn variant="secondary" onClick={() => { if (!isCreatingAssemblage) { setShowCreateModal(false); resetForm(); } }} disabled={isCreatingAssemblage}>Annuler</Btn>
-                <Btn onClick={submitAssemblage} disabled={isCreatingAssemblage || validationErrors.length > 0}>
-                  {isCreatingAssemblage ? "Enregistrement en cours..." : "Enregistrer l'assemblage"}
-                </Btn>
-              </div>
-            </div>
-          </div>
-        </Modal>
+        <CreateAssemblageModal
+          isSubmitting={isSubmitting}
+          isCreatingAssemblage={isCreatingAssemblage}
+          onClose={() => setShowCreateModal(false)}
+          resetForm={resetForm}
+          assemblageType={assemblageType}
+          setAssemblageType={setAssemblageType}
+          assemblageLabels={assemblageLabels}
+          sourceSections={sourceSections}
+          buildSourceKey={buildSourceKey}
+          readSourceDraft={readSourceDraft}
+          setSourceDrafts={setSourceDrafts}
+          selectedSources={selectedSources}
+          selectedSourceRows={selectedSourceRows}
+          updateSourceDraft={updateSourceDraft}
+          destinationContainerId={destinationContainerId}
+          setDestinationContainerId={setDestinationContainerId}
+          destinationCandidates={destinationCandidates}
+          adjuvantRows={adjuvantRows}
+          setAdjuvants={setAdjuvants}
+          products={state.products || []}
+          totalVolumeHl={totalVolumeHl}
+          proposedCode={proposedCode}
+          decision={decision}
+          vintageEntries={vintageEntries}
+          compositionEntries={compositionEntries}
+          notes={notes}
+          setNotes={setNotes}
+          validationErrors={validationErrors}
+          submitAssemblage={submitAssemblage}
+        />
       )}
     </div>
   );

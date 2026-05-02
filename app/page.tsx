@@ -1,47 +1,26 @@
 "use client";
 // @ts-nocheck
 
-import React, { useState, useReducer, useRef, useEffect } from "react";
+import React, { useState, useReducer, useEffect } from "react";
 import {
   THEMES, CONTAINER_TYPES, LOT_STATUSES, LOT_STATUS_COLORS,
-  BOTTLE_STATUSES, BOTTLE_STATUS_COLORS, CEPAGES,
-  getFillPct, formatVol, formatVolShort, getTypeColor, roleColor,
+  CEPAGES,
+  getFillPct, formatVol, formatVolShort, getTypeColor,
   initialState, storeReducer, ThemeCtx, AuthCtx, StoreCtx, useTheme, useAuth, useStore
 } from "../lib/store";
-import { FillBar, Badge, KpiCard, Modal, FF, Input, Select, Btn, Toast } from "../components/ui";
+import { FillBar, Badge, KpiCard, Modal, FF, Input, Select, Btn, Toast, MultiSelectDrop } from "../components/ui";
 import { supabase } from "../lib/supabase";
 import { CHAMPAGNE_GEODATA } from '../lib/geodata';
 import {
-  ASSEMBLAGE_TYPES,
-  BOTTLE_FORMAT_TO_HL,
-  convertBottleCountToHl,
-  convertHlToBottleCount,
-  evaluateAssemblageDecision,
-  getBottleFormatLabel,
-  isAssemblageMainEligibleLotStatus,
-  isAssemblageReserveEligibleLotStatus,
-  isAssemblageRoseEligibleLotStatus,
-  isAssemblageEligibleLotStatus,
-} from "@/lib/assemblage";
-import {
-  calculateAdjuvantQuantity,
   calculateBottleCount,
-  calculateLevainVolume,
-  calculateMixtionVolumes,
-  calculateSugarDose,
   calculateTiragePlan,
-  calculateYeastQuantity,
   isTirageEligibleLotStatus,
-  normalizeTirageBouchage,
 } from "@/lib/tirage";
 import {
   calculateBottleLotAgeMonths,
   getBottleLotCount,
   getBottleStatusLabel,
   getDegorgementEligibility,
-  getExpeditionEligibility,
-  getHabillageEligibility,
-  MIN_SUR_LATTES_MONTHS,
   normalizeBottleLotStatus,
 } from "@/lib/bottles";
 import {
@@ -54,10 +33,18 @@ import {
   unwrapApiData,
 } from "@/lib/client-app-helpers";
 import { AdminResetDatabaseModal } from "@/components/modules/AdminResetDatabaseModal";
+import { AdminUsers } from "@/components/modules/AdminUsers";
 import { Assemblages } from "@/components/modules/Assemblages";
 import { DirectTirageModal } from "@/components/modules/DirectTirageModal";
+import { Lots } from "@/components/modules/Lots";
 import { PlanificateurTirage } from "@/components/modules/PlanificateurTirage";
 import { ExpedierModal, HabillerModal, StockBouteilles } from "@/components/modules/StockBouteilles";
+import {
+  formatRoleLabel,
+  getCurrentUserRoleKey,
+  roleMatches,
+  toUiUser,
+} from "@/lib/roles";
 
 // =============================================================================
 // HELPERS & COMPOSANTS SUR-MESURE
@@ -68,15 +55,6 @@ const formatStatus = (s: string | null | undefined) => {
   if (s === "FERMENTATION_MALOLACTIQUE") return "FML";
   if (s === "FA_ET_FML") return "FA & FML";
   return s.replace(/_/g, " ");
-};
-
-type MultiSelectDropProps = {
-  label: string;
-  options: any[];
-  selected: any[];
-  onChange: (next: any[]) => void;
-  format?: (value: any) => any;
-  width?: number;
 };
 
 type LoginScreenProps = {
@@ -121,94 +99,10 @@ type VendangesProps = {
   onSelectContainer: (container: any) => void;
 };
 
-
-const ROLE_LABELS: Record<string, string> = {
-  ADMIN: "Admin",
-  CHEF_CAVE: "Chef de cave",
-  CAVISTE: "Caviste",
-  LECTURE_SEULE: "Lecture seule",
-};
-
-const normalizeRoleKey = (role: any) => {
-  if (typeof role !== "string" || !role.trim()) return null;
-  const normalized = role.trim().toUpperCase().replace(/\s+/g, "_");
-  if (normalized === "CHEF_DE_CAVE") return "CHEF_CAVE";
-  return ROLE_LABELS[normalized] ? normalized : null;
-};
-
-const formatRoleLabel = (role: any) => {
-  const normalized = normalizeRoleKey(role);
-  return normalized ? ROLE_LABELS[normalized] : (role || "Utilisateur");
-};
-
-const roleMatches = (role: any, expectedRoles: string[]) => {
-  const normalized = normalizeRoleKey(role);
-  return normalized ? expectedRoles.includes(normalized) : false;
-};
-
-const getCurrentUserRoleKey = (user: any) => user?.roleKey ?? normalizeRoleKey(user?.role);
-
 const findUserByEmail = (users: any[], email: string | null | undefined) => {
   if (!email) return null;
   return (users || []).find((candidate: any) => candidate?.email?.toLowerCase() === email.toLowerCase()) || null;
 };
-
-const toUiUser = (rawUser: any) => {
-  const name = rawUser?.name?.trim() || rawUser?.email?.split("@")[0]?.toUpperCase() || "Utilisateur";
-  const roleKey = normalizeRoleKey(rawUser?.role);
-  return {
-    ...rawUser,
-    id: rawUser?.id != null ? String(rawUser.id) : rawUser?.id,
-    name,
-    roleKey,
-    role: formatRoleLabel(rawUser?.role),
-    initials: name.substring(0, 2).toUpperCase(),
-  };
-};
-
-function MultiSelectDrop({ label, options, selected, onChange, format = (v: any) => v, width = 140 }: MultiSelectDropProps) {
-  const T = useTheme();
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    const handleOutside = (e: MouseEvent) => {
-      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handleOutside);
-    return () => document.removeEventListener("mousedown", handleOutside);
-  }, []);
-
-  const toggle = (opt: any) => {
-    if (selected.includes(opt)) onChange(selected.filter(x => x !== opt));
-    else onChange([...selected, opt]);
-  };
-
-  const displayLabel = selected.length === 0 ? label : 
-                       selected.length === 1 ? format(selected[0]) : 
-                       `${selected.length} sélections`;
-
-  return (
-    <div style={{ position: 'relative', width }} ref={ref}>
-      <div onClick={() => setOpen(!open)} style={{ border: `1px solid ${open ? T.accent : T.border}`, padding: '9px 12px', borderRadius: 4, cursor: 'pointer', fontSize: 12, background: T.surfaceHigh, color: selected.length ? T.textStrong : T.textDim, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span>{displayLabel}</span>
-        <span style={{ fontSize: 10 }}>▼</span>
-      </div>
-      {open && (
-        <div style={{ position: 'absolute', top: '100%', left: 0, right: 0, marginTop: 4, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 4, zIndex: 100, maxHeight: 220, overflowY: 'auto', boxShadow: '0 8px 16px rgba(0,0,0,0.8)' }}>
-          {options.length === 0 ? (
-            <div style={{ padding: '8px 12px', fontSize: 11, color: T.textDim, fontStyle: 'italic' }}>Vide</div>
-          ) : options.map(o => (
-            <label key={o} style={{ display: 'flex', alignItems: 'center', padding: '10px 12px', cursor: 'pointer', borderBottom: `1px solid ${T.border}44`, fontSize: 11, color: T.text, transition: 'background .15s' }} onMouseEnter={e => e.currentTarget.style.background = T.surfaceHigh} onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
-              <input type="checkbox" checked={selected.includes(o)} onChange={() => toggle(o)} style={{ marginRight: 10, accentColor: T.accent, cursor: 'pointer' }} />
-              {format(o)}
-            </label>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 // =============================================================================
 // LOGIN
@@ -3891,176 +3785,6 @@ function RemuageModal({ bl, actionType, onClose }: { bl: any; actionType: any; o
 }
 
 // =============================================================================
-// LISTE DES LOTS (ACTIFS / HISTORIQUE)
-// =============================================================================
-function Lots({ onSelectLot }: { onSelectLot: any }) {
-  const T = useTheme(); 
-  const { state } = useStore();
-  
-  const [tab, setTab] = useState("actifs"); 
-  const [search, setSearch] = useState("");
-  const [filterMillesimes, setFilterMillesimes] = useState([]);
-  const [filterCepages, setFilterCepages] = useState([]);
-  const [filterLieux, setFilterLieux] = useState([]);
-  const [filterContainers, setFilterContainers] = useState([]);
-  const [filterStatuses, setFilterStatuses] = useState([]);
-
-  const GROUPS = {
-    CUVES: ["CUVE_INOX", "CUVE_BETON", "CUVE_EMAIL", "CUVE_FIBRE", "CUVE_PLASTIQUE", "CUVE_DEBOURBAGE"],
-    BOIS: ["BARRIQUE", "FOUDRE"],
-    SOUS_PRODUITS: ["CUVE_BOURBES", "CUVE_LIES", "CUVE_REBECHES"]
-  };
-
-  const formatVolShort = (vol: any) => typeof vol === 'number' ? `${vol.toFixed(1)} hL` : `${vol} hL`;
-  const formatStatus = (s: any) => s ? s.replace(/_/g, ' ') : "INCONNU";
-
-  const unifiedLots = [
-    ...(state.lots || []).map((l: any) => ({ ...l, _type: 'bulk', code: l.businessCode || l.code, millesime: l.year || l.millesime, volume: l.currentVolume || l.volume, containerId: l.currentContainerId || l.containerId })),
-    ...(state.bottleLots || []).map((b: any) => {
-      const src = (state.lots || []).find((l: any) => l.id == b.sourceLotId);
-      return {
-        ...b,
-        _type: 'bottle',
-        code: b.businessCode || b.code,
-        millesime: src?.year || src?.millesime || "--",
-        cepage: src?.mainGrapeCode || src?.cepage || "MULTI",
-        lieu: b.locationZone || b.zone || "--",
-        volume: b.currentBottleCount || b.currentCount, 
-        containerId: null,
-        format: b.formatCode || b.format
-      };
-    })
-  ];
-
-  const uniqueMillesimes = [...new Set(unifiedLots.map(l => l.millesime))].filter(m => m && m !== "--").sort((a,b) => b - a).map(String);
-  const uniqueLieux = [...new Set(unifiedLots.map(l => l.lieu).filter(Boolean))].filter(l => l !== "--").sort();
-  const uniqueStatuses = [...new Set(unifiedLots.map(l => l.status))].sort();
-  
-  const containerCategories = ["Cuves", "Bois", "Citernes", "Bouteilles", "Sous-produits", "Vrac (Sans contenant)", "Autre"];
-  const selectedMillesimes = filterMillesimes as any[];
-  const selectedCepages = filterCepages as any[];
-  const selectedLieux = filterLieux as any[];
-  const selectedContainers = filterContainers as any[];
-  const selectedStatuses = filterStatuses as any[];
-
-  const actifsCount = unifiedLots.filter(l => {
-    const isDeadBulk = l._type === 'bulk' && (l.volume <= 0 || ["ASSEMBLE", "TIRE", "ARCHIVE"].includes(l.status));
-    const isDeadBottle = l._type === 'bottle' && l.volume <= 0; 
-    return !(isDeadBulk || isDeadBottle);
-  }).length;
-
-  const historiqueCount = unifiedLots.length - actifsCount;
-
-  const filtered = unifiedLots.filter((l: any) => {
-    const isDeadBulk = l._type === 'bulk' && (l.volume <= 0 || ["ASSEMBLE", "TIRE", "ARCHIVE"].includes(l.status));
-    const isDeadBottle = l._type === 'bottle' && l.volume <= 0;
-    const isDead = isDeadBulk || isDeadBottle;
-    
-    if (tab === "actifs" && isDead) return false;
-    if (tab === "historique" && !isDead) return false;
-
-    const container = (l._type === 'bulk' && !isDeadBulk) ? (state.containers || []).find((c: any) => c.id === l.containerId) : null;
-
-    const matchSearch = !search || (l.code || "").toLowerCase().includes(search.toLowerCase());
-    const matchMillesime = selectedMillesimes.length === 0 || selectedMillesimes.includes(l.millesime?.toString());
-    const matchCepage = selectedCepages.length === 0 || selectedCepages.includes(l.cepage);
-    const matchLieu = selectedLieux.length === 0 || selectedLieux.includes(l.lieu);
-    const matchStatus = selectedStatuses.length === 0 || selectedStatuses.includes(l.status);
-    
-    let matchContainer = true;
-    if (selectedContainers.length > 0) {
-      if (l._type === 'bottle') {
-        matchContainer = selectedContainers.includes("Bouteilles");
-      } else if (!container) {
-        matchContainer = selectedContainers.includes("Vrac (Sans contenant)");
-      } else {
-        const t = (container.type || "").toLowerCase();
-        const n = ((container.displayName || container.name) || "").toLowerCase();
-        const isSousProduit = GROUPS.SOUS_PRODUITS.includes(container.type) || t.includes("bourbe") || t.includes("lies") || t.includes("rebeche") || n.includes("bourbe") || n.includes("lies") || n.includes("rebeche");
-
-        if (isSousProduit) {
-          matchContainer = selectedContainers.includes("Sous-produits");
-        } else if (GROUPS.CUVES.includes(container.type)) {
-          matchContainer = selectedContainers.includes("Cuves");
-        } else if (GROUPS.BOIS.includes(container.type)) {
-          matchContainer = selectedContainers.includes("Bois");
-        } else if (container.type === "CITERNE" || container.type === "COMPARTIMENT") {
-          matchContainer = selectedContainers.includes("Citernes");
-        } else {
-          matchContainer = selectedContainers.includes("Autre");
-        }
-      }
-    }
-
-    return matchSearch && matchMillesime && matchCepage && matchLieu && matchStatus && matchContainer;
-  });
-
-  return (
-    <div>
-      <div style={{ marginBottom:28 }}>
-        <h1 style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:32, color:T.textStrong, margin:0 }}>Lots</h1>
-      </div>
-      
-      <div style={{ display:"flex", gap: 10, marginBottom:20 }}>
-        <button onClick={() => setTab("actifs")} style={{ background: tab==="actifs" ? T.accent : "transparent", color: tab==="actifs" ? T.bg : T.accent, border: `1px solid ${T.accent}`, padding: "9px 18px", borderRadius: 3, fontSize: 11, fontWeight: "bold", letterSpacing: 1, cursor: "pointer", fontFamily: "monospace", transition:"all .2s" }}>
-          LOTS ACTIFS ({actifsCount})
-        </button>
-        <button onClick={() => setTab("historique")} style={{ background: tab==="historique" ? T.accent : "transparent", color: tab==="historique" ? T.bg : T.accent, border: `1px solid ${T.accent}`, padding: "9px 18px", borderRadius: 3, fontSize: 11, fontWeight: "bold", letterSpacing: 1, cursor: "pointer", fontFamily: "monospace", transition:"all .2s" }}>
-          HISTORIQUE ({historiqueCount})
-        </button>
-      </div>
-
-      <div style={{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap", alignItems:"center" }}>
-        <Input value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} placeholder="Recherche code..." style={{ width:180 }} />
-        
-        <MultiSelectDrop label="Tous millésimes" options={uniqueMillesimes} selected={selectedMillesimes} onChange={(next: any[]) => setFilterMillesimes(next as any)} width={150} />
-        <MultiSelectDrop label="Tous cépages" options={CEPAGES} selected={selectedCepages} onChange={(next: any[]) => setFilterCepages(next as any)} width={130} />
-        <MultiSelectDrop label="Tous lieux-dits" options={uniqueLieux} selected={selectedLieux} onChange={(next: any[]) => setFilterLieux(next as any)} width={150} />
-        <MultiSelectDrop label="Tous contenants" options={containerCategories} selected={selectedContainers} onChange={(next: any[]) => setFilterContainers(next as any)} width={180} />
-        <MultiSelectDrop label="Tous statuts" options={uniqueStatuses} selected={selectedStatuses} onChange={(next: any[]) => setFilterStatuses(next as any)} format={formatStatus} width={160} />
-
-        {(search || filterMillesimes.length > 0 || filterCepages.length > 0 || filterLieux.length > 0 || filterContainers.length > 0 || filterStatuses.length > 0) && (
-          <Btn variant="ghost" onClick={() => { setSearch(""); setFilterMillesimes([]); setFilterCepages([]); setFilterLieux([]); setFilterContainers([]); setFilterStatuses([]); }}>
-            Effacer filtres
-          </Btn>
-        )}
-      </div>
-
-      <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:4, overflow:"hidden" }}>
-        <div style={{ display:"grid", gridTemplateColumns:"2fr 60px 80px 90px 110px 1fr 130px", padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
-          <div>Code Lot</div><div>Mill.</div><div>Cép.</div><div>Volume</div><div>Contenant</div><div>Lieu / Zone</div><div>Statut</div>
-        </div>
-        
-        {filtered.length === 0 && (
-          <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucun lot dans cette section.</div>
-        )}
-
-        {filtered.map((l: any, i: number) => {
-          const isDeadBulk = l._type === 'bulk' && (l.volume <= 0 || ["ASSEMBLE", "TIRE", "ARCHIVE"].includes(l.status));
-          const container = (l._type === 'bulk' && !isDeadBulk) ? (state.containers || []).find((c: any) => c.id === l.containerId) : null;
-          
-          return (
-            <div key={l.code} onClick={() => onSelectLot(l)} style={{ display:"grid", gridTemplateColumns:"2fr 60px 80px 90px 110px 1fr 130px", padding:"14px 16px", borderBottom: i < filtered.length-1 ? `1px solid ${T.border}` : "none", cursor:"pointer", alignItems:"center", opacity: tab === "historique" ? 0.6 : 1 }} onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = T.surfaceHigh} onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = "transparent"}>
-              <div style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600 }}>{l.code}</div>
-              <div style={{ fontSize:13, color:T.text }}>{l.millesime}</div>
-              <div style={{ fontSize:12, color:T.accentLight, fontFamily:"monospace" }}>{l.cepage}</div>
-              <div style={{ fontSize:13, color:T.text }}>
-                {l._type === 'bottle' ? `${l.volume} btl` : (l.volume > 0 ? formatVolShort(l.volume) : "0 hL")}
-              </div>
-              <div style={{ fontSize:12, color:T.textDim, fontFamily:"monospace" }}>
-                {l._type === 'bottle' ? l.format : (container ? (container.displayName || container.name) : (isDeadBulk ? "--" : "Vrac"))}
-              </div>
-              <div style={{ fontSize:12, color:T.textDim }}>{l.lieu || "--"}</div>
-              <Badge label={formatStatus(l.status)} color={LOT_STATUS_COLORS[l.status] || T.textDim} />
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
-// =============================================================================
 // MODULE PLANIFICATEUR DE TIRAGE (SÉCURISÉ & STATELESS)
 // =============================================================================
 // =============================================================================
@@ -6032,133 +5756,6 @@ function Parametres({ theme, setTheme }: { theme: any; setTheme: any }) {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-// =============================================================================
-// GESTION DES UTILISATEURS (ADMIN)
-// =============================================================================
-function AdminUsers() {
-  const T = useTheme(); 
-  const { state, dispatch } = useStore();
-  const { user, setUser } = useAuth(); 
-  
-  const [modal, setModal] = useState(false); 
-  const [editUser, setEditUser] = useState<any | null>(null); 
-  const [form, setForm]   = useState({ name:"", email:"", role:"Caviste", pwd:"" });
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  
-  const set = (k: any,v: any) => setForm((f: any) => ({...f,[k]:v}));
-
-  const handleUpsertUser = async (isEdit = false) => {
-    const dataToSubmit = isEdit ? editUser : form;
-    if (!dataToSubmit) return;
-    if (!dataToSubmit.name || !dataToSubmit.email) return alert("Nom et Email obligatoires.");
-    
-    setIsSubmitting(true);
-    
-    try {
-      // 👈 VRAI APPEL API (Fini la simulation !)
-      const res = await fetch('/api/users', { 
-        method: isEdit ? 'PUT' : 'POST', 
-        headers: buildApiHeaders(user),
-        body: JSON.stringify(dataToSubmit) 
-      });
-      
-      const data = await res.json();
-      
-      if (!res.ok) {
-        throw new Error(data.error || "Erreur lors de la sauvegarde de l'utilisateur.");
-      }
-
-      const savedUser = toUiUser(unwrapApiData(data));
-
-      if (isEdit) {
-        dispatch({ type: "UPDATE_USER", payload: savedUser });
-        dispatch({ type: "TOAST_ADD", payload: { msg: "Profil utilisateur mis à jour.", color: T.blue } }); 
-        
-        // Si l'utilisateur modifie son PROPRE compte, on met à jour sa session active
-        if (user && user.email === savedUser.email) {
-          setUser({ ...user, name: savedUser.name, role: savedUser.role, roleKey: savedUser.roleKey, initials: savedUser.initials });
-        }
-        setEditUser(null);
-      } else {
-        dispatch({ type: "ADD_USER", payload: savedUser });
-        dispatch({ type: "TOAST_ADD", payload: { msg: "Nouvel utilisateur créé avec succès.", color: T.green } }); 
-        setModal(false); 
-        setForm({ name:"", email:"", role:"Caviste", pwd:"" });
-      }
-
-    } catch (error: any) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: error?.message ?? "Erreur inconnue", color: T.red } });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <div>
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:28 }}>
-        <h1 style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:32, color:T.textStrong, margin:0 }}>Utilisateurs & Droits d'Accès</h1>
-        <Btn onClick={() => setModal(true)}>+ Ajouter utilisateur</Btn>
-      </div>
-      <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, overflow:"hidden" }}>
-        <div style={{ display:"grid", gridTemplateColumns:"2fr 2fr 1fr 100px", padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1, background: T.surfaceHigh }}>
-          <div>Nom & Prénom</div><div>Adresse Email</div><div>Rôle (Droits)</div><div>Actions</div>
-        </div>
-        {state.users.map((u: any, i: number) => (
-          <div key={u.id} style={{ display:"grid", gridTemplateColumns:"2fr 2fr 1fr 100px", alignItems:"center", padding:"16px 16px", borderBottom: i < state.users.length - 1 ? `1px solid ${T.border}` : "none" }}>
-            <span style={{ color:T.textStrong, fontWeight:600 }}>{u.name}</span>
-            <span style={{ color:T.textDim, fontFamily:"monospace", fontSize:12 }}>{u.email}</span>
-            <div><Badge label={u.role} color={roleColor(T, u.role)} /></div>
-            <Btn variant="ghost" onClick={() => setEditUser(u)}>Éditer</Btn>
-          </div>
-        ))}
-      </div>
-
-      {modal && (
-        <Modal title="Ajouter un nouvel utilisateur" onClose={() => setModal(false)}>
-          <FF label="Nom complet">
-            <Input value={form.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("name",e.target.value)} disabled={isSubmitting} placeholder="Ex: Jean Dupont" />
-          </FF>
-          <FF label="Adresse Email (Sert d'identifiant)">
-            <Input type="email" value={form.email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("email",e.target.value)} disabled={isSubmitting} placeholder="jean@domaine.fr" />
-          </FF>
-          <FF label="Niveau d'accès (Rôle)">
-            <Select value={form.role} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => set("role",e.target.value)} disabled={isSubmitting}>
-              {["Chef de cave","Caviste","Lecture seule"].map(r => <option key={r} value={r}>{r}</option>)}
-            </Select>
-          </FF>
-          <div style={{ fontSize: 11, color: T.textDim, marginTop: 12, fontStyle: "italic", borderLeft: `2px solid ${T.accent}`, paddingLeft: 10 }}>
-            Un email contenant un lien de connexion magique sera envoyé à cet utilisateur.
-          </div>
-          <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:24 }}>
-            <Btn variant="secondary" onClick={() => setModal(false)} disabled={isSubmitting}>Annuler</Btn>
-            <Btn onClick={() => handleUpsertUser(false)} disabled={isSubmitting} style={{ background: isSubmitting ? T.textDim : T.accent }}>Créer l'accès</Btn>
-          </div>
-        </Modal>
-      )}
-
-      {editUser && (
-        <Modal title="Modifier les droits utilisateur" onClose={() => setEditUser(null)}>
-          <FF label="Nom complet">
-            <Input value={editUser.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditUser({...(editUser || {}), name:e.target.value})} disabled={isSubmitting} />
-          </FF>
-          <FF label="Adresse Email">
-            <Input type="email" value={editUser.email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEditUser({...(editUser || {}), email:e.target.value})} disabled={isSubmitting} />
-          </FF>
-          <FF label="Niveau d'accès (Rôle)">
-            <Select value={editUser.role} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setEditUser({...(editUser || {}), role:e.target.value})} disabled={isSubmitting}>
-              {["Admin","Chef de cave","Caviste","Lecture seule"].map(r => <option key={r} value={r}>{r}</option>)}
-            </Select>
-          </FF>
-          <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:24 }}>
-            <Btn variant="secondary" onClick={() => setEditUser(null)} disabled={isSubmitting}>Annuler</Btn>
-            <Btn onClick={() => handleUpsertUser(true)} disabled={isSubmitting}>Sauvegarder les modifications</Btn>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }
@@ -8586,6 +8183,7 @@ export default function App() {
             ...current,
             name: matchedUser.name,
             role: matchedUser.role,
+            roleLabel: matchedUser.roleLabel,
             roleKey: matchedUser.roleKey,
             initials: matchedUser.initials,
           };

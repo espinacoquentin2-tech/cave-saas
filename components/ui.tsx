@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect } from "react"; //
+import React, { useEffect, useRef, useState } from "react"; //
 import { useTheme } from "../lib/store";
 
 export function FillBar({ pct, color }: any) {
@@ -99,6 +99,59 @@ export function Select({ value, onChange, children, disabled, style: extra }: an
     >
       {children}
     </select>
+  );
+}
+
+type MultiSelectDropProps = {
+  label: string;
+  options: any[];
+  selected: any[];
+  onChange: (next: any[]) => void;
+  format?: (value: any) => any;
+  width?: number;
+};
+
+export function MultiSelectDrop({ label, options, selected, onChange, format = (v: any) => v, width = 140 }: MultiSelectDropProps) {
+  const T = useTheme();
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const handleOutside = (e: MouseEvent) => {
+      if (ref.current && e.target instanceof Node && !ref.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener("mousedown", handleOutside);
+    return () => document.removeEventListener("mousedown", handleOutside);
+  }, []);
+
+  const toggle = (opt: any) => {
+    if (selected.includes(opt)) onChange(selected.filter(x => x !== opt));
+    else onChange([...selected, opt]);
+  };
+
+  const displayLabel = selected.length === 0 ? label :
+                       selected.length === 1 ? format(selected[0]) :
+                       `${selected.length} sélections`;
+
+  return (
+    <div style={{ position: "relative", width }} ref={ref}>
+      <div onClick={() => setOpen(!open)} style={{ border: `1px solid ${open ? T.accent : T.border}`, padding: "9px 12px", borderRadius: 4, cursor: "pointer", fontSize: 12, background: T.surfaceHigh, color: selected.length ? T.textStrong : T.textDim, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>{displayLabel}</span>
+        <span style={{ fontSize: 10 }}>▼</span>
+      </div>
+      {open && (
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: T.surface, border: `1px solid ${T.border}`, borderRadius: 4, zIndex: 100, maxHeight: 220, overflowY: "auto", boxShadow: "0 8px 16px rgba(0,0,0,0.8)" }}>
+          {options.length === 0 ? (
+            <div style={{ padding: "8px 12px", fontSize: 11, color: T.textDim, fontStyle: "italic" }}>Vide</div>
+          ) : options.map(o => (
+            <label key={o} style={{ display: "flex", alignItems: "center", padding: "10px 12px", cursor: "pointer", borderBottom: `1px solid ${T.border}44`, fontSize: 11, color: T.text, transition: "background .15s" }} onMouseEnter={e => e.currentTarget.style.background = T.surfaceHigh} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <input type="checkbox" checked={selected.includes(o)} onChange={() => toggle(o)} style={{ marginRight: 10, accentColor: T.accent, cursor: "pointer" }} />
+              {format(o)}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

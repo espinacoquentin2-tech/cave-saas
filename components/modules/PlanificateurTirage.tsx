@@ -14,9 +14,12 @@ import {
   calculateTiragePlan,
   calculateYeastQuantity,
   isTirageEligibleLotStatus,
-  normalizeTirageBouchage,
 } from "@/lib/tirage";
-import { getBottleFormatLabel } from "@/lib/assemblage";
+import { TirageCalculationSummary } from "@/components/modules/tirage/TirageCalculationSummary";
+import { TirageCreateAction } from "@/components/modules/tirage/TirageCreateAction";
+import { TirageParametersForm } from "@/components/modules/tirage/TirageParametersForm";
+import { TirageSourceSelector } from "@/components/modules/tirage/TirageSourceSelector";
+import { TirageStockChecklist } from "@/components/modules/tirage/TirageStockChecklist";
 
 export function PlanificateurTirage() {
   const T = useTheme();
@@ -882,247 +885,62 @@ export function PlanificateurTirage() {
 
           <div style={{ display:"grid", gridTemplateColumns:"1.2fr 1fr", gap:24 }}>
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:20, display:"flex", flexDirection:"column", gap:16 }}>
-              <div>
-                <div style={{ fontSize:14, fontWeight:"bold", color:T.textStrong, marginBottom:4 }}>Créer le tirage depuis cette planification</div>
-                <div style={{ fontSize:12, color:T.textDim, lineHeight:1.5 }}>
-                  Cette préparation appelle <code>/api/tirage</code> avec les mêmes règles d'éligibilité, de volume et de stock que le tirage direct.
-                </div>
-              </div>
-
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-                <FF label="Cuve source">
-                  <Select
-                    value={planningForm.sourceContainerId}
-                    disabled={isSubmitting}
-                    onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
-                      const nextContainerId = e.target.value;
-                      const nextContainer = cuvesVinBase.find((container: any) => String(container.id) === String(nextContainerId));
-                      const nextLot = nextContainer ? getContainerLot(nextContainer) : null;
-                      const nextAnalyses = nextLot
-                        ? (state.analyses || [])
-                            .filter((analysis: any) => String(analysis.lotId) === String(nextLot.id))
-                            .sort((a: any, b: any) => new Date(b.analysisDate).getTime() - new Date(a.analysisDate).getTime())
-                        : [];
-                      const nextResidualSugar = nextAnalyses[0]?.extraData?.sucresResiduel;
-                      setPlanningForm((prev) => ({
-                        ...prev,
-                        sourceContainerId: nextContainerId,
-                        residualSugarGPerL:
-                          nextResidualSugar != null && prev.residualSugarGPerL === ""
-                            ? String(nextResidualSugar)
-                            : prev.residualSugarGPerL,
-                      }));
-                    }}
-                  >
-                    <option value="">-- Sélectionner une cuve source --</option>
-                    {cuvesVinBase.map((container: any) => {
-                      const lot = getContainerLot(container);
-                      return (
-                        <option key={container.id} value={container.id}>
-                          {(container.displayName || container.name)} · {lot ? getLotCode(lot) : "Lot introuvable"} · {parseFloat(container.currentVolume || lot?.currentVolume || 0).toFixed(1)} hL
-                        </option>
-                      );
-                    })}
-                  </Select>
-                </FF>
-                <FF label="Lot source détecté">
-                  <Input value={planningSourceLotCode || "--"} disabled={true} />
-                </FF>
-                <FF label="Volume à tirer (hL)">
-                  <Input type="number" step="0.1" value={planningForm.requestedVolumeHl} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlanningForm((prev) => ({ ...prev, requestedVolumeHl: e.target.value }))} />
-                </FF>
-                <FF label="Volume disponible">
-                  <Input value={planningSourceLot ? `${planningAvailableVolumeHl.toFixed(3)} hL` : "--"} disabled={true} />
-                </FF>
-                <FF label="Format bouteille">
-                  <Select value={planningForm.format} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlanningForm((prev) => ({ ...prev, format: e.target.value }))}>
-                    {["37.5cl", "75cl", "150cl", "300cl"].map((format) => (
-                      <option key={format} value={format}>{getBottleFormatLabel(format)}</option>
-                    ))}
-                  </Select>
-                </FF>
-                <FF label="Type de bouchage">
-                  <Select value={planningForm.bouchage} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlanningForm((prev) => ({ ...prev, bouchage: e.target.value }))}>
-                    <option value="CAPSULE">Capsule + Bidule</option>
-                    <option value="LIEGE">Liège + Agrafe</option>
-                  </Select>
-                </FF>
-                <FF label="Pression cible (bar)">
-                  <Input type="number" step="0.1" value={planningForm.pressureTargetBars} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlanningForm((prev) => ({ ...prev, pressureTargetBars: e.target.value }))} />
-                </FF>
-                <FF label="Température vin (°C)">
-                  <Input type="number" step="0.1" value={planningForm.wineTemperatureC} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlanningForm((prev) => ({ ...prev, wineTemperatureC: e.target.value }))} placeholder="Optionnel" />
-                </FF>
-                <FF label="Sucres résiduels (g/L)">
-                  <Input type="number" step="0.1" value={planningForm.residualSugarGPerL} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlanningForm((prev) => ({ ...prev, residualSugarGPerL: e.target.value }))} placeholder={planningAnalysisResidualSugar != null ? `Analyse: ${planningAnalysisResidualSugar} g/L` : "Optionnel"} />
-                </FF>
-                <FF label="Note opérateur">
-                  <Input value={planningForm.note} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlanningForm((prev) => ({ ...prev, note: e.target.value }))} placeholder="Ex: tirage préparé depuis le planning hebdo" />
-                </FF>
-              </div>
-
-              <div style={{ borderTop:`1px solid ${T.border}`, paddingTop:16, display:"flex", flexDirection:"column", gap:12 }}>
-                <div style={{ fontSize:12, textTransform:"uppercase", letterSpacing:1, color:T.textDim, fontWeight:"bold" }}>Intrants calculés et confirmés</div>
-
-                <div style={{ display:"grid", gridTemplateColumns:"auto 1fr 140px", gap:12, alignItems:"center" }}>
-                  <input type="checkbox" checked={planningForm.includeSugar} disabled={isSubmitting} onChange={(e) => setPlanningForm((prev) => ({ ...prev, includeSugar: e.target.checked }))} />
-                  <Select value={planningForm.sugarProductId} disabled={isSubmitting || !planningForm.includeSugar} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlanningForm((prev) => ({ ...prev, sugarProductId: e.target.value }))}>
-                    <option value="">-- Sucre de tirage --</option>
-                    {sugarProducts.map((product: any) => <option key={product.id} value={product.id}>{product.name} ({toSafeNumber(product.currentStock).toFixed(3)} {product.unit})</option>)}
-                  </Select>
-                  <Input value={planningSugarCalculation ? `${planningSugarCalculation.quantityTotal.toFixed(3)} ${planningSugarProduct?.unit || ""}` : "--"} disabled={true} />
-                </div>
-
-                <div style={{ display:"grid", gridTemplateColumns:"auto 1.2fr 110px 110px 120px", gap:12, alignItems:"center" }}>
-                  <input type="checkbox" checked={planningForm.includeYeast} disabled={isSubmitting} onChange={(e) => setPlanningForm((prev) => ({ ...prev, includeYeast: e.target.checked }))} />
-                  <Select value={planningForm.yeastProductId} disabled={isSubmitting || !planningForm.includeYeast} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlanningForm((prev) => ({ ...prev, yeastProductId: e.target.value }))}>
-                    <option value="">-- Levure prise de mousse --</option>
-                    {yeastProducts.map((product: any) => <option key={product.id} value={product.id}>{product.name} ({toSafeNumber(product.currentStock).toFixed(3)} {product.unit})</option>)}
-                  </Select>
-                  <Input type="number" step="0.1" value={planningForm.yeastDose} disabled={isSubmitting || !planningForm.includeYeast} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlanningForm((prev) => ({ ...prev, yeastDose: e.target.value }))} />
-                  <Select value={planningForm.yeastDoseUnit} disabled={isSubmitting || !planningForm.includeYeast} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlanningForm((prev) => ({ ...prev, yeastDoseUnit: e.target.value }))}>
-                    {["g/hL", "kg/hL", "mL/hL", "L/hL"].map((unit) => <option key={unit} value={unit}>{unit}</option>)}
-                  </Select>
-                  <Input value={planningForm.includeYeast && planningYeastQuantity > 0 ? `${planningYeastQuantity.toFixed(3)} ${planningYeastProduct?.unit || ""}` : "--"} disabled={true} />
-                </div>
-
-                <div style={{ display:"grid", gridTemplateColumns:"auto 1.2fr 110px 110px 120px", gap:12, alignItems:"center" }}>
-                  <input type="checkbox" checked={planningForm.includeAdjuvant} disabled={isSubmitting} onChange={(e) => setPlanningForm((prev) => ({ ...prev, includeAdjuvant: e.target.checked }))} />
-                  <Select value={planningForm.adjuvantProductId} disabled={isSubmitting || !planningForm.includeAdjuvant} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlanningForm((prev) => ({ ...prev, adjuvantProductId: e.target.value }))}>
-                    <option value="">-- Adjuvant de remuage --</option>
-                    {adjuvantProducts.map((product: any) => <option key={product.id} value={product.id}>{product.name} ({toSafeNumber(product.currentStock).toFixed(3)} {product.unit})</option>)}
-                  </Select>
-                  <Input type="number" step="0.1" value={planningForm.adjuvantDose} disabled={isSubmitting || !planningForm.includeAdjuvant} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPlanningForm((prev) => ({ ...prev, adjuvantDose: e.target.value }))} />
-                  <Select value={planningForm.adjuvantDoseUnit} disabled={isSubmitting || !planningForm.includeAdjuvant} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setPlanningForm((prev) => ({ ...prev, adjuvantDoseUnit: e.target.value }))}>
-                    {["mL/hL", "L/hL", "g/hL", "kg/hL"].map((unit) => <option key={unit} value={unit}>{unit}</option>)}
-                  </Select>
-                  <Input value={planningForm.includeAdjuvant && planningAdjuvantQuantity > 0 ? `${planningAdjuvantQuantity.toFixed(3)} ${planningAdjuvantProduct?.unit || ""}` : "--"} disabled={true} />
-                </div>
-
-                <div style={{ fontSize:12, color:T.textDim, lineHeight:1.5 }}>
-                  Levain calculé: <strong>{planningLevainVolumeHl.toFixed(3)} hL</strong> à {planningLevainPct.toFixed(1)} %.
-                  {levainStockProduct
-                    ? " Produit levain détecté mais non consommé automatiquement: TODO métier explicite à confirmer."
-                    : " Aucun produit stock dédié n'est présent dans le seed: levain traité comme donnée de process non stockée."}
-                </div>
-              </div>
+              <TirageSourceSelector
+                form={planningForm}
+                setForm={setPlanningForm}
+                isSubmitting={isSubmitting}
+                cuvesVinBase={cuvesVinBase}
+                getContainerLot={getContainerLot}
+                analyses={state.analyses || []}
+                planningSourceLotCode={planningSourceLotCode}
+                planningSourceLot={planningSourceLot}
+                planningAvailableVolumeHl={planningAvailableVolumeHl}
+                planningAnalysisResidualSugar={planningAnalysisResidualSugar}
+              />
+              <TirageParametersForm
+                form={planningForm}
+                setForm={setPlanningForm}
+                isSubmitting={isSubmitting}
+                sugarProducts={sugarProducts}
+                yeastProducts={yeastProducts}
+                adjuvantProducts={adjuvantProducts}
+                planningSugarCalculation={planningSugarCalculation}
+                planningSugarProduct={planningSugarProduct}
+                planningYeastQuantity={planningYeastQuantity}
+                planningYeastProduct={planningYeastProduct}
+                planningAdjuvantQuantity={planningAdjuvantQuantity}
+                planningAdjuvantProduct={planningAdjuvantProduct}
+                planningLevainVolumeHl={planningLevainVolumeHl}
+                planningLevainPct={planningLevainPct}
+                levainStockProduct={levainStockProduct}
+              />
             </div>
 
             <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:20, display:"flex", flexDirection:"column", gap:16 }}>
-              <div style={{ fontSize:14, fontWeight:"bold", color:T.textStrong }}>Synthèse du tirage préparé</div>
-              <div style={{
-                background: planningIsReady ? T.green+"11" : T.surfaceHigh,
-                border: `1px solid ${planningIsReady ? T.green+"33" : planningPrimaryIssue ? T.red+"33" : T.border}`,
-                borderRadius: 6,
-                padding: 14,
-              }}>
-                <div style={{ fontSize:12, fontWeight:"bold", color: planningIsReady ? T.green : planningPrimaryIssue ? T.red : T.textStrong, marginBottom:6 }}>
-                  {isSubmitting
-                    ? "Création du tirage en cours"
-                    : planningIsReady
-                      ? "Planification prête pour un tirage réel"
-                      : "Action en attente de validation"}
-                </div>
-                <div style={{ fontSize:12, color: planningPrimaryIssue ? T.red : T.textDim, lineHeight:1.5 }}>
-                  {isSubmitting
-                    ? "Le bouton reste verrouillé pendant l'enregistrement pour éviter tout double submit."
-                    : planningIsReady
-                      ? `${planningBottleCount.toLocaleString('fr-FR')} bouteilles seront créées et ${planningPlanPreview.consumedVolumeHl.toFixed(3)} hL seront consommés sur ${planningSourceLotCode}.`
-                      : planningPrimaryIssue || "Complétez la planification pour activer la création du tirage."}
-                </div>
-              </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-                <div><div style={{ fontSize:10, color:T.textDim, textTransform:"uppercase" }}>Cols calculés</div><div style={{ fontSize:20, fontFamily:"monospace", color:T.textStrong }}>{planningBottleCount.toLocaleString('fr-FR')}</div></div>
-                <div><div style={{ fontSize:10, color:T.textDim, textTransform:"uppercase" }}>Volume réel consommé</div><div style={{ fontSize:20, fontFamily:"monospace", color:T.textStrong }}>{planningPlanPreview.consumedVolumeHl.toFixed(3)} hL</div></div>
-                <div><div style={{ fontSize:10, color:T.textDim, textTransform:"uppercase" }}>Reliquat théorique</div><div style={{ fontSize:20, fontFamily:"monospace", color:T.textStrong }}>{planningPlanPreview.remainderVolumeHl.toFixed(3)} hL</div></div>
-                <div><div style={{ fontSize:10, color:T.textDim, textTransform:"uppercase" }}>Bouchage</div><div style={{ fontSize:20, fontFamily:"monospace", color:T.textStrong }}>{normalizeTirageBouchage(planningForm.bouchage)}</div></div>
-              </div>
-
-              <div style={{ border:`1px solid ${T.border}`, borderRadius:6, overflow:"hidden" }}>
-                <div style={{ padding:"10px 14px", background:T.surfaceHigh, fontSize:11, color:T.textDim, textTransform:"uppercase", fontWeight:"bold" }}>Détail des intrants</div>
-                <div style={{ display:"flex", flexDirection:"column" }}>
-                  {planningCalculatedItems.length === 0 ? (
-                    <div style={{ padding:14, fontSize:12, color:T.textDim }}>Aucun intrant calculé pour le moment.</div>
-                  ) : (
-                    planningCalculatedItems.map((item: any, index: number) => {
-                      const product = item.productId ? tiragePlanningProducts.find((candidate: any) => String(candidate.id) === String(item.productId)) : null;
-                      const available = product ? toSafeNumber(product.currentStock) : 0;
-                      const isShortage = !!product && available + 0.0001 < item.quantity;
-                      return (
-                        <div key={`${item.kind}-${index}`} style={{ display:"grid", gridTemplateColumns:"1.4fr 100px 110px 1fr", gap:12, padding:"12px 14px", borderTop:index === 0 ? "none" : `1px solid ${T.border}`, background:isShortage ? T.red+"11" : "transparent" }}>
-                          <div>
-                            <div style={{ fontSize:12, color:T.textStrong, fontWeight:"bold" }}>{item.label}</div>
-                            <div style={{ fontSize:11, color:T.textDim }}>
-                              {item.dose != null && item.doseUnit ? `${item.dose} ${item.doseUnit}` : item.consumeStock === false ? "Process non stocké" : "Consommation stock"}
-                            </div>
-                          </div>
-                          <div style={{ fontSize:12, fontFamily:"monospace", color:T.textStrong }}>{item.quantity.toFixed(3)} {item.unit}</div>
-                          <div style={{ fontSize:12, fontFamily:"monospace", color:product ? (isShortage ? T.red : T.textDim) : T.textDim }}>
-                            {product ? `${available.toFixed(3)} ${product.unit}` : "--"}
-                          </div>
-                          <div style={{ fontSize:11, color:isShortage ? T.red : T.textDim }}>
-                            {item.note || (isShortage ? `Manque ${(item.quantity - available).toFixed(3)} ${item.unit}` : "OK")}
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              {planningIssues.length > 0 && (
-                <div style={{ background:T.red+"11", border:`1px solid ${T.red}44`, borderRadius:6, padding:14 }}>
-                  <div style={{ fontSize:12, fontWeight:"bold", color:T.red, marginBottom:8 }}>Planification incomplète</div>
-                  <ul style={{ margin:0, paddingLeft:18, color:T.red, fontSize:12, lineHeight:1.6 }}>
-                    {planningIssues.map((issue: string) => <li key={issue}>{issue}</li>)}
-                  </ul>
-                </div>
-              )}
-
-              {planningStockShortages.length > 0 && (
-                <div style={{ background:T.red+"11", border:`1px solid ${T.red}33`, borderRadius:6, padding:14 }}>
-                  <div style={{ fontSize:12, fontWeight:"bold", color:T.red, marginBottom:8 }}>Stocks insuffisants</div>
-                  <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
-                    {planningStockShortages.map((item: any) => (
-                      <div key={`shortage-${item.productId}`} style={{ fontSize:12, color:T.red }}>
-                        {item.label}: disponible {item.available.toFixed(3)} {item.unit}, requis {item.quantity.toFixed(3)} {item.unit}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {planningLastError && (
-                <div style={{ background:T.red+"11", border:`1px solid ${T.red}33`, borderRadius:6, padding:14 }}>
-                  <div style={{ fontSize:12, fontWeight:"bold", color:T.red, marginBottom:6 }}>Dernière erreur backend</div>
-                  <div style={{ fontSize:12, color:T.red, lineHeight:1.5 }}>{planningLastError}</div>
-                </div>
-              )}
-
-              {planningLastSuccess && (
-                <div style={{ background:T.green+"11", border:`1px solid ${T.green}33`, borderRadius:6, padding:14 }}>
-                  <div style={{ fontSize:12, fontWeight:"bold", color:T.green, marginBottom:6 }}>Tirage créé en base</div>
-                  <div style={{ fontSize:12, color:T.textStrong }}>
-                    {planningLastSuccess.bottleLotCode} · {planningLastSuccess.bottleCount} bouteilles · volume restant {planningLastSuccess.remainingVolume?.toFixed ? planningLastSuccess.remainingVolume.toFixed(3) : planningLastSuccess.remainingVolume} hL sur {planningLastSuccess.sourceLotCode}
-                  </div>
-                  <div style={{ fontSize:11, color:T.textDim, marginTop:6 }}>
-                    Les données ont été rafraîchies après création pour remettre à jour le lot source, les stocks et les BottleLots.
-                  </div>
-                </div>
-              )}
-
-              <Btn
-                onClick={handleCreateTirageFromPlanning}
-                disabled={isSubmitting || planningIssues.length > 0}
-                style={{ width:"100%", height:48, fontSize:14 }}
-              >
-                {isSubmitting ? "Création du tirage en cours..." : "Créer le tirage depuis cette planification"}
-              </Btn>
-              <div style={{ fontSize:11, color:planningIsReady ? T.textDim : T.red, lineHeight:1.5 }}>
-                {planningIsReady
-                  ? "Le flux utilisera la même route /api/tirage que le tirage direct depuis un lot."
-                  : `Bouton désactivé tant que la planification n'est pas complète${planningPrimaryIssue ? ` : ${planningPrimaryIssue}` : "."}`}
-              </div>
+              <TirageCalculationSummary
+                isSubmitting={isSubmitting}
+                planningIsReady={planningIsReady}
+                planningPrimaryIssue={planningPrimaryIssue}
+                planningBottleCount={planningBottleCount}
+                planningPlanPreview={planningPlanPreview}
+                planningSourceLotCode={planningSourceLotCode}
+                planningForm={planningForm}
+              />
+              <TirageStockChecklist
+                planningCalculatedItems={planningCalculatedItems}
+                tiragePlanningProducts={tiragePlanningProducts}
+                planningIssues={planningIssues}
+                planningStockShortages={planningStockShortages}
+                planningLastError={planningLastError}
+                planningLastSuccess={planningLastSuccess}
+              />
+              <TirageCreateAction
+                onCreate={handleCreateTirageFromPlanning}
+                isSubmitting={isSubmitting}
+                planningIssues={planningIssues}
+                planningIsReady={planningIsReady}
+                planningPrimaryIssue={planningPrimaryIssue}
+              />
             </div>
           </div>
 
