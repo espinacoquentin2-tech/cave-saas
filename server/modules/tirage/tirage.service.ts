@@ -73,6 +73,18 @@ const inferStockKind = (
   return null;
 };
 
+const serializeTirageItem = (item: CreateTirageInput['stockItems'][number] | CreateTirageInput['calculatedItems'][number]) => ({
+  productId: item.productId ?? null,
+  kind: item.kind ?? null,
+  quantity: item.quantity,
+  unit: item.unit,
+  label: item.label,
+  dose: item.dose ?? null,
+  doseUnit: item.doseUnit ?? null,
+  treatedVolumeHl: item.treatedVolumeHl ?? null,
+  consumeStock: item.consumeStock ?? true,
+});
+
 const isConcurrentTirageConflict = (error: unknown) => {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     return error.code === 'P2034' || error.code === 'P2002';
@@ -497,6 +509,23 @@ export class TirageModuleService {
           eventType: input.isTranquille ? 'CREATION_MISE' : 'CREATION_TIRAGE',
           eventDatetime: tirageDate,
           comment: input.note ?? (input.isTranquille ? 'Mise en bouteille vin tranquille' : 'Tirage initial'),
+          metadata: {
+            operation: 'TIRAGE',
+            sourceLotId: sourceLot.id,
+            sourceContainerId: sourceLot.currentContainer?.id ?? input.sourceContainerId ?? null,
+            quantity: input.count,
+            format: input.format,
+            bottleCount: input.count,
+            requestedVolumeHl: input.volume,
+            consumedVolumeHl: round(consumedVolume, 4),
+            pressureTargetBars: input.pressureTargetBars ?? null,
+            wineTemperatureC: input.wineTemperatureC ?? null,
+            residualSugarGPerL: effectiveResidualSugar != null ? Number(effectiveResidualSugar) : null,
+            bouchage: normalizedBouchage,
+            stockItems: input.stockItems.map(serializeTirageItem),
+            calculatedItems: input.calculatedItems.map(serializeTirageItem),
+            notes: input.note ?? null,
+          },
         });
 
         await TirageRepository.createBottleEventLink(tx, {

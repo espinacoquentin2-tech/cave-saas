@@ -1208,6 +1208,25 @@ export class AdminResetService {
         eventDatetime: shiftDays(tirageOldDate, 1),
         operatorUserId: operator.id,
         comment: `${DEMO_CAVE_NAME} · tirage campagne démo bouteilles`,
+        metadata: {
+          operation: 'TIRAGE',
+          sourceLotId: bsaBrut,
+          sourceContainerId: null,
+          quantity:
+            tirageEligible.currentBottleCount + tirageRecent.currentBottleCount + tirageRose.currentBottleCount,
+          format: '75cl',
+          bottleCount:
+            tirageEligible.currentBottleCount + tirageRecent.currentBottleCount + tirageRose.currentBottleCount,
+          requestedVolumeHl: null,
+          consumedVolumeHl: null,
+          pressureTargetBars: null,
+          wineTemperatureC: null,
+          residualSugarGPerL: null,
+          bouchage: null,
+          stockItems: [],
+          calculatedItems: [],
+          notes: `${DEMO_CAVE_NAME} · tirage campagne démo bouteilles`,
+        },
       },
     });
     counts.bottleEvents += 1;
@@ -1227,6 +1246,18 @@ export class AdminResetService {
         eventDatetime: degorgementDate,
         operatorUserId: operator.id,
         comment: `${DEMO_CAVE_NAME} · dégorgement partiel lot BSA`,
+        metadata: {
+          operation: 'DEGORGEMENT',
+          quantity: 240,
+          losses: 0,
+          dosageGPerL: 8,
+          liqueurType: 'Brut',
+          liqueurVolumeL: null,
+          sourceBottleLotId: tirageEligible.id,
+          destinationBottleLotId: degorge1.id,
+          consumables: [],
+          notes: `${DEMO_CAVE_NAME} · dégorgement partiel lot BSA`,
+        },
       },
     });
     counts.bottleEvents += 1;
@@ -1254,6 +1285,18 @@ export class AdminResetService {
         eventDatetime: habillageDate,
         operatorUserId: operator.id,
         comment: `${DEMO_CAVE_NAME} · habillage partiel lot dégorgé`,
+        metadata: {
+          operation: 'HABILLAGE',
+          quantity: 100,
+          sourceBottleLotId: degorge1.id,
+          destinationBottleLotId: pretExpedition.id,
+          consumables: [],
+          packaging: {
+            cartonSize: null,
+            cartons: null,
+          },
+          notes: `${DEMO_CAVE_NAME} · habillage partiel lot dégorgé`,
+        },
       },
     });
     counts.bottleEvents += 1;

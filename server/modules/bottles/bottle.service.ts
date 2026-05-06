@@ -50,6 +50,12 @@ export class BottleModuleService {
       where: input.id ? { id: input.id } : undefined,
       orderBy: { id: 'desc' },
       include: {
+        bottleEventLinks: {
+          include: {
+            event: true,
+          },
+          orderBy: { id: 'desc' },
+        },
         sourceLot: {
           include: {
             components: true,

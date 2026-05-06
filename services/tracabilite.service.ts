@@ -17,7 +17,7 @@ export class TracabiliteService {
     let focusedLot: TraceableLot;
     let parents: TraceableLot[] = [];
     let children: TraceableLot[] = [];
-    let expeditions: Array<{ id: string; eventDatetime: Date; comment: string }> = [];
+    let expeditions: Array<{ id: string; eventDatetime: Date; comment: string; metadata?: unknown }> = [];
 
     // 1. TROUVER LE LOT CIBLE
     if (type === "bulk") {
@@ -108,11 +108,13 @@ export class TracabiliteService {
           id: `shipment-${line.id}`,
           eventDatetime: line.shipment.shipmentDate,
           comment: `${line.bottleCount} btl · ${line.shipment.customerName || 'Client non renseigné'}${line.shipment.comment ? ` · ${line.shipment.comment}` : ''}`,
+          metadata: null,
         })),
         ...bottleEventLinks.map((link) => ({
           id: `event-${link.eventId}-${link.id}`,
           eventDatetime: link.event.eventDatetime,
           comment: `${link.bottleCount} btl · ${link.event.comment || 'Expédition'}`,
+          metadata: link.event.metadata,
         })),
       ];
     } else {
@@ -125,6 +127,7 @@ export class TracabiliteService {
           id: `bulk-event-${e.id}`,
           eventDatetime: e.eventDatetime,
           comment: e.comment || 'Expédition',
+          metadata: null,
         }));
     }
 

@@ -345,42 +345,6 @@ export class BottlesService {
             },
           });
 
-          const bottleEvent = await tx.bottleEvent.create({
-            data: {
-              eventType: 'DEGORGEMENT',
-              operatorUserId: operatorId,
-              eventDatetime: degorgementDate,
-              comment: buildComment(
-                `Dégorgement de ${data.count} btl.`,
-                `Âge sur lattes: ${calculateBottleLotAgeMonths(sourceLot.tirageDate, degorgementDate)} mois.`,
-                `Dosage: ${data.dosageLabel || `${data.dosageGramsPerLiter} g/L`} (${data.dosageGramsPerLiter} g/L).`,
-                `Liqueur: ${data.liqueurType}.`,
-                data.liqueurVolumeLiters != null && data.liqueurVolumeLiters > 0
-                  ? `Volume liqueur: ${data.liqueurVolumeLiters.toFixed(3)} L.`
-                  : null,
-                data.lossCount > 0 ? `Pertes: ${data.lossCount} btl.` : null,
-                data.note ?? null,
-              ),
-            },
-          });
-
-          await tx.bottleEventLink.createMany({
-            data: [
-              {
-                eventId: bottleEvent.id,
-                bottleLotId: sourceLot.id,
-                roleInEvent: 'SOURCE',
-                bottleCount: totalSourceDecrease,
-              },
-              {
-                eventId: bottleEvent.id,
-                bottleLotId: destinationLot.id,
-                roleInEvent: 'CIBLE',
-                bottleCount: data.count,
-              },
-            ],
-          });
-
           const stockMovements = [];
           for (const stockItem of [
             {
@@ -423,6 +387,54 @@ export class BottlesService {
               stockMovements.push(movement);
             }
           }
+
+          const bottleEvent = await tx.bottleEvent.create({
+            data: {
+              eventType: 'DEGORGEMENT',
+              operatorUserId: operatorId,
+              eventDatetime: degorgementDate,
+              comment: buildComment(
+                `Dégorgement de ${data.count} btl.`,
+                `Âge sur lattes: ${calculateBottleLotAgeMonths(sourceLot.tirageDate, degorgementDate)} mois.`,
+                `Dosage: ${data.dosageLabel || `${data.dosageGramsPerLiter} g/L`} (${data.dosageGramsPerLiter} g/L).`,
+                `Liqueur: ${data.liqueurType}.`,
+                data.liqueurVolumeLiters != null && data.liqueurVolumeLiters > 0
+                  ? `Volume liqueur: ${data.liqueurVolumeLiters.toFixed(3)} L.`
+                  : null,
+                data.lossCount > 0 ? `Pertes: ${data.lossCount} btl.` : null,
+                data.note ?? null,
+              ),
+              metadata: {
+                operation: 'DEGORGEMENT',
+                quantity: data.count,
+                losses: data.lossCount,
+                dosageGPerL: round(data.dosageGramsPerLiter),
+                liqueurType: data.liqueurType,
+                liqueurVolumeL: data.liqueurVolumeLiters != null ? round(data.liqueurVolumeLiters) : null,
+                sourceBottleLotId: sourceLot.id,
+                destinationBottleLotId: destinationLot.id,
+                consumables: stockMovements,
+                notes: data.note ?? null,
+              },
+            },
+          });
+
+          await tx.bottleEventLink.createMany({
+            data: [
+              {
+                eventId: bottleEvent.id,
+                bottleLotId: sourceLot.id,
+                roleInEvent: 'SOURCE',
+                bottleCount: totalSourceDecrease,
+              },
+              {
+                eventId: bottleEvent.id,
+                bottleLotId: destinationLot.id,
+                roleInEvent: 'CIBLE',
+                bottleCount: data.count,
+              },
+            ],
+          });
 
           await tx.idempotencyRecord.create({
             data: {
@@ -549,36 +561,6 @@ export class BottlesService {
             },
           });
 
-          const bottleEvent = await tx.bottleEvent.create({
-            data: {
-              eventType: 'HABILLAGE',
-              operatorUserId: operatorId,
-              eventDatetime: habillageDate,
-              comment: buildComment(
-                `Habillage de ${data.count} btl.`,
-                data.cartonId ? `Cartonnage ${data.cartonSize}.` : null,
-                data.note ?? null,
-              ),
-            },
-          });
-
-          await tx.bottleEventLink.createMany({
-            data: [
-              {
-                eventId: bottleEvent.id,
-                bottleLotId: sourceLot.id,
-                roleInEvent: 'SOURCE',
-                bottleCount: data.count,
-              },
-              {
-                eventId: bottleEvent.id,
-                bottleLotId: destinationLot.id,
-                roleInEvent: 'CIBLE',
-                bottleCount: data.count,
-              },
-            ],
-          });
-
           const stockMovements = [];
           for (const stockItem of [
             {
@@ -625,6 +607,48 @@ export class BottlesService {
               stockMovements.push(movement);
             }
           }
+
+          const bottleEvent = await tx.bottleEvent.create({
+            data: {
+              eventType: 'HABILLAGE',
+              operatorUserId: operatorId,
+              eventDatetime: habillageDate,
+              comment: buildComment(
+                `Habillage de ${data.count} btl.`,
+                data.cartonId ? `Cartonnage ${data.cartonSize}.` : null,
+                data.note ?? null,
+              ),
+              metadata: {
+                operation: 'HABILLAGE',
+                quantity: data.count,
+                sourceBottleLotId: sourceLot.id,
+                destinationBottleLotId: destinationLot.id,
+                consumables: stockMovements,
+                packaging: {
+                  cartonSize: data.cartonSize,
+                  cartons: data.cartonId ? Math.ceil(data.count / data.cartonSize) : null,
+                },
+                notes: data.note ?? null,
+              },
+            },
+          });
+
+          await tx.bottleEventLink.createMany({
+            data: [
+              {
+                eventId: bottleEvent.id,
+                bottleLotId: sourceLot.id,
+                roleInEvent: 'SOURCE',
+                bottleCount: data.count,
+              },
+              {
+                eventId: bottleEvent.id,
+                bottleLotId: destinationLot.id,
+                roleInEvent: 'CIBLE',
+                bottleCount: data.count,
+              },
+            ],
+          });
 
           await tx.idempotencyRecord.create({
             data: {
@@ -737,7 +761,7 @@ export class BottlesService {
               ),
             },
           });
-          await tx.shipmentLine.create({
+          const shipmentLine = await tx.shipmentLine.create({
             data: {
               shipmentId: shipment.id,
               bottleLotId: sourceLot.id,
@@ -755,6 +779,16 @@ export class BottlesService {
                 data.destination ? `Destination: ${data.destination}.` : null,
                 data.note ?? null,
               ),
+              metadata: {
+                operation: 'EXPEDITION',
+                quantity: data.count,
+                customer: data.clientName,
+                destination: data.destination ?? null,
+                shipmentId: shipment.id,
+                shipmentLineId: shipmentLine.id,
+                sourceBottleLotId: sourceLot.id,
+                notes: data.note ?? null,
+              },
             },
           });
           await tx.bottleEventLink.create({

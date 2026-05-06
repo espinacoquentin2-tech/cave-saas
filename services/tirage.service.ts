@@ -230,6 +230,23 @@ export class TirageService {
           eventType: data.isTranquille ? 'CREATION_MISE' : 'CREATION_TIRAGE',
           operatorUserId: userId,
           comment: data.note || (data.isTranquille ? 'Mise en bouteille de vin tranquille' : 'Tirage initial'),
+          metadata: {
+            operation: 'TIRAGE',
+            sourceLotId: sourceLot.id,
+            sourceContainerId: sourceLot.currentContainerId,
+            quantity: data.count,
+            format: data.format,
+            bottleCount: data.count,
+            requestedVolumeHl: data.volume,
+            consumedVolumeHl: data.volume,
+            pressureTargetBars: null,
+            wineTemperatureC: null,
+            residualSugarGPerL: null,
+            bouchage: null,
+            stockItems: [],
+            calculatedItems: [],
+            notes: data.note ?? null,
+          },
         }
       });
 

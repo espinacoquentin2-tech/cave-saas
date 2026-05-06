@@ -235,6 +235,7 @@ model BottleEvent {
   eventDatetime   DateTime @default(now()) @map("event_datetime")
   operatorUserId  Int      @map("operator_user_id")
   comment         String?
+  metadata        Json?
   createdAt       DateTime @default(now()) @map("created_at")
 
   operator        User              @relation(fields: [operatorUserId], references: [id])

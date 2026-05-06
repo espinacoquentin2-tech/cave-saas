@@ -6,6 +6,7 @@ import { Badge, Btn, Input, Modal } from "@/components/ui";
 import { LOT_STATUS_COLORS, useStore, useTheme } from "@/lib/store";
 import { getBottleStatusLabel } from "@/lib/bottles";
 import { buildApiHeaders } from "@/lib/client-app-helpers";
+import { BottleEventMetadataDetails } from "@/components/modules/BottleEventMetadataDetails";
 
 export function Tracabilite({ onSelectLot }: { onSelectLot: any }) {
   const T = useTheme(); 
@@ -231,10 +232,11 @@ export function Tracabilite({ onSelectLot }: { onSelectLot: any }) {
                   <div style={{ marginTop: 10, borderTop: `1px dashed ${T.green}44`, paddingTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
                     <div style={{ fontSize: 10, color: T.green, textTransform: "uppercase", letterSpacing: 1, textAlign: "center" }}>Expéditions liées</div>
                     {lineageData.expeditions.map((e: any) => (
-                      <div key={e.id} style={{ background: T.green + "11", border: `1px solid ${T.green}55`, borderRadius: 4, padding: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div key={e.id} style={{ background: T.green + "11", border: `1px solid ${T.green}55`, borderRadius: 4, padding: "12px" }}>
                         <div>
                           <div style={{ fontSize: 12, fontWeight: "bold", color: T.green }}>📦 {e.comment || "Expédition"}</div>
                           <div style={{ fontSize: 10, color: T.textDim, marginTop: 4 }}>{new Date(e.eventDatetime).toLocaleDateString('fr-FR')}</div>
+                          <BottleEventMetadataDetails metadata={e.metadata} />
                         </div>
                       </div>
                     ))}

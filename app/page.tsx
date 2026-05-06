@@ -48,6 +48,7 @@ import { PlanificateurTirage } from "@/components/modules/PlanificateurTirage";
 import { PlanificateurVendanges } from "@/components/modules/PlanificateurVendanges";
 import { Stocks } from "@/components/modules/Stocks";
 import { ExpedierModal, HabillerModal, StockBouteilles } from "@/components/modules/StockBouteilles";
+import { BottleEventMetadataDetails } from "@/components/modules/BottleEventMetadataDetails";
 import { Tracabilite } from "@/components/modules/Tracabilite";
 import { WorkOrdersAdmin } from "@/components/modules/WorkOrdersAdmin";
 import {
@@ -3415,6 +3416,11 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
     const isDeadBottle = btlCount <= 0;
     const ageMois = calculateBottleLotAgeMonths(lot.tirageDate);
     const normalizedBottleStatus = normalizeBottleLotStatus(lot.status, lot.type);
+    const bottleEvents = Array.isArray(lot.bottleEvents)
+      ? lot.bottleEvents
+          .filter((e: any) => e.eventType || e.type)
+          .sort((a: any, b: any) => new Date(b.eventDatetime || b.createdAt || b.date).getTime() - new Date(a.eventDatetime || a.createdAt || a.date).getTime())
+      : [];
 
     return (
       <div>
@@ -3470,7 +3476,26 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
            <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:4, padding:20 }}>
              <div style={{ fontSize:11, textTransform:"uppercase", letterSpacing:2, color:T.textDim, marginBottom:14 }}>Timeline Bouteilles</div>
-             <div style={{ color:T.textDim, fontSize:12, fontStyle:"italic" }}>Les événements de dégorgement / habillage de l'API s'afficheront ici.</div>
+             {bottleEvents.length === 0 ? (
+               <div style={{ color:T.textDim, fontSize:12, fontStyle:"italic" }}>Aucun événement bouteille lié.</div>
+             ) : bottleEvents.map((e: any, i: number) => (
+               <div key={`${e.id}-${e.roleInEvent || i}`} style={{ display:"flex", gap:12, padding:"12px 0", borderBottom: i < bottleEvents.length-1 ? `1px solid ${T.border}` : "none" }}>
+                 <div>
+                   <div style={{ width:8, height:8, borderRadius:"50%", background:T.accent, marginTop:4 }} />
+                   {i < bottleEvents.length-1 && <div style={{ width:1, height:"100%", background:T.border, margin:"4px auto 0" }} />}
+                 </div>
+                 <div style={{ flex:1, minWidth:0 }}>
+                   <div style={{ display:"flex", justifyContent:"space-between", gap:10 }}>
+                     <Badge label={e.eventType || e.type} />
+                     <span style={{ fontSize:10, color:T.textDim, fontFamily:"monospace" }}>
+                       {e.eventDatetime ? new Date(e.eventDatetime).toLocaleDateString('fr-FR') : e.date || "--"}
+                     </span>
+                   </div>
+                   <div style={{ fontSize:12, color:T.text, marginTop:6 }}>{e.comment || e.note || "--"}</div>
+                   <BottleEventMetadataDetails metadata={e.metadata} />
+                 </div>
+               </div>
+             ))}
            </div>
 
            <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
@@ -5050,6 +5075,20 @@ export default function App() {
             type: b.type,
             sourceLotId: b.sourceLotId?.toString(),
             sourceBottleLotId: b.sourceBottleLotId?.toString(),
+            bottleEvents: Array.isArray(b.bottleEventLinks)
+              ? b.bottleEventLinks.map((link: any) => ({
+                  id: link.event?.id?.toString() || link.eventId?.toString(),
+                  eventType: link.event?.eventType,
+                  type: link.event?.eventType,
+                  eventDatetime: link.event?.eventDatetime,
+                  createdAt: link.event?.createdAt,
+                  comment: link.event?.comment || "",
+                  note: link.event?.comment || "",
+                  metadata: link.event?.metadata || null,
+                  roleInEvent: link.roleInEvent,
+                  bottleCount: Number(link.bottleCount || 0),
+                }))
+              : [],
             sourceLot: b.sourceLot
               ? {
                   id: b.sourceLot.id?.toString(),
