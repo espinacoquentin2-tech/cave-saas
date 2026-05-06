@@ -56,18 +56,19 @@ export const roleMatches = (role: any, expectedRoles: string[]) => {
   return normalized ? expectedRoles.includes(normalized) : false;
 };
 
-export const getCurrentUserRoleKey = (user: any) => user?.roleKey ?? normalizeRoleKey(user?.role);
+export const getCurrentUserRoleKey = (user: any) => normalizeRoleKey(user?.roleKey) ?? normalizeRoleKey(user?.role);
 
 export const toUiUser = (rawUser: any) => {
   const name = rawUser?.name?.trim() || rawUser?.email?.split("@")[0]?.toUpperCase() || "Utilisateur";
-  const roleKey = normalizeRoleKey(rawUser?.role);
+  const roleKey = normalizeRoleKey(rawUser?.roleKey) ?? normalizeRoleKey(rawUser?.role);
+  const roleLabel = roleKey ? formatRoleLabel(roleKey) : formatRoleLabel(rawUser?.role);
   return {
     ...rawUser,
     id: rawUser?.id != null ? String(rawUser.id) : rawUser?.id,
     name,
     roleKey,
-    roleLabel: formatRoleLabel(rawUser?.role),
-    role: formatRoleLabel(rawUser?.role),
+    roleLabel,
+    role: roleLabel,
     initials: name.substring(0, 2).toUpperCase(),
   };
 };

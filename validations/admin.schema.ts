@@ -1,5 +1,6 @@
 // validations/admin.schema.ts
 import { z } from 'zod';
+import { formatRoleLabel, normalizeRoleKey } from '@/lib/roles';
 
 // Validation pour les Ordres de Travail
 export const CreateWorkOrderSchema = z.object({
@@ -37,7 +38,26 @@ export const UserSchema = z.object({
   id: z.number().int().optional(), // Présent pour l'édition
   name: z.string().min(2, "Le nom doit contenir au moins 2 caractères"),
   email: z.string().email("Format d'email invalide"),
-  role: z.enum(["Admin", "Chef de cave", "Caviste", "Lecture seule"])
+  roleKey: z.string().trim().optional(),
+  role: z.string().trim().optional()
+}).superRefine((data, context) => {
+  const roleKey = normalizeRoleKey(data.roleKey) ?? normalizeRoleKey(data.role);
+
+  if (!roleKey) {
+    context.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["roleKey"],
+      message: "Rôle utilisateur invalide.",
+    });
+  }
+}).transform((data) => {
+  const roleKey = normalizeRoleKey(data.roleKey) ?? normalizeRoleKey(data.role);
+
+  return {
+    ...data,
+    roleKey: roleKey!,
+    role: formatRoleLabel(roleKey),
+  };
 });
 
 export type UserPayload = z.infer<typeof UserSchema>;

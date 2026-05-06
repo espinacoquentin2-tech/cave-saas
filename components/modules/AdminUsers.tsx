@@ -10,7 +10,6 @@ import {
   formatRoleLabel,
   normalizeRoleKey,
   roleColorByKey,
-  roleKeyToBackendRole,
   toUiUser,
 } from "@/lib/roles";
 
@@ -28,15 +27,16 @@ export function AdminUsers() {
 
   const buildUserPayload = (data: any, includeId = false) => {
     const roleKey = normalizeRoleKey(data?.roleKey ?? data?.role);
-    const backendRole = roleKeyToBackendRole(roleKey);
+    const roleLabel = formatRoleLabel(roleKey);
 
-    if (!roleKey || !backendRole) return null;
+    if (!roleKey) return null;
 
     return {
       ...(includeId && data?.id ? { id: Number(data.id) } : {}),
       name: data.name,
       email: data.email,
-      role: backendRole,
+      roleKey,
+      role: roleLabel,
     };
   };
 

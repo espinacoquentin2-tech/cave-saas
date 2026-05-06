@@ -1,12 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { ForbiddenError, UnauthorizedError } from '@/lib/errors';
+import { formatRoleLabel, normalizeRoleKey } from '@/lib/roles';
 import { logger } from '@/server/shared/logger';
 import { prisma } from '@/server/shared/prisma';
 
+const roleKeySchema = z.enum(['ADMIN', 'CHEF_CAVE', 'CAVISTE', 'LECTURE_SEULE']);
+
 export const requestActorSchema = z.object({
   email: z.string().trim().email(),
-  role: z.enum(['ADMIN', 'CHEF_CAVE', 'CAVISTE', 'LECTURE_SEULE']),
+  role: roleKeySchema,
+  roleKey: roleKeySchema,
 });
 
 export type RequestActor = z.infer<typeof requestActorSchema>;
@@ -16,22 +20,8 @@ export const WRITE_ROLES: Array<RequestActor['role']> = ['ADMIN', 'CHEF_CAVE', '
 export const DELETE_ROLES: Array<RequestActor['role']> = ['ADMIN', 'CHEF_CAVE'];
 const DEVELOPMENT_ADMIN_LOCAL_PART = 'espinacoquentin2';
 
-const normalizePersistedRole = (role: string | null | undefined) => {
-  if (!role) {
-    return null;
-  }
-
-  const normalized = role.trim().toUpperCase().replace(/ /g, '_');
-  if (normalized === 'CHEF_DE_CAVE') {
-    return 'CHEF_CAVE';
-  }
-
-  if (['ADMIN', 'CHEF_CAVE', 'CAVISTE', 'LECTURE_SEULE'].includes(normalized)) {
-    return normalized as RequestActor['role'];
-  }
-
-  return null;
-};
+const resolveEffectiveRoleKey = (user: { roleKey?: string | null; role?: string | null }) =>
+  normalizeRoleKey(user.roleKey) ?? normalizeRoleKey(user.role);
 
 const isDevelopmentAdminEmail = (email: string | null | undefined) => {
   if (process.env.NODE_ENV !== 'development' || !email) {
@@ -89,27 +79,27 @@ export const resolveAuthenticatedActor = async (request: Request): Promise<Reque
 
   let dbUser = await prisma.user.findFirst({
     where: { email: { equals: user.email, mode: 'insensitive' } },
-    select: { email: true, role: true },
+    select: { email: true, role: true, roleKey: true },
   });
 
   if (!dbUser) {
-    const roleFromMetadata = normalizePersistedRole(
-      typeof user.user_metadata?.role === 'string' ? user.user_metadata.role : null,
-    );
-    const defaultRole = isDevelopmentAdminEmail(user.email) ? 'ADMIN' : roleFromMetadata ?? 'CAVISTE';
+    const roleFromMetadata =
+      normalizeRoleKey(typeof user.user_metadata?.roleKey === 'string' ? user.user_metadata.roleKey : null) ??
+      normalizeRoleKey(typeof user.user_metadata?.role === 'string' ? user.user_metadata.role : null);
+    const defaultRoleKey = isDevelopmentAdminEmail(user.email) ? 'ADMIN' : roleFromMetadata ?? 'CAVISTE';
     const fallbackName =
       typeof user.user_metadata?.full_name === 'string' && user.user_metadata.full_name.trim()
         ? user.user_metadata.full_name.trim()
         : user.email.split('@')[0];
 
-    if (isDevelopmentAdminEmail(user.email) && defaultRole !== roleFromMetadata) {
+    if (isDevelopmentAdminEmail(user.email) && defaultRoleKey !== roleFromMetadata) {
       logger.warn({
         action: 'auth.dev_admin_bootstrap',
         userEmail: user.email,
         details: {
           message: 'Compte de développement promu ADMIN lors de sa création.',
           previousRole: roleFromMetadata ?? 'missing',
-          targetRole: defaultRole,
+          targetRole: defaultRoleKey,
         },
       });
     }
@@ -119,14 +109,15 @@ export const resolveAuthenticatedActor = async (request: Request): Promise<Reque
         data: {
           email: user.email.toLowerCase(),
           name: fallbackName,
-          role: defaultRole,
+          role: formatRoleLabel(defaultRoleKey),
+          roleKey: defaultRoleKey,
         },
-        select: { email: true, role: true },
+        select: { email: true, role: true, roleKey: true },
       });
     } catch {
       dbUser = await prisma.user.findFirst({
         where: { email: { equals: user.email, mode: 'insensitive' } },
-        select: { email: true, role: true },
+        select: { email: true, role: true, roleKey: true },
       });
     }
   }
@@ -136,35 +127,37 @@ export const resolveAuthenticatedActor = async (request: Request): Promise<Reque
   }
 
   if (isDevelopmentAdminEmail(dbUser.email)) {
-    const currentRole = normalizePersistedRole(dbUser.role);
+    const currentRoleKey = resolveEffectiveRoleKey(dbUser);
 
-    if (currentRole !== 'ADMIN') {
+    if (currentRoleKey !== 'ADMIN') {
       logger.warn({
         action: 'auth.dev_admin_role_mismatch',
         userEmail: dbUser.email,
-        role: currentRole ?? dbUser.role,
+        role: currentRoleKey ?? dbUser.role,
         details: {
           message: 'Le compte de développement espinacoquentin2 doit être ADMIN. Mise à niveau automatique en cours.',
           currentRole: dbUser.role,
+          currentRoleKey: dbUser.roleKey,
         },
       });
 
       dbUser = await prisma.user.update({
         where: { email: dbUser.email },
-        data: { role: 'ADMIN' },
-        select: { email: true, role: true },
+        data: { role: formatRoleLabel('ADMIN'), roleKey: 'ADMIN' },
+        select: { email: true, role: true, roleKey: true },
       });
     }
   }
 
-  const persistedRole = normalizePersistedRole(dbUser.role);
-  if (!persistedRole) {
+  const effectiveRoleKey = resolveEffectiveRoleKey(dbUser);
+  if (!effectiveRoleKey) {
     throw new ForbiddenError('Rôle utilisateur invalide.');
   }
 
   return {
     email: dbUser.email,
-    role: persistedRole,
+    role: effectiveRoleKey,
+    roleKey: effectiveRoleKey,
   };
 };
 
@@ -172,7 +165,7 @@ export const assertRole = (
   actor: RequestActor,
   allowedRoles: Array<RequestActor['role']>,
 ) => {
-  if (!allowedRoles.includes(actor.role)) {
+  if (!allowedRoles.includes(actor.roleKey)) {
     throw new ForbiddenError('Accès refusé pour ce rôle.');
   }
 };

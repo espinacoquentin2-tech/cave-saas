@@ -1,5 +1,7 @@
 // services/admin.service.ts
-import { CreateWorkOrderPayload, UserPayload } from '../validations/admin.schema';
+import { CreateWorkOrderPayload } from '../validations/admin.schema';
+import { formatRoleLabel, normalizeRoleKey } from '@/lib/roles';
+import type { UpsertUserInput } from '@/server/modules/users/user.schemas';
 import { prisma } from '@/server/shared/prisma';
 
 
@@ -74,24 +76,35 @@ export class AdminService {
   }
 
   // --- GESTION DES UTILISATEURS ---
-  static async upsertUser(data: UserPayload, userEmail: string) {
+  static async upsertUser(data: UpsertUserInput, userEmail: string) {
     // Vérification sommaire des droits (devrait idéalement être faite dans le contrôleur via la session)
     const currentUser = await prisma.user.findUnique({ where: { email: userEmail } });
-    if (!currentUser || !["ADMIN", "CHEF_CAVE"].includes(currentUser.role)) {
+    const currentUserRoleKey = currentUser
+      ? normalizeRoleKey(currentUser.roleKey) ?? normalizeRoleKey(currentUser.role)
+      : null;
+
+    if (!currentUserRoleKey || !["ADMIN", "CHEF_CAVE"].includes(currentUserRoleKey)) {
       throw new Error("Droits insuffisants pour gérer les utilisateurs.");
     }
+
+    const persistedUser = {
+      name: data.name,
+      email: data.email,
+      role: data.role || formatRoleLabel(data.roleKey),
+      roleKey: data.roleKey,
+    };
 
     let user;
     if (data.id) {
       // Mise à jour
       user = await prisma.user.update({
         where: { id: data.id },
-        data: { name: data.name, email: data.email, role: data.role.toUpperCase().replace(/ /g, '_') }
+        data: persistedUser
       });
     } else {
       // Création
       user = await prisma.user.create({
-        data: { name: data.name, email: data.email, role: data.role.toUpperCase().replace(/ /g, '_') }
+        data: persistedUser
       });
     }
     return user;

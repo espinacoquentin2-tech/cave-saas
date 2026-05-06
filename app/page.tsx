@@ -159,6 +159,7 @@ function LoginScreen({ onLogin }: LoginScreenProps) {
           email: authUser.email,
           name: foundUser?.name,
           role: foundUser?.role,
+          roleKey: foundUser?.roleKey,
         }),
         accessToken,
       });

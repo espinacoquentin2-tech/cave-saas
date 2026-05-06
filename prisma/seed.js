@@ -17,11 +17,11 @@ async function main() {
 
   // 1. Création des utilisateurs de référence attendus par l'application
   const users = [
-    { name: 'Marie Laurent', email: 'admin@cave.fr', role: 'ADMIN' },
-    { name: 'Jean Dupont', email: 'chef@cave.fr', role: 'CHEF_CAVE' },
-    { name: 'Pierre Martin', email: 'caviste@cave.fr', role: 'CAVISTE' },
-    { name: 'Sophie Bernard', email: 'lecture@cave.fr', role: 'LECTURE_SEULE' },
-    { name: 'Jean Dubois', email: 'jean@domaine.fr', role: 'CHEF_CAVE' },
+    { name: 'Marie Laurent', email: 'admin@cave.fr', role: 'Admin', roleKey: 'ADMIN' },
+    { name: 'Jean Dupont', email: 'chef@cave.fr', role: 'Chef de cave', roleKey: 'CHEF_CAVE' },
+    { name: 'Pierre Martin', email: 'caviste@cave.fr', role: 'Caviste', roleKey: 'CAVISTE' },
+    { name: 'Sophie Bernard', email: 'lecture@cave.fr', role: 'Lecture seule', roleKey: 'LECTURE_SEULE' },
+    { name: 'Jean Dubois', email: 'jean@domaine.fr', role: 'Chef de cave', roleKey: 'CHEF_CAVE' },
   ]
 
   for (const user of users) {
