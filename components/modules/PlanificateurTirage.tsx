@@ -667,62 +667,6 @@ export function PlanificateurTirage() {
     dispatch({ type: "TOAST_ADD", payload: { msg: `Alimentation validée ! Levain remonté à ${newLevainVol} hL.`, color: T.green } });
   };
 
-  const handleValiderMixtion = async () => {
-    if (!mixBaseTankId || !mixDestTankId || !mixLevainTankId) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: "Sélectionnez la cuve de base, la cuve de levain, et la cuve de destination.", color: T.red } });
-      return;
-    }
-    if (!resMix || resMix.error) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: "Corrigez les erreurs de calcul avant de valider.", color: T.red } });
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    try {
-      const payload = {
-        baseTankId: mixBaseTankId,
-        levainTankId: mixLevainTankId,
-        destTankId: mixDestTankId,
-        baseVolToDraw: parseFloat(mixVolVinSaisi) || parseFloat(selectedBaseTank.currentVolume),
-        targetPressure: parseFloat(String(config.mixTargetPressure)),
-        levainPct: parseFloat(String(config.mixLevainPct)),
-        levainSugar: parseFloat(String(config.mixLevainSugar)),
-        sugarSource: config.mixSugarSource,
-        liqueurSugar: parseFloat(String(config.mixLiqueurSugar)),
-        tirageFormat: parseFloat(String(config.tirageFormat)),
-        tirageBouchage: config.tirageBouchage,
-        idempotencyKey: idempotencyKey || crypto.randomUUID()
-      };
-
-      const res = await fetch('/api/mixtion/execute', {
-        method: 'POST',
-        headers: buildApiHeaders(undefined),
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.message || data.error || "Une erreur est survenue lors de l'enregistrement.");
-        throw new Error(data.message || data.error || "Une erreur est survenue lors de l'enregistrement.");
-      }
-
-      dispatch({ type: "TOAST_ADD", payload: { msg: `Succès : ${data.volMixtion.toFixed(2)}hL préparés en cuve !`, color: T.green } });
-      
-      setIdempotencyKey(crypto.randomUUID());
-      if (refreshData) await refreshData();
-      
-      setMixVolVinSaisi("");
-      setMixDestTankId("");
-
-    } catch (e: any) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: `Opération refusée : ${e.message}`, color: T.red } });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:28 }}>
@@ -731,7 +675,7 @@ export function PlanificateurTirage() {
           <div style={{ color:T.textDim, fontSize:13, marginTop:4 }}>Calculs des mixtions, propagation des levains et anticipation des matières sèches.</div>
         </div>
         <div style={{ display: "flex", gap: 10 }}>
-          <Btn variant={activeTab === "MIXTION" ? "primary" : "secondary"} onClick={() => setActiveTab("MIXTION")}>🍷 Mixtion & Mise</Btn>
+          <Btn variant={activeTab === "MIXTION" ? "primary" : "secondary"} onClick={() => setActiveTab("MIXTION")}>🍷 Simulation mixtion</Btn>
           <Btn variant={activeTab === "PLANNING" ? "primary" : "secondary"} onClick={() => setActiveTab("PLANNING")}>📅 Planning & Stocks</Btn>
           <Btn variant={activeTab === "ALIM" ? "primary" : "secondary"} onClick={() => setActiveTab("ALIM")}>🧪 Alimentation Jour.</Btn>
         </div>
@@ -794,8 +738,8 @@ export function PlanificateurTirage() {
             </div>
 
             <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.accent}55` }}>
-              <div style={{ fontSize: 14, fontWeight: "bold", color: T.accentLight, marginBottom: 16 }}>3. Embouteillage</div>
-              <FF label="Cuve de Destination (Mixtion & Tirage)" style={{ marginBottom: 16 }}>
+              <div style={{ fontSize: 14, fontWeight: "bold", color: T.accentLight, marginBottom: 16 }}>3. Hypothèses de tirage</div>
+              <FF label="Cuve de travail (hypothèse)" style={{ marginBottom: 16 }}>
                 <Select value={mixDestTankId} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMixDestTankId(e.target.value)} style={{ borderColor: !mixDestTankId ? T.accent : T.border }}>
                   <option value="">-- Sélectionner une cuve de tirage vide --</option>
                   {cuvesTirage.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name}</option>)}
@@ -820,7 +764,7 @@ export function PlanificateurTirage() {
 
           <div>
             <div style={{ position: "sticky", top: 20, background: T.surface, padding: 32, borderRadius: 8, border: `2px solid ${T.accent}`, opacity: isSubmitting ? 0.6 : 1, pointerEvents: isSubmitting ? "none" : "auto", transition: "opacity 0.2s" }}>
-              <div style={{ fontSize: 12, color: T.accent, textTransform: "uppercase", letterSpacing: 2, fontWeight: "bold", marginBottom: 24, textAlign: "center" }}>Recette de la Cuve de Mixtion</div>
+              <div style={{ fontSize: 12, color: T.accent, textTransform: "uppercase", letterSpacing: 2, fontWeight: "bold", marginBottom: 24, textAlign: "center" }}>Simulation de préparation mixtion</div>
               {!resMix ? (
                 <div style={{ textAlign: "center", color: T.textDim, fontStyle: "italic", padding: "40px 0" }}>Veuillez indiquer un volume de vin à tirer.</div>
               ) : resMix.error ? (
@@ -854,19 +798,15 @@ export function PlanificateurTirage() {
                     </div>
                   </div>
                   <div style={{ background: T.accent+"11", border: `1px solid ${T.accent}44`, padding: 20, borderRadius: 6, marginTop: 8 }}>
-                    <div style={{ fontSize: 12, textTransform: "uppercase", color: T.accentLight, fontWeight: "bold", marginBottom: 16 }}>📦 Tirage & Matières Sèches</div>
+                    <div style={{ fontSize: 12, textTransform: "uppercase", color: T.accentLight, fontWeight: "bold", marginBottom: 16 }}>📦 Estimation tirage & matières sèches</div>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
                       <div style={{ fontSize: 14, color: T.textStrong, fontWeight: "bold" }}>Nombre de cols estimés :</div>
                       <div style={{ fontSize: 22, color: T.textStrong, fontWeight: "bold", fontFamily: "monospace" }}>{(resMix.nbCols ?? 0).toLocaleString('fr-FR')}</div>
                     </div>
                   </div>
-                  <Btn 
-                    onClick={handleValiderMixtion} 
-                    disabled={isSubmitting || !mixBaseTankId || !mixLevainTankId || !mixDestTankId}
-                    style={{ width: "100%", marginTop: 16, height: 48, fontSize: 14, background: isSubmitting ? T.textDim : T.accent, transition: "background 0.2s" }}
-                  >
-                    {isSubmitting ? "Enregistrement sécurisé en cours..." : "Valider & Lancer la Mixtion"}
-                  </Btn>
+                  <div style={{ background: T.surfaceHigh, border: `1px solid ${T.border}`, padding: 16, borderRadius: 6, marginTop: 16, color: T.text, fontSize: 13, lineHeight: 1.5 }}>
+                    La mixtion est désormais un calcul de préparation. Pour créer un tirage réel, utilise le bouton Créer le tirage depuis cette planification.
+                  </div>
                 </div>
               )}
             </div>

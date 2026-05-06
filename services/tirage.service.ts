@@ -9,6 +9,7 @@ export class TirageService {
   
   // ==========================================
   // 1. OPERATION DE MIXTION (Calculs CIVC)
+  // Legacy mixtion execution disabled. Modern tirage flow uses /api/tirage.
   // ==========================================
   static async executeMixtion(data: ExecuteMixtionPayload, userEmail: string) {
     return await prisma.$transaction(async (tx) => {
