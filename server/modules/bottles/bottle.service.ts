@@ -75,6 +75,7 @@ export class BottleModuleService {
     });
   }
 
+  // Legacy dangerous delete. Disabled at route level. Do not call for production workflows.
   static async delete(id: number, actor: RequestActor) {
     const fmtHL = { '37.5cl': 0.00375, '75cl': 0.0075, '150cl': 0.015, '300cl': 0.03 } as const;
 
