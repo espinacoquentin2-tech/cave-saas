@@ -145,6 +145,7 @@ export class TransferRepository {
       operatorUserId: number;
       eventDatetime: Date;
       comment: string;
+      metadata?: Prisma.InputJsonValue;
     },
   ) {
     return tx.lotEvent.create({
@@ -152,6 +153,17 @@ export class TransferRepository {
         eventType: 'TRANSFERT',
         ...data,
       },
+    });
+  }
+
+  static updateTransferEventMetadata(
+    tx: TransferTransaction,
+    eventId: number,
+    metadata: Prisma.InputJsonValue,
+  ) {
+    return tx.lotEvent.update({
+      where: { id: eventId },
+      data: { metadata },
     });
   }
 

@@ -21,6 +21,22 @@ const formatNumber = (value: unknown, suffix = "") => {
   return `${value}${suffix}`;
 };
 
+const formatTransferDestinations = (value: unknown) => {
+  if (!Array.isArray(value)) return null;
+
+  const destinations = value
+    .filter(isObject)
+    .map((destination) => {
+      const lot = destination.lotId ? `lot #${destination.lotId}` : "lot cible";
+      const container = destination.containerId ? `cuve #${destination.containerId}` : "cuve cible";
+      const volume = formatNumber(destination.volumeHl, " hL");
+      const status = destination.status ? ` · ${destination.status}` : "";
+      return `${lot} → ${container}${volume ? ` · ${volume}` : ""}${status}`;
+    });
+
+  return destinations.length > 0 ? destinations.join(" / ") : null;
+};
+
 export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
   const T = useTheme();
 
@@ -29,7 +45,7 @@ export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
   }
 
   const operation = String(metadata.operation || "").toUpperCase();
-  if (operation !== "EXPEDITION_VRAC" && operation !== "INTRANT") {
+  if (operation !== "EXPEDITION_VRAC" && operation !== "INTRANT" && operation !== "TRANSFERT") {
     return null;
   }
 
@@ -41,6 +57,17 @@ export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
           ["Unité", metadata.unit || null],
           ["Note", metadata.note || null],
         ]
+      : operation === "TRANSFERT"
+        ? [
+            ["Lot source", metadata.sourceLotId ? `#${metadata.sourceLotId}` : null],
+            ["Cuve source", metadata.sourceContainerId ? `#${metadata.sourceContainerId}` : null],
+            ["Volume demandé", formatNumber(metadata.requestedVolumeHl, " hL")],
+            ["Volume transféré", formatNumber(metadata.transferredVolumeHl, " hL")],
+            ["Reliquat", formatNumber(metadata.remainingVolumeHl, " hL")],
+            ["Statut reliquat", metadata.remainderStatus || null],
+            ["Destinations", formatTransferDestinations(metadata.destinations)],
+            ["Note", metadata.note || null],
+          ]
       : [
           ["Volume expédié", formatNumber(metadata.volumeHl, " hL")],
           ["Client", metadata.client || null],

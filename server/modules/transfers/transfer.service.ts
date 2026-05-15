@@ -16,6 +16,7 @@ interface TransferResult {
 
 const toDecimal = (value: number) => new Prisma.Decimal(value.toFixed(3));
 const toNumber = (value: Prisma.Decimal | number) => Number(value);
+const roundVolume = (value: number) => Number(value.toFixed(3));
 
 const assertSourceConsistency = (
   sourceLot: TransferSourceSnapshot,
@@ -127,16 +128,49 @@ export class TransferService {
       }
 
       const createdLotIds: number[] = [];
+      const transferredVolume = input.destinations.reduce(
+        (sum, destination) => sum + destination.volume,
+        0,
+      );
+      const transferDestinations: Array<{
+        lotId: number | null;
+        containerId: number;
+        volumeHl: number;
+        status: string;
+      }> = input.destinations.map((destination) => ({
+        lotId: null,
+        containerId: destination.toId,
+        volumeHl: roundVolume(destination.volume),
+        status:
+          sourceLot.currentContainer?.type === 'CUVE_DEBOURBAGE' && sourceLot.status === 'MOUT_NON_DEBOURBE'
+            ? 'MOUT_DEBOURBE'
+            : sourceLot.status,
+      }));
+      const note = input.note?.trim() || null;
+      const transferMetadata = () => ({
+        operation: 'TRANSFERT',
+        sourceLotId: sourceLot.id,
+        sourceContainerId: sourceLot.currentContainer?.id ?? input.fromId,
+        requestedVolumeHl: roundVolume(input.volume),
+        transferredVolumeHl: roundVolume(transferredVolume),
+        remainingVolumeHl: roundVolume(Math.max(remainingVolume, 0)),
+        remainderStatus,
+        destinations: transferDestinations,
+        createdLotIds,
+        note,
+        idempotencyKey: input.idempotencyKey,
+      });
 
       const event = await TransferRepository.createTransferEvent(tx, {
         operatorUserId: operator.id,
         eventDatetime: new Date(input.date),
         comment: [
           `Transfert de ${input.volume} hL depuis ${sourceLot.currentContainer.displayName}.`,
-          input.note?.trim() || null,
+          note,
         ]
           .filter(Boolean)
           .join(' '),
+        metadata: transferMetadata(),
       });
 
       await TransferRepository.createLotEventLink(tx, {
@@ -187,10 +221,7 @@ export class TransferService {
       }
 
       for (const [index, destination] of input.destinations.entries()) {
-        const targetStatus =
-          sourceLot.currentContainer?.type === 'CUVE_DEBOURBAGE' && sourceLot.status === 'MOUT_NON_DEBOURBE'
-            ? 'MOUT_DEBOURBE'
-            : sourceLot.status;
+        const targetStatus = transferDestinations[index].status;
 
         const targetLot = await TransferRepository.createChildLot(tx, {
           technicalCode: `${sourceLot.technicalCode}-TR-${event.id}-${index + 1}`,
@@ -206,6 +237,7 @@ export class TransferService {
         });
 
         createdLotIds.push(targetLot.id);
+        transferDestinations[index].lotId = targetLot.id;
 
         await TransferRepository.updateContainerStatus(tx, destination.toId, 'PLEIN');
         await TransferRepository.createLotEventLink(tx, {
@@ -220,6 +252,8 @@ export class TransferService {
           roleInEvent: 'CIBLE',
         });
       }
+
+      await TransferRepository.updateTransferEventMetadata(tx, event.id, transferMetadata());
 
       await TransferRepository.createIdempotencyRecord(tx, input.idempotencyKey, actor.email);
       await TransferRepository.createAuditLog(tx, {
