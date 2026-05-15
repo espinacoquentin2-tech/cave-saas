@@ -69,6 +69,9 @@ const toDecimal = (value: number, precision = 4) => new Prisma.Decimal(round(val
 
 const toNumber = (value: Prisma.Decimal | number | string | null | undefined) => Number(value ?? 0);
 
+const compactJson = (value: Record<string, unknown>): Prisma.InputJsonObject =>
+  Object.fromEntries(Object.entries(value).filter(([, entry]) => entry !== undefined)) as Prisma.InputJsonObject;
+
 const buildSourceSummary = (components: AssemblageDecisionComponent[]) =>
   components
     .map((component) => `${component.label}: ${component.volumeHl.toFixed(2)} hL`)
@@ -332,6 +335,7 @@ export class AssemblageModuleService {
         const sourceBottleMap = new Map(sourceBottleLots.map((bottleLot) => [bottleLot.id, bottleLot] as const));
         const productMap = new Map(products.map((product) => [product.id, product] as const));
         const decisionComponents: AssemblageDecisionComponent[] = [];
+        const metadataComponents: Prisma.InputJsonObject[] = [];
         const sourceContainerIds = new Set<number>();
         let totalVolumeHl = 0;
 
@@ -394,6 +398,18 @@ export class AssemblageModuleService {
               isReserve: resolvedSourceRole === 'RESERVE' || decisionComponent.isReserve,
               isRedWine: resolvedSourceRole === 'ROSE' || decisionComponent.isRedWine,
             });
+            metadataComponents.push(
+              compactJson({
+                sourceRole: resolvedSourceRole,
+                sourceType: 'LOT',
+                lotId: lot.id,
+                lotCode: lot.businessCode,
+                volumeHl: round(source.volumeHl, 4),
+                cepage: lot.mainGrapeCode,
+                vintage: lot.year,
+                status: lot.status,
+              }),
+            );
             if (lot.currentContainerId) {
               sourceContainerIds.add(lot.currentContainerId);
             }
@@ -445,6 +461,22 @@ export class AssemblageModuleService {
                     sourceRole: source.sourceRole,
                     cepageBreakdown: [{ grapeCode: 'INCONNU', percentage: 100 }],
                   },
+            );
+            metadataComponents.push(
+              compactJson({
+                sourceRole: source.sourceRole,
+                sourceType: 'BOTTLE_LOT',
+                bottleLotId: bottleLot.id,
+                bottleLotCode: bottleLot.businessCode,
+                volumeHl: round(source.volumeHl, 4),
+                bottleCount: source.originQuantity,
+                format: resolvedFormat,
+                lotId: bottleSourceLot?.id,
+                lotCode: bottleSourceLot?.businessCode,
+                cepage: bottleSourceLot?.mainGrapeCode,
+                vintage: bottleSourceLot?.year,
+                status: bottleSourceLot?.status,
+              }),
             );
             if (bottleSourceLot?.currentContainerId) {
               sourceContainerIds.add(bottleSourceLot.currentContainerId);
@@ -630,6 +662,47 @@ export class AssemblageModuleService {
             roleInEvent: 'CIBLE',
             volumeChange: toDecimal(totalVolumeHl),
             unit: 'hL',
+          },
+        });
+
+        await tx.lotEvent.update({
+          where: { id: event.id },
+          data: {
+            metadata: compactJson({
+              operation: 'ASSEMBLAGE',
+              targetLotId: lot.id,
+              targetLotCode: lot.businessCode,
+              targetContainerId: destinationContainer.id,
+              targetContainerCode: destinationContainer.code,
+              targetStatus: lot.status,
+              assemblageTypeRequested: normalized.assemblageType,
+              suggestedType: decision.suggestedType,
+              volumeTotalHl: totalVolumeHl,
+              components: metadataComponents,
+              compositionByCepage: decision.compositionByCepage,
+              compositionByVintage: decision.compositionByVintage,
+              reserveShare: decision.reserveShare,
+              redWineShare: decision.redWineShare,
+              isBlancDeBlancs: decision.isBlancDeBlancs,
+              isBlancDeNoirs: decision.isBlancDeNoirs,
+              isMillesimeCandidate: decision.isMillesimeCandidate,
+              isBsaCandidate: decision.isBsaCandidate,
+              isRoseCandidate: decision.isRoseCandidate,
+              warnings: decision.warnings,
+              adjuvants: normalized.adjuvants.map((adjuvant) =>
+                compactJson({
+                  productId: adjuvant.productId,
+                  productName: productMap.get(adjuvant.productId)?.name,
+                  quantity: round(adjuvant.quantityTotal, 4),
+                  unit: adjuvant.quantityUnit,
+                  dose: round(adjuvant.dose, 4),
+                  doseUnit: adjuvant.doseUnit,
+                  treatedVolumeHl: round(adjuvant.treatedVolumeHl, 4),
+                }),
+              ),
+              note: normalized.notes,
+              idempotencyKey: normalized.idempotencyKey,
+            }),
           },
         });
 

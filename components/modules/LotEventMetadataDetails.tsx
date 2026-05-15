@@ -51,6 +51,36 @@ const formatTirageItems = (value: unknown) => {
   return items.length > 0 ? items.join(" / ") : null;
 };
 
+const formatPercentages = (value: unknown) => {
+  if (!isObject(value)) return null;
+
+  const items = Object.entries(value)
+    .filter(([, percentage]) => isPresent(percentage))
+    .map(([label, percentage]) => `${label} ${formatNumber(percentage, " %")}`);
+
+  return items.length > 0 ? items.join(" / ") : null;
+};
+
+const formatAssemblageSources = (value: unknown, role: string) => {
+  if (!Array.isArray(value)) return null;
+
+  const sources = value
+    .filter(isObject)
+    .filter((source) => String(source.sourceRole || "").toUpperCase() === role)
+    .map((source) => {
+      const label =
+        source.sourceType === "BOTTLE_LOT"
+          ? source.bottleLotCode || (source.bottleLotId ? `lot bouteille #${source.bottleLotId}` : "lot bouteille")
+          : source.lotCode || (source.lotId ? `lot #${source.lotId}` : "lot");
+      const volume = formatNumber(source.volumeHl, " hL");
+      const bottles = formatNumber(source.bottleCount, " btl");
+      const format = source.format ? ` · ${source.format}` : "";
+      return `${label}${volume ? ` · ${volume}` : ""}${bottles ? ` · ${bottles}` : ""}${format}`;
+    });
+
+  return sources.length > 0 ? sources.join(" / ") : null;
+};
+
 export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
   const T = useTheme();
 
@@ -64,7 +94,8 @@ export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
     operation !== "INTRANT" &&
     operation !== "TRANSFERT" &&
     operation !== "CORRECTION_VOLUME" &&
-    operation !== "TIRAGE"
+    operation !== "TIRAGE" &&
+    operation !== "ASSEMBLAGE"
   ) {
     return null;
   }
@@ -111,6 +142,24 @@ export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
             ["Bouchage", metadata.bouchage || null],
             ["Consommables", formatTirageItems(metadata.stockItems)],
             ["Intrants calculés", formatTirageItems(metadata.calculatedItems)],
+            ["Note", metadata.note || null],
+          ]
+      : operation === "ASSEMBLAGE"
+        ? [
+            ["Lot assemblé", metadata.targetLotCode || (metadata.targetLotId ? `#${metadata.targetLotId}` : null)],
+            ["Cuve destination", metadata.targetContainerCode || (metadata.targetContainerId ? `#${metadata.targetContainerId}` : null)],
+            ["Volume total", formatNumber(metadata.volumeTotalHl, " hL")],
+            ["Type demandé", metadata.assemblageTypeRequested || null],
+            ["Type suggéré", metadata.suggestedType || null],
+            ["Composition cépage", formatPercentages(metadata.compositionByCepage)],
+            ["Composition millésime", formatPercentages(metadata.compositionByVintage)],
+            ["Part réserve", formatNumber(metadata.reserveShare, " %")],
+            ["Part vin rouge", formatNumber(metadata.redWineShare, " %")],
+            ["Sources principales", formatAssemblageSources(metadata.components, "MAIN")],
+            ["Sources réserve", formatAssemblageSources(metadata.components, "RESERVE")],
+            ["Sources rosé", formatAssemblageSources(metadata.components, "ROSE")],
+            ["Adjuvants", formatTirageItems(metadata.adjuvants)],
+            ["Alertes", Array.isArray(metadata.warnings) && metadata.warnings.length > 0 ? metadata.warnings.join(" / ") : null],
             ["Note", metadata.note || null],
           ]
       : [
