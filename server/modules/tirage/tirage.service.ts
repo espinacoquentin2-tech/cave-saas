@@ -85,6 +85,14 @@ const serializeTirageItem = (item: CreateTirageInput['stockItems'][number] | Cre
   consumeStock: item.consumeStock ?? true,
 });
 
+const serializeTirageStockItemForLotEvent = (
+  item: CreateTirageInput['stockItems'][number],
+  product: { name: string } | undefined,
+) => ({
+  ...serializeTirageItem(item),
+  productName: product?.name ?? item.label,
+});
+
 const isConcurrentTirageConflict = (error: unknown) => {
   if (error instanceof Prisma.PrismaClientKnownRequestError) {
     return error.code === 'P2034' || error.code === 'P2002';
@@ -466,6 +474,33 @@ export class TirageModuleService {
           locationZone: input.zone ?? null,
         });
 
+        const previousLotStatus = sourceLot.status;
+        const newLotStatus = depletedSourceLot ? 'TIRE' : sourceLot.status;
+        const lotEventMetadata = {
+          operation: 'TIRAGE',
+          sourceLotId: sourceLot.id,
+          sourceContainerId: sourceLot.currentContainer?.id ?? input.sourceContainerId ?? null,
+          bottleLotId: bottleLot.id,
+          bottleLotCode: bottleLot.businessCode,
+          format: input.format,
+          bottleCount: input.count,
+          requestedVolumeHl: input.volume,
+          consumedVolumeHl: round(consumedVolume, 4),
+          remainingVolumeHl: round(Math.max(remainingVolume, 0), 4),
+          previousLotStatus,
+          newLotStatus,
+          pressureTargetBars: input.pressureTargetBars ?? null,
+          wineTemperatureC: input.wineTemperatureC ?? null,
+          residualSugarGPerL: effectiveResidualSugar != null ? Number(effectiveResidualSugar) : null,
+          bouchage: normalizedBouchage,
+          stockItems: input.stockItems.map((item) =>
+            serializeTirageStockItemForLotEvent(item, productMap.get(item.productId)),
+          ),
+          calculatedItems: input.calculatedItems.map(serializeTirageItem),
+          note: input.note ?? null,
+          idempotencyKey: input.idempotencyKey,
+        };
+
         const lotEvent = await TirageRepository.createLotEvent(tx, {
           operatorUserId: operator.id,
           eventType: typeCode,
@@ -487,6 +522,7 @@ export class TirageModuleService {
           ]
             .filter(Boolean)
             .join(' '),
+          metadata: lotEventMetadata,
         });
 
         await TirageRepository.createLotEventLink(tx, {

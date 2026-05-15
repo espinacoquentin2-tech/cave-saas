@@ -118,6 +118,7 @@ export class TirageRepository {
       eventType: string;
       comment: string;
       eventDatetime: Date;
+      metadata?: Prisma.InputJsonValue;
     },
   ) {
     return tx.lotEvent.create({ data });

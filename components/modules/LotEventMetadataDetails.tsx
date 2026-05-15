@@ -37,6 +37,20 @@ const formatTransferDestinations = (value: unknown) => {
   return destinations.length > 0 ? destinations.join(" / ") : null;
 };
 
+const formatTirageItems = (value: unknown) => {
+  if (!Array.isArray(value)) return null;
+
+  const items = value
+    .filter(isObject)
+    .map((item) => {
+      const label = item.productName || item.label || item.kind || "Intrant";
+      const quantity = formatNumber(item.quantity, item.unit ? ` ${item.unit}` : "");
+      return quantity ? `${label} · ${quantity}` : String(label);
+    });
+
+  return items.length > 0 ? items.join(" / ") : null;
+};
+
 export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
   const T = useTheme();
 
@@ -49,7 +63,8 @@ export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
     operation !== "EXPEDITION_VRAC" &&
     operation !== "INTRANT" &&
     operation !== "TRANSFERT" &&
-    operation !== "CORRECTION_VOLUME"
+    operation !== "CORRECTION_VOLUME" &&
+    operation !== "TIRAGE"
   ) {
     return null;
   }
@@ -81,6 +96,21 @@ export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
             ["Sens", metadata.eventType === "CORRECTION_HAUSSE" ? "Hausse" : metadata.eventType === "CORRECTION_BAISSE" ? "Baisse" : null],
             ["Contenant", metadata.containerId ? `#${metadata.containerId}` : null],
             ["Raison", metadata.reason || null],
+            ["Note", metadata.note || null],
+          ]
+      : operation === "TIRAGE"
+        ? [
+            ["Lot source", metadata.sourceLotId ? `#${metadata.sourceLotId}` : null],
+            ["Lot bouteille", metadata.bottleLotCode || (metadata.bottleLotId ? `#${metadata.bottleLotId}` : null)],
+            ["Format", metadata.format || null],
+            ["Bouteilles", formatNumber(metadata.bottleCount, " btl")],
+            ["Volume demandé", formatNumber(metadata.requestedVolumeHl, " hL")],
+            ["Volume consommé", formatNumber(metadata.consumedVolumeHl, " hL")],
+            ["Volume restant", formatNumber(metadata.remainingVolumeHl, " hL")],
+            ["Pression cible", formatNumber(metadata.pressureTargetBars, " bar")],
+            ["Bouchage", metadata.bouchage || null],
+            ["Consommables", formatTirageItems(metadata.stockItems)],
+            ["Intrants calculés", formatTirageItems(metadata.calculatedItems)],
             ["Note", metadata.note || null],
           ]
       : [
