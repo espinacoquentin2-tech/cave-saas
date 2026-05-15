@@ -29,22 +29,30 @@ export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
   }
 
   const operation = String(metadata.operation || "").toUpperCase();
-  if (operation !== "EXPEDITION_VRAC") {
+  if (operation !== "EXPEDITION_VRAC" && operation !== "INTRANT") {
     return null;
   }
 
-  const rows: Array<[string, string | null]> = [
-    ["Volume expédié", formatNumber(metadata.volumeHl, " hL")],
-    ["Client", metadata.client || null],
-    ["Destination", metadata.destination || null],
-    ["Mode", metadata.mode || null],
-    ["Contenant source", metadata.containerCode || (metadata.containerId ? `#${metadata.containerId}` : null)],
-    ["Type contenant", metadata.containerType || null],
-    ["Volume avant", formatNumber(metadata.previousLotVolumeHl, " hL")],
-    ["Volume après", formatNumber(metadata.remainingLotVolumeHl, " hL")],
-    ["Statut avant", metadata.previousLotStatus || null],
-    ["Statut après", metadata.newLotStatus || null],
-  ];
+  const rows: Array<[string, string | null]> =
+    operation === "INTRANT"
+      ? [
+          ["Intrant", metadata.intrant || null],
+          ["Quantité", formatNumber(metadata.quantity)],
+          ["Unité", metadata.unit || null],
+          ["Note", metadata.note || null],
+        ]
+      : [
+          ["Volume expédié", formatNumber(metadata.volumeHl, " hL")],
+          ["Client", metadata.client || null],
+          ["Destination", metadata.destination || null],
+          ["Mode", metadata.mode || null],
+          ["Contenant source", metadata.containerCode || (metadata.containerId ? `#${metadata.containerId}` : null)],
+          ["Type contenant", metadata.containerType || null],
+          ["Volume avant", formatNumber(metadata.previousLotVolumeHl, " hL")],
+          ["Volume après", formatNumber(metadata.remainingLotVolumeHl, " hL")],
+          ["Statut avant", metadata.previousLotStatus || null],
+          ["Statut après", metadata.newLotStatus || null],
+        ];
 
   const visibleRows = rows.filter(([, value]) => isPresent(value));
   if (visibleRows.length === 0) {

@@ -48,7 +48,16 @@ export class LotsService {
         data: {
           eventType: "INTRANT",
           operatorUserId: userId,
-          comment: `${data.intrant} : ${data.quantity} ${data.unit}`
+          comment: `${data.intrant} : ${data.quantity} ${data.unit}`,
+          metadata: {
+            operation: "INTRANT",
+            lotId: lot.id,
+            intrant: data.intrant,
+            quantity: data.quantity,
+            unit: data.unit,
+            note: null,
+            idempotencyKey: data.idempotencyKey
+          }
         }
       });
 
