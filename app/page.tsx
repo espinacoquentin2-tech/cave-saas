@@ -3859,12 +3859,13 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
     .sort((a: any, b: any) => String(a.businessCode || a.code || "").localeCompare(String(b.businessCode || b.code || "")));
 
   const isVracShipmentContainer = (container: any) => ["CITERNE", "COMPARTIMENT"].includes(container?.type);
+  const vracShipmentAllowedStatuses = new Set(["VIN_DE_BASE", "ASSEMBLAGE", "ASSEMBLE", "RESERVE"]);
   const findLotContainer = (lot: any) => {
     const lotContainerId = lot.currentContainerId || lot.containerId || lot.currentContainer?.id;
     return (state.containers || []).find((c: any) => String(c.id) === String(lotContainerId)) || lot.currentContainer || null;
   };
   const findVracShipmentEvent = (lot: any, container: any) => (state.events || []).find((event: any) => {
-    if (event.type !== "TRANSFERT") return false;
+    if (event.type !== "EXPEDITION_VRAC" && !(event.type === "EXPEDITION" && String(event.note || event.comment || "").toLowerCase().includes("expedition vrac"))) return false;
     const eventLotIds = event.lotIds || (event.lotId ? [event.lotId] : []);
     const eventContainerIds = event.containerIds || (event.containerId ? [event.containerId] : []);
     return eventLotIds.some((id: any) => String(id) === String(lot.id))
@@ -3883,7 +3884,7 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
     });
   const eligibleVracRows = vracRows.filter(({ lot }: any) => {
     const status = String(lot.status || "");
-    return (lot.currentVolume || lot.volume || 0) > 0 && status !== "ARCHIVE";
+    return (lot.currentVolume || lot.volume || 0) > 0 && vracShipmentAllowedStatuses.has(status);
   });
 
   // --- ACTION SÉCURISÉE ---
@@ -3975,23 +3976,58 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
     const [volume, setVolume] = useState("");
     const [client, setClient] = useState("");
     const [destination, setDestination] = useState("");
-    const [mode, setMode] = useState("citerne");
+    const [mode, setMode] = useState("CITERNE");
     const [note, setNote] = useState("");
+    const [isSubmitting, setIsSubmitting] = useState(false);
+    const [submitError, setSubmitError] = useState("");
+    const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
     const selectedRow = eligibleVracRows.find(({ lot }: any) => String(lot.id) === String(lotId));
     const selectedLot = selectedRow?.lot;
     const selectedContainer = selectedRow?.container;
     const maxVolume = selectedLot ? Number(selectedLot.currentVolume || selectedLot.volume || 0) : 0;
     const volumeNum = parseFloat(String(volume).replace(",", "."));
     const volumeInvalid = !!volume && (!Number.isFinite(volumeNum) || volumeNum <= 0 || volumeNum > maxVolume);
+    const formValid = !!selectedLot && !!selectedContainer && Number.isFinite(volumeNum) && volumeNum > 0 && volumeNum <= maxVolume && client.trim().length > 0 && destination.trim().length > 0 && !!mode;
+
+    const submit = async () => {
+      if (!formValid || isSubmitting) return;
+      setIsSubmitting(true);
+      setSubmitError("");
+
+      try {
+        const res = await fetch('/api/expeditions/vrac', {
+          method: 'POST',
+          headers: buildApiHeaders(user),
+          body: JSON.stringify({
+            lotId: Number(selectedLot.id),
+            containerId: Number(selectedContainer.id),
+            volumeHl: volumeNum,
+            client: client.trim(),
+            destination: destination.trim(),
+            mode,
+            note: note.trim() || null,
+            idempotencyKey,
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(extractApiErrorMessage(data, "Erreur lors de l'expédition vrac."));
+        }
+
+        dispatch({ type: "TOAST_ADD", payload: { msg: "Expédition vrac enregistrée.", color: T.accent } });
+        if (refreshData) await refreshData();
+        setModalVrac(false);
+      } catch (e: any) {
+        setSubmitError(e?.message || "Erreur lors de l'expédition vrac.");
+        setIdempotencyKey(crypto.randomUUID());
+        setIsSubmitting(false);
+      }
+    };
 
     return (
       <Modal title="Nouvel envoi vrac / citerne" onClose={() => setModalVrac(false)}>
-        <div style={{ background: T.red + "11", border: `1px solid ${T.red}33`, color: T.red, borderRadius: 4, padding: 12, marginBottom: 16, fontSize: 12 }}>
-          Flux backend vrac à finaliser. La saisie est disponible pour cadrer l'envoi, mais la validation est désactivée.
-        </div>
-
         <FF label="Lot vrac éligible">
-          <Select value={lotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setLotId(e.target.value); setVolume(""); }} disabled={eligibleVracRows.length === 0}>
+          <Select value={lotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setLotId(e.target.value); setVolume(""); setSubmitError(""); }} disabled={eligibleVracRows.length === 0 || isSubmitting}>
             <option value="">Sélectionner un lot</option>
             {eligibleVracRows.map(({ lot, container }: any) => (
               <option key={lot.id} value={lot.id}>
@@ -4023,37 +4059,43 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <FF label={`Volume à expédier${selectedLot ? ` (max ${formatVolShort(maxVolume)})` : ""}`}>
             <div style={{ display: "flex", gap: 8 }}>
-              <Input type="number" step="0.1" value={volume} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVolume(e.target.value)} placeholder="0.0" style={{ flex: 1, color: volumeInvalid ? T.red : T.text }} />
-              <Btn variant="secondary" onClick={() => setVolume(maxVolume.toString())} disabled={!selectedLot}>MAX</Btn>
+              <Input type="number" step="0.1" value={volume} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setVolume(e.target.value); setSubmitError(""); }} placeholder="0.0" disabled={isSubmitting} style={{ flex: 1, color: volumeInvalid ? T.red : T.text }} />
+              <Btn variant="secondary" onClick={() => setVolume(maxVolume.toString())} disabled={!selectedLot || isSubmitting}>MAX</Btn>
             </div>
             {volumeInvalid && <div style={{ color: T.red, fontSize: 11, marginTop: 6 }}>Volume invalide ou supérieur au disponible.</div>}
           </FF>
           <FF label="Mode d'envoi">
-            <Select value={mode} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMode(e.target.value)}>
-              <option value="citerne">Citerne</option>
-              <option value="vrac">Vrac</option>
-              <option value="autre">Autre</option>
+            <Select value={mode} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setMode(e.target.value); setSubmitError(""); }} disabled={isSubmitting}>
+              <option value="CITERNE">Citerne</option>
+              <option value="VRAC">Vrac</option>
+              <option value="AUTRE">Autre</option>
             </Select>
           </FF>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <FF label="Client">
-            <Input value={client} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setClient(e.target.value)} placeholder="Nom client" />
+            <Input value={client} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setClient(e.target.value); setSubmitError(""); }} placeholder="Nom client" disabled={isSubmitting} />
           </FF>
           <FF label="Destination">
-            <Input value={destination} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDestination(e.target.value)} placeholder="Destination" />
+            <Input value={destination} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setDestination(e.target.value); setSubmitError(""); }} placeholder="Destination" disabled={isSubmitting} />
           </FF>
         </div>
 
         <FF label="Note optionnelle">
-          <Input value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} placeholder="Bon, transporteur, consignes..." />
+          <Input value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} placeholder="Bon, transporteur, consignes..." disabled={isSubmitting} />
         </FF>
 
+        {submitError && (
+          <div style={{ background: T.red + "11", border: `1px solid ${T.red}33`, color: T.red, borderRadius: 4, padding: 12, marginTop: 12, fontSize: 12 }}>
+            {submitError}
+          </div>
+        )}
+
         <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
-          <Btn variant="secondary" onClick={() => setModalVrac(false)}>Annuler</Btn>
-          <Btn disabled style={{ opacity: 0.55 }}>
-            Flux backend vrac à finaliser
+          <Btn variant="secondary" onClick={() => setModalVrac(false)} disabled={isSubmitting}>Annuler</Btn>
+          <Btn onClick={submit} disabled={!formValid || isSubmitting} style={{ opacity: (!formValid || isSubmitting) ? 0.55 : 1 }}>
+            {isSubmitting ? "Enregistrement..." : "Valider l'expédition"}
           </Btn>
         </div>
       </Modal>
@@ -4304,11 +4346,12 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
                 : "--";
               const containerName = container ? (container.displayName || container.name || container.code) : "Citerne";
               const details = [
-                containerName,
+                shipmentEvent?.note || shipmentEvent?.comment || containerName,
                 container?.code && container?.code !== containerName ? container.code : null,
                 container?.zone ? `Zone : ${container.zone}` : null,
-                lot.notes || null,
+                !shipmentEvent ? lot.notes || null : null,
               ].filter(Boolean).join(" • ");
+              const displayVolume = shipmentEvent?.volumeOut ? shipmentEvent.volumeOut : (lot.currentVolume || lot.volume || 0);
               const statusLabel = formatStatus(container?.status || lot.status || "EN COURS");
 
               return (
@@ -4317,7 +4360,7 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
                   <div onClick={() => lot && onSelectLot && onSelectLot(lot)} style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, cursor: lot ? "pointer" : "default", textDecoration: lot ? "underline" : "none" }}>
                     {lot.businessCode || lot.code || "--"}
                   </div>
-                  <div style={{ fontSize:13, color:T.textStrong }}>{formatVolShort(lot.currentVolume || lot.volume || 0)}</div>
+                  <div style={{ fontSize:13, color:T.textStrong }}>{formatVolShort(displayVolume)}</div>
                   <div style={{ fontSize:13, color:T.text }}>🚛 {details || "Citerne / compartiment"}</div>
                   <div style={{ fontSize:12, color:T.textDim }}>{shipmentEvent?.operator || "--"}</div>
                   <div style={{ display: "flex", justifyContent: "center" }}>
@@ -5487,8 +5530,9 @@ export default function App() {
             containerId: containerLinks[0]?.containerId?.toString(),
             containerIds: containerLinks.map((link: any) => link.containerId?.toString()).filter(Boolean),
             volumeIn: e.eventType==='CREATION' ? lotLinks[0]?.volumeChange || 0 : 0,
-            volumeOut: e.eventType==='TRANSFERT' ? lotLinks[0]?.volumeChange || 0 : 0,
+            volumeOut: (e.eventType==='TRANSFERT' || e.eventType==='EXPEDITION_VRAC') ? lotLinks[0]?.volumeChange || 0 : 0,
             operator: operatorName,
+            comment: e.comment || "",
             note: e.comment || "",
           };
         })});

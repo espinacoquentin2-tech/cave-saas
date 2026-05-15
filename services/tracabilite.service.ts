@@ -119,7 +119,7 @@ export class TracabiliteService {
       ];
     } else {
       const allExpeditions = await prisma.lotEvent.findMany({
-        where: { eventType: "EXPEDITION" } 
+        where: { eventType: { in: ["EXPEDITION", "EXPEDITION_VRAC"] } }
       });
       expeditions = allExpeditions
         .filter((e) => e.comment && e.comment.includes(focusedLot.businessCode))

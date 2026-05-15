@@ -41,7 +41,16 @@ export async function GET(request: Request) {
 
     const events = await prisma.lotEvent.findMany({
       where: whereClause,
-      include: { lots: true, containers: true },
+      include: {
+        lots: true,
+        containers: true,
+        operator: {
+          select: {
+            name: true,
+            email: true,
+          },
+        },
+      },
       orderBy: { eventDatetime: 'desc' },
       skip,
       take: payload.limit,
