@@ -20,6 +20,8 @@ import {
   calculateBottleLotAgeMonths,
   getBottleLotCount,
   getDegorgementEligibility,
+  getExpeditionEligibility,
+  getBottleStatusLabel,
   normalizeBottleLotStatus,
 } from "@/lib/bottles";
 import {
@@ -3838,6 +3840,9 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
   const [confirmDeliveryId, setConfirmDeliveryId] = useState(null);
   const [isValidatingDelivery, setIsValidatingDelivery] = useState(false);
   const [modalDistillerie, setModalDistillerie] = useState(false);
+  const [modalBouteilles, setModalBouteilles] = useState(false);
+  const [modalVrac, setModalVrac] = useState(false);
+  const [selectedBottleShipmentLot, setSelectedBottleShipmentLot] = useState<any | null>(null);
 
   // --- LOGIQUE MÉTIER ---
   // On filtre les expéditions depuis les événements du store (chargés via fetchAll)
@@ -3848,6 +3853,10 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
   const expeditionsDistillerie = (state.events || [])
     .filter((e: any) => e.type === "DISTILLERIE" || (e.type === "PERTE" && e.note?.includes("[DISTILLERIE]")))
     .sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  const bottleShipmentLots = (state.bottleLots || [])
+    .filter((b: any) => getExpeditionEligibility(b).eligible && !b.archivedAt && !b.cancelledAt)
+    .sort((a: any, b: any) => String(a.businessCode || a.code || "").localeCompare(String(b.businessCode || b.code || "")));
 
   const isVracShipmentContainer = (container: any) => ["CITERNE", "COMPARTIMENT"].includes(container?.type);
   const findLotContainer = (lot: any) => {
@@ -3872,6 +3881,10 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
       const dateB = new Date(b.shipmentEvent?.eventDatetime || b.lot.createdAt || b.lot.date || 0).getTime();
       return dateB - dateA;
     });
+  const eligibleVracRows = vracRows.filter(({ lot }: any) => {
+    const status = String(lot.status || "");
+    return (lot.currentVolume || lot.volume || 0) > 0 && status !== "ARCHIVE";
+  });
 
   // --- ACTION SÉCURISÉE ---
   const executeDelivery = async () => {
@@ -3921,6 +3934,131 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
   };
 
   const gridCols = "140px 160px 120px 1fr 120px 140px"; 
+
+  const BottleShipmentSelectModal = () => (
+    <Modal title="Nouvel envoi bouteilles" onClose={() => setModalBouteilles(false)}>
+      <div style={{ border: `1px solid ${T.border}`, borderRadius: 4, maxHeight: 360, overflowY: "auto", background: T.surfaceHigh }}>
+        {bottleShipmentLots.length === 0 ? (
+          <div style={{ padding: 24, textAlign: "center", color: T.textDim, fontSize: 13 }}>
+            Aucun lot bouteille prêt à l'expédition.
+          </div>
+        ) : bottleShipmentLots.map((bl: any, i: number) => {
+          const stock = getBottleLotCount(bl);
+          const status = normalizeBottleLotStatus(bl.status, bl.type);
+          const location = [bl.zone || bl.locationZone, bl.palette || bl.locationPalette, bl.rack || bl.locationRack].filter(Boolean).join(" / ") || "--";
+
+          return (
+            <div
+              key={bl.id}
+              onClick={() => { setSelectedBottleShipmentLot(bl); setModalBouteilles(false); }}
+              style={{ display: "grid", gridTemplateColumns: "1.5fr 80px 90px 120px 1fr", gap: 12, padding: "12px 14px", borderBottom: i < bottleShipmentLots.length - 1 ? `1px solid ${T.border}` : "none", alignItems: "center", cursor: "pointer" }}
+              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => { e.currentTarget.style.background = T.accent + "12"; }}
+              onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => { e.currentTarget.style.background = "transparent"; }}
+            >
+              <div style={{ fontSize: 13, color: T.accent, fontFamily: "monospace", fontWeight: 700 }}>{bl.businessCode || bl.code}</div>
+              <div style={{ fontSize: 12, color: T.text }}>{bl.format || bl.formatCode || "--"}</div>
+              <div style={{ fontSize: 13, color: T.textStrong, fontWeight: "bold" }}>{stock} btl</div>
+              <div><Badge label={getBottleStatusLabel(status, bl.type)} color={T.green} /></div>
+              <div style={{ fontSize: 12, color: T.textDim }}>{location}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18 }}>
+        <Btn variant="secondary" onClick={() => setModalBouteilles(false)}>Fermer</Btn>
+      </div>
+    </Modal>
+  );
+
+  const VracShipmentModal = () => {
+    const [lotId, setLotId] = useState("");
+    const [volume, setVolume] = useState("");
+    const [client, setClient] = useState("");
+    const [destination, setDestination] = useState("");
+    const [mode, setMode] = useState("citerne");
+    const [note, setNote] = useState("");
+    const selectedRow = eligibleVracRows.find(({ lot }: any) => String(lot.id) === String(lotId));
+    const selectedLot = selectedRow?.lot;
+    const selectedContainer = selectedRow?.container;
+    const maxVolume = selectedLot ? Number(selectedLot.currentVolume || selectedLot.volume || 0) : 0;
+    const volumeNum = parseFloat(String(volume).replace(",", "."));
+    const volumeInvalid = !!volume && (!Number.isFinite(volumeNum) || volumeNum <= 0 || volumeNum > maxVolume);
+
+    return (
+      <Modal title="Nouvel envoi vrac / citerne" onClose={() => setModalVrac(false)}>
+        <div style={{ background: T.red + "11", border: `1px solid ${T.red}33`, color: T.red, borderRadius: 4, padding: 12, marginBottom: 16, fontSize: 12 }}>
+          Flux backend vrac à finaliser. La saisie est disponible pour cadrer l'envoi, mais la validation est désactivée.
+        </div>
+
+        <FF label="Lot vrac éligible">
+          <Select value={lotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setLotId(e.target.value); setVolume(""); }} disabled={eligibleVracRows.length === 0}>
+            <option value="">Sélectionner un lot</option>
+            {eligibleVracRows.map(({ lot, container }: any) => (
+              <option key={lot.id} value={lot.id}>
+                {(lot.businessCode || lot.code)} · {(container.displayName || container.name || container.code)} · {formatVolShort(lot.currentVolume || lot.volume || 0)}
+              </option>
+            ))}
+          </Select>
+        </FF>
+
+        {selectedLot && (
+          <div style={{ background: T.surfaceHigh, border: `1px solid ${T.border}`, borderRadius: 4, padding: 14, marginBottom: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+              <div>
+                <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1 }}>Contenant actuel</div>
+                <div style={{ fontSize: 13, color: T.textStrong }}>{selectedContainer?.displayName || selectedContainer?.name || selectedContainer?.code || "--"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1 }}>Type</div>
+                <div style={{ fontSize: 13, color: T.textStrong }}>{selectedContainer?.type || "--"}</div>
+              </div>
+              <div>
+                <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1 }}>Volume disponible</div>
+                <div style={{ fontSize: 13, color: T.textStrong }}>{formatVolShort(maxVolume)}</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <FF label={`Volume à expédier${selectedLot ? ` (max ${formatVolShort(maxVolume)})` : ""}`}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <Input type="number" step="0.1" value={volume} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVolume(e.target.value)} placeholder="0.0" style={{ flex: 1, color: volumeInvalid ? T.red : T.text }} />
+              <Btn variant="secondary" onClick={() => setVolume(maxVolume.toString())} disabled={!selectedLot}>MAX</Btn>
+            </div>
+            {volumeInvalid && <div style={{ color: T.red, fontSize: 11, marginTop: 6 }}>Volume invalide ou supérieur au disponible.</div>}
+          </FF>
+          <FF label="Mode d'envoi">
+            <Select value={mode} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setMode(e.target.value)}>
+              <option value="citerne">Citerne</option>
+              <option value="vrac">Vrac</option>
+              <option value="autre">Autre</option>
+            </Select>
+          </FF>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <FF label="Client">
+            <Input value={client} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setClient(e.target.value)} placeholder="Nom client" />
+          </FF>
+          <FF label="Destination">
+            <Input value={destination} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setDestination(e.target.value)} placeholder="Destination" />
+          </FF>
+        </div>
+
+        <FF label="Note optionnelle">
+          <Input value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} placeholder="Bon, transporteur, consignes..." />
+        </FF>
+
+        <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
+          <Btn variant="secondary" onClick={() => setModalVrac(false)}>Annuler</Btn>
+          <Btn disabled style={{ opacity: 0.55 }}>
+            Flux backend vrac à finaliser
+          </Btn>
+        </div>
+      </Modal>
+    );
+  };
 
   // ==========================================
   // COMPOSANT INTERNE : MODALE DISTILLERIE
@@ -4103,9 +4241,19 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
           </button>
         </div>
 
+        {tab === "bouteilles" && (
+          <Btn onClick={() => setModalBouteilles(true)}>
+            + Nouvel envoi
+          </Btn>
+        )}
+        {tab === "vrac" && (
+          <Btn onClick={() => setModalVrac(true)}>
+            + Nouvel envoi
+          </Btn>
+        )}
         {tab === "distillerie" && (
           <Btn onClick={() => setModalDistillerie(true)} style={{ background: T.red, borderColor: T.red, color: "#fff" }}>
-            + Nouvel envoi (Distillerie)
+            + Nouvel envoi
           </Btn>
         )}
       </div>
@@ -4230,6 +4378,9 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
         </Modal>
       )}
 
+      {modalBouteilles && <BottleShipmentSelectModal />}
+      {selectedBottleShipmentLot && <ExpedierModal bl={selectedBottleShipmentLot} onClose={() => setSelectedBottleShipmentLot(null)} />}
+      {modalVrac && <VracShipmentModal />}
       {modalDistillerie && <DistillerieModal />}
     </div>
   );

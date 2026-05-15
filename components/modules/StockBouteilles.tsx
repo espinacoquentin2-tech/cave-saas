@@ -337,9 +337,11 @@ export function ExpedierModal({ bl, onClose }: { bl: any; onClose: any }) {
 
   const max = getBottleLotCount(bl);
   const eligibility = getExpeditionEligibility(bl);
+  const qtyNum = parseInt(count);
+  const quantityInvalid = !!count && (!qtyNum || qtyNum <= 0 || qtyNum > max);
+  const location = [bl.zone || bl.locationZone, bl.palette || bl.locationPalette, bl.rack || bl.locationRack].filter(Boolean).join(" / ") || "--";
 
   const submit = async () => {
-    const qtyNum = parseInt(count);
     if (!qtyNum || qtyNum <= 0 || qtyNum > max) return alert("Quantité invalide.");
     if (!clientName.trim()) return alert("Nom du client requis.");
     if (!expeditionDate) return alert("Date d'expédition requise.");
@@ -366,7 +368,7 @@ export function ExpedierModal({ bl, onClose }: { bl: any; onClose: any }) {
         throw new Error(errorData.message || errorData.error || "Erreur d'expédition");
       }
 
-      dispatch({ type: "TOAST_ADD", payload: { msg: `${qtyNum} expédiées à ${clientName}`, color: T.green } });
+      dispatch({ type: "TOAST_ADD", payload: { msg: "Expédition bouteilles créée", color: T.green } });
       if (refreshData) await refreshData();
       onClose();
     } catch (e: any) {
@@ -381,11 +383,33 @@ export function ExpedierModal({ bl, onClose }: { bl: any; onClose: any }) {
       <div style={{ background: eligibility.eligible ? T.green + "11" : T.red + "11", border: `1px solid ${eligibility.eligible ? T.green + "33" : T.red + "33"}`, color: eligibility.eligible ? T.textStrong : T.red, borderRadius: 4, padding: 12, marginBottom: 16, fontSize: 12 }}>
         {eligibility.eligible ? "Lot éligible à l'expédition." : `Lot bloqué: ${eligibility.reason}.`}
       </div>
+      <div style={{ background: T.surfaceHigh, border: `1px solid ${T.border}`, borderRadius: 4, padding: 14, marginBottom: 14 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1.4fr 80px 90px 120px 1fr", gap: 12, alignItems: "center" }}>
+          <div>
+            <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1 }}>Lot</div>
+            <div style={{ fontSize: 13, color: T.accent, fontFamily: "monospace", fontWeight: 700 }}>{bl.businessCode || bl.code}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1 }}>Format</div>
+            <div style={{ fontSize: 13, color: T.textStrong }}>{bl.format || bl.formatCode || "--"}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1 }}>Stock</div>
+            <div style={{ fontSize: 13, color: T.textStrong }}>{max} btl</div>
+          </div>
+          <div><Badge label={getBottleStatusLabel(bl.status, bl.type)} color={T.green} /></div>
+          <div>
+            <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1 }}>Emplacement</div>
+            <div style={{ fontSize: 12, color: T.textDim }}>{location}</div>
+          </div>
+        </div>
+      </div>
       <FF label={`Nombre (max ${max})`}>
         <div style={{ display: "flex", gap: 8 }}>
-          <Input type="number" value={count} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1 }} />
+          <Input type="number" value={count} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCount(e.target.value)} disabled={isSubmitting} style={{ flex: 1, color: quantityInvalid ? T.red : T.text }} />
           <Btn variant="secondary" onClick={() => setCount(max.toString())} disabled={isSubmitting}>MAX</Btn>
         </div>
+        {quantityInvalid && <div style={{ color: T.red, fontSize: 11, marginTop: 6 }}>Quantité invalide ou supérieure au stock disponible.</div>}
       </FF>
       <FF label="Date d'expédition">
         <Input type="date" value={expeditionDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setExpeditionDate(e.target.value)} disabled={isSubmitting} />
@@ -401,7 +425,7 @@ export function ExpedierModal({ bl, onClose }: { bl: any; onClose: any }) {
       </FF>
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
-        <Btn onClick={submit} disabled={isSubmitting || !count || !clientName || !expeditionDate || !eligibility.eligible}>
+        <Btn onClick={submit} disabled={isSubmitting || !count || quantityInvalid || !clientName || !expeditionDate || !eligibility.eligible}>
           {isSubmitting ? "Traitement..." : "Valider l'expédition"}
         </Btn>
       </div>
