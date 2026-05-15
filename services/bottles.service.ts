@@ -11,6 +11,8 @@ import {
   ExpedierInput,
   HabillerInput,
   UpdateBottleStatusInput,
+  ArchiveBottleLotInput,
+  CancelBottleEventInput,
 } from '@/server/modules/bottles/bottle.schemas';
 import { prisma } from '@/server/shared/prisma';
 
@@ -178,6 +180,67 @@ const consumeProduct = async (
     data: {
       productId: product.id,
       type: 'OUT',
+      quantity: new Prisma.Decimal(quantity.toFixed(3)),
+      note,
+      operator: actorEmail,
+    },
+  });
+
+  return {
+    productId: product.id,
+    productName: product.name,
+    quantity: round(quantity),
+    unit: product.unit,
+    movementId: movement.id,
+  };
+};
+
+type JsonObject = Record<string, unknown>;
+
+const asObject = (value: unknown): JsonObject =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as JsonObject) : {};
+
+const asNumber = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const addProductStock = async (
+  tx: Tx,
+  {
+    actorEmail,
+    productId,
+    quantity,
+    note,
+  }: {
+    actorEmail: string;
+    productId: number;
+    quantity: number;
+    note: string;
+  },
+) => {
+  if (quantity <= 0) {
+    return null;
+  }
+
+  const product = await tx.product.findUnique({ where: { id: productId } });
+  if (!product) {
+    return null;
+  }
+
+  await tx.product.update({
+    where: { id: product.id },
+    data: {
+      currentStock: {
+        increment: new Prisma.Decimal(quantity.toFixed(3)),
+      },
+    },
+  });
+
+  const movement = await tx.stockMovement.create({
+    data: {
+      productId: product.id,
+      type: 'IN',
       quantity: new Prisma.Decimal(quantity.toFixed(3)),
       note,
       operator: actorEmail,
@@ -832,6 +895,272 @@ export class BottlesService {
       if (isConcurrentBottleConflict(error)) {
         throw new BusinessLogicError(
           "Un autre opérateur a modifié le lot pendant l'expédition. Rechargez puis réessayez.",
+          409,
+        );
+      }
+
+      throw error;
+    }
+  }
+
+  static async archive(data: ArchiveBottleLotInput, userEmail: string) {
+    return prisma.$transaction(
+      async (tx) => {
+        const bottleLot = await tx.bottleLot.findUnique({
+          where: { id: data.bottleLotId },
+          include: {
+            shipmentLines: true,
+          },
+        });
+        if (!bottleLot) {
+          throw new BusinessLogicError('Lot bouteille introuvable.', 404);
+        }
+
+        if (bottleLot.status === 'ARCHIVE' || bottleLot.archivedAt) {
+          throw new BusinessLogicError('Ce lot bouteille est déjà archivé.', 409);
+        }
+
+        const [childrenCount, activeExpeditionCount] = await Promise.all([
+          tx.bottleLot.count({ where: { sourceBottleLotId: bottleLot.id } }),
+          tx.bottleEventLink.count({
+            where: {
+              bottleLotId: bottleLot.id,
+              event: {
+                eventType: 'EXPEDITION',
+                cancelledAt: null,
+              },
+            },
+          }),
+        ]);
+        const activeShipmentLines = bottleLot.shipmentLines.filter((line) => !line.cancelledAt);
+
+        if (childrenCount > 0 || activeShipmentLines.length > 0 || activeExpeditionCount > 0) {
+          throw new BusinessLogicError(
+            'Impossible d’archiver ce lot : il possède des lots enfants ou des expéditions actives. Annule d’abord les opérations aval.',
+            409,
+          );
+        }
+
+        const operatorId = await this.getUserId(tx, userEmail);
+        const archivedAt = new Date();
+        const updated = await tx.bottleLot.update({
+          where: { id: bottleLot.id },
+          data: {
+            status: 'ARCHIVE',
+            archivedAt,
+            archivedBy: userEmail,
+            archiveReason: data.reason,
+          },
+        });
+
+        const event = await tx.bottleEvent.create({
+          data: {
+            eventType: 'ARCHIVAGE',
+            operatorUserId: operatorId,
+            eventDatetime: archivedAt,
+            comment: buildComment(`Archivage du lot ${bottleLot.businessCode}.`, data.reason, data.note ?? null),
+            metadata: {
+              operation: 'ARCHIVAGE',
+              bottleLotId: bottleLot.id,
+              previousStatus: bottleLot.status,
+              quantity: bottleLot.currentBottleCount,
+              reason: data.reason,
+              note: data.note ?? null,
+            },
+          },
+        });
+
+        await tx.bottleEventLink.create({
+          data: {
+            eventId: event.id,
+            bottleLotId: bottleLot.id,
+            roleInEvent: 'ARCHIVED',
+            bottleCount: bottleLot.currentBottleCount,
+          },
+        });
+
+        await tx.auditLog.create({
+          data: {
+            action: 'BOTTLE_LOT_ARCHIVED',
+            details: `Lot bouteille ${bottleLot.businessCode} archivé par ${userEmail}. Raison: ${data.reason}.`,
+            userId: userEmail,
+          },
+        });
+
+        return {
+          status: 'SUCCESS',
+          bottleLotId: updated.id,
+          bottleLotCode: updated.businessCode,
+          archivedAt,
+          archiveEventId: event.id,
+          warnings: [],
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
+  }
+
+  static async cancelEvent(data: CancelBottleEventInput, userEmail: string) {
+    try {
+      return await prisma.$transaction(
+        async (tx) => {
+          const event = await tx.bottleEvent.findUnique({
+            where: { id: data.eventId },
+            include: {
+              links: {
+                include: {
+                  bottleLot: true,
+                },
+              },
+            },
+          });
+
+          if (!event) {
+            throw new BusinessLogicError('Événement bouteille introuvable.', 404);
+          }
+          if (event.cancelledAt) {
+            throw new BusinessLogicError('Cet événement bouteille est déjà annulé.', 409);
+          }
+
+          if (event.eventType !== 'EXPEDITION') {
+            throw new BusinessLogicError(
+              `Annulation ${event.eventType} non disponible en V1. Les règles sont préparées, mais seules les expéditions sont restaurées automatiquement pour l’instant.`,
+              409,
+            );
+          }
+
+          const metadata = asObject(event.metadata);
+          const sourceBottleLotId =
+            asNumber(metadata.sourceBottleLotId) ??
+            event.links.find((link) => link.roleInEvent === 'SOURCE')?.bottleLotId ??
+            null;
+          const quantity =
+            asNumber(metadata.quantity) ??
+            event.links.find((link) => link.roleInEvent === 'SOURCE')?.bottleCount ??
+            null;
+          const shipmentLineId = asNumber(metadata.shipmentLineId);
+
+          if (!sourceBottleLotId || !quantity || quantity <= 0) {
+            throw new BusinessLogicError(
+              "Impossible d’annuler cette expédition : les métadonnées sourceBottleLotId/quantity sont incomplètes.",
+              409,
+            );
+          }
+
+          const sourceLot = await tx.bottleLot.findUnique({ where: { id: sourceBottleLotId } });
+          if (!sourceLot) {
+            throw new BusinessLogicError('Lot bouteille source introuvable pour cette expédition.', 404);
+          }
+          if (sourceLot.status === 'ARCHIVE') {
+            throw new BusinessLogicError(
+              'Impossible d’annuler cette expédition : le lot source est archivé.',
+              409,
+            );
+          }
+
+          if (shipmentLineId) {
+            const shipmentLine = await tx.shipmentLine.findUnique({ where: { id: shipmentLineId } });
+            if (shipmentLine?.cancelledAt) {
+              throw new BusinessLogicError('Cette ligne d’expédition est déjà marquée comme annulée.', 409);
+            }
+          }
+
+          const operatorId = await this.getUserId(tx, userEmail);
+          const cancelledAt = new Date();
+          const restoredCount = sourceLot.currentBottleCount + quantity;
+          const nextStatus = sourceLot.status === 'EXPEDIE' && restoredCount > 0 ? 'PRET_EXPEDITION' : sourceLot.status;
+
+          const updatedLot = await tx.bottleLot.update({
+            where: { id: sourceLot.id },
+            data: {
+              currentBottleCount: {
+                increment: quantity,
+              },
+              status: nextStatus,
+            },
+          });
+
+          if (shipmentLineId) {
+            await tx.shipmentLine.update({
+              where: { id: shipmentLineId },
+              data: {
+                cancelledAt,
+                cancelReason: data.reason,
+              },
+            });
+          }
+
+          const cancelEvent = await tx.bottleEvent.create({
+            data: {
+              eventType: 'ANNULATION_EXPEDITION',
+              operatorUserId: operatorId,
+              eventDatetime: cancelledAt,
+              comment: buildComment(
+                `Annulation de l’expédition #${event.id}: ${quantity} btl restaurées sur ${sourceLot.businessCode}.`,
+                data.reason,
+                data.note ?? null,
+              ),
+              metadata: {
+                operation: 'ANNULATION_EXPEDITION',
+                cancelledEventId: event.id,
+                quantity,
+                sourceBottleLotId: sourceLot.id,
+                shipmentId: metadata.shipmentId ?? null,
+                shipmentLineId: shipmentLineId ?? null,
+                previousBottleLotStatus: sourceLot.status,
+                nextBottleLotStatus: nextStatus,
+                previousBottleCount: sourceLot.currentBottleCount,
+                restoredBottleCount: restoredCount,
+                reason: data.reason,
+                note: data.note ?? null,
+              },
+            },
+          });
+
+          await tx.bottleEvent.update({
+            where: { id: event.id },
+            data: {
+              cancelledAt,
+              cancelledBy: userEmail,
+              cancelReason: data.reason,
+              cancelEventId: cancelEvent.id,
+            },
+          });
+
+          await tx.bottleEventLink.create({
+            data: {
+              eventId: cancelEvent.id,
+              bottleLotId: sourceLot.id,
+              roleInEvent: 'RESTORED_SOURCE',
+              bottleCount: quantity,
+            },
+          });
+
+          await tx.auditLog.create({
+            data: {
+              action: 'BOTTLE_EXPEDITION_CANCELLED',
+              details: `Expédition #${event.id} annulée par ${userEmail}: ${quantity} btl restaurées sur ${sourceLot.businessCode}. Raison: ${data.reason}.`,
+              userId: userEmail,
+            },
+          });
+
+          return {
+            status: 'SUCCESS',
+            cancelledEventId: event.id,
+            cancelEventId: cancelEvent.id,
+            sourceBottleLotId: updatedLot.id,
+            sourceBottleLotCode: updatedLot.businessCode,
+            restoredCount: quantity,
+            sourceBottleCount: updatedLot.currentBottleCount,
+            sourceStatus: updatedLot.status,
+          };
+        },
+        { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+      );
+    } catch (error) {
+      if (isConcurrentBottleConflict(error)) {
+        throw new BusinessLogicError(
+          'Un autre opérateur a modifié le lot pendant l’annulation. Rechargez puis réessayez.',
           409,
         );
       }

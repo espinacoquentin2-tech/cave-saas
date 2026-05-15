@@ -63,6 +63,21 @@ export function BottleEventMetadataDetails({ metadata }: { metadata?: unknown })
       ["Destination", metadata.destination || null],
       ["Shipment", metadata.shipmentId ? `#${metadata.shipmentId}` : null],
     );
+  } else if (operation === "ANNULATION_EXPEDITION") {
+    rows.push(
+      ["Événement annulé", metadata.cancelledEventId ? `#${metadata.cancelledEventId}` : null],
+      ["Quantité restaurée", formatNumber(metadata.quantity, " btl")],
+      ["Stock avant", formatNumber(metadata.previousBottleCount, " btl")],
+      ["Stock après", formatNumber(metadata.restoredBottleCount, " btl")],
+      ["Raison", metadata.reason || null],
+    );
+  } else if (operation === "ARCHIVAGE") {
+    rows.push(
+      ["Lot", metadata.bottleLotId ? `#${metadata.bottleLotId}` : null],
+      ["Statut précédent", metadata.previousStatus || null],
+      ["Stock", formatNumber(metadata.quantity, " btl")],
+      ["Raison", metadata.reason || null],
+    );
   } else if (operation === "TIRAGE") {
     rows.push(
       ["Format", metadata.format || null],

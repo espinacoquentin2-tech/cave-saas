@@ -3262,6 +3262,107 @@ function RemuageModal({ bl, actionType, onClose }: { bl: any; actionType: any; o
   );
 }
 
+function ArchiveBottleLotModal({ bl, onClose }: { bl: any; onClose: any }) {
+  const T = useTheme();
+  const { user } = useAuth();
+  const { dispatch, refreshData } = useStore();
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const submit = async () => {
+    if (!reason.trim()) return alert("Raison obligatoire.");
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/bottles/archive", {
+        method: "POST",
+        headers: buildApiHeaders(user),
+        body: JSON.stringify({ bottleLotId: parseInt(bl.id), reason, note }),
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(extractApiErrorMessage(payload, "Erreur d'archivage"));
+      dispatch({ type: "TOAST_ADD", payload: { msg: `Lot ${bl.businessCode || bl.code} archivé`, color: T.textDim } });
+      if (refreshData) await refreshData();
+      onClose();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal title="Archiver le lot bouteille" onClose={onClose}>
+      <div style={{ background:T.surfaceHigh, border:`1px solid ${T.border}`, borderRadius:4, padding:12, fontSize:12, color:T.text, marginBottom:16 }}>
+        Le lot passe en ARCHIVE. Aucun lot, événement, mouvement de stock ou expédition n'est supprimé.
+      </div>
+      <FF label="Raison">
+        <Input value={reason} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReason(e.target.value)} disabled={isSubmitting} placeholder="Erreur de saisie / doublon / lot non exploitable" />
+      </FF>
+      <FF label="Note optionnelle">
+        <Input value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} disabled={isSubmitting} />
+      </FF>
+      <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:16 }}>
+        <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
+        <Btn onClick={submit} disabled={isSubmitting || !reason.trim()} style={{ background:T.red, borderColor:T.red, color:"#fff" }}>
+          {isSubmitting ? "Archivage..." : "Confirmer l'archivage"}
+        </Btn>
+      </div>
+    </Modal>
+  );
+}
+
+function CancelBottleEventModal({ event, onClose }: { event: any; onClose: any }) {
+  const T = useTheme();
+  const { user } = useAuth();
+  const { dispatch, refreshData } = useStore();
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const quantity = event?.metadata?.quantity ?? event?.bottleCount;
+
+  const submit = async () => {
+    if (!reason.trim()) return alert("Raison obligatoire.");
+    setIsSubmitting(true);
+    try {
+      const res = await fetch("/api/bottles/cancel-event", {
+        method: "POST",
+        headers: buildApiHeaders(user),
+        body: JSON.stringify({ eventId: parseInt(event.id), reason, note }),
+      });
+      const payload = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(extractApiErrorMessage(payload, "Erreur d'annulation"));
+      dispatch({ type: "TOAST_ADD", payload: { msg: "Expédition annulée, stock restauré", color: T.green } });
+      if (refreshData) await refreshData();
+      onClose();
+    } catch (e: any) {
+      alert(e.message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <Modal title="Annuler l'opération" onClose={onClose}>
+      <div style={{ background:T.surfaceHigh, border:`1px solid ${T.border}`, borderRadius:4, padding:12, fontSize:12, color:T.text, marginBottom:16 }}>
+        Annulation de {event?.eventType || event?.type} #{event?.id}. Effet prévu : restauration de {quantity || "--"} btl sur le lot source, création d'un événement d'annulation et conservation de l'expédition d'origine.
+      </div>
+      <FF label="Raison">
+        <Input value={reason} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setReason(e.target.value)} disabled={isSubmitting} placeholder="Erreur de saisie" />
+      </FF>
+      <FF label="Note optionnelle">
+        <Input value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} disabled={isSubmitting} />
+      </FF>
+      <div style={{ display:"flex", justifyContent:"flex-end", gap:10, marginTop:16 }}>
+        <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
+        <Btn onClick={submit} disabled={isSubmitting || !reason.trim()} style={{ background:T.red, borderColor:T.red, color:"#fff" }}>
+          {isSubmitting ? "Annulation..." : "Confirmer l'annulation"}
+        </Btn>
+      </div>
+    </Modal>
+  );
+}
+
 // =============================================================================
 // MODULE PLANIFICATEUR DE TIRAGE (SÉCURISÉ & STATELESS)
 // =============================================================================
@@ -3274,6 +3375,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
   const { state, dispatch, refreshData } = useStore();
   
   const [modal, setModal] = useState(null); 
+  const [selectedBottleEvent, setSelectedBottleEvent] = useState(null);
   const [rightTab, setRightTab] = useState("analyses"); 
   
   const [statusForm, setStatusForm] = useState({ status: "", note: "" });
@@ -3422,6 +3524,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
           .filter((e: any) => e.eventType || e.type)
           .sort((a: any, b: any) => new Date(b.eventDatetime || b.createdAt || b.date).getTime() - new Date(a.eventDatetime || a.createdAt || a.date).getTime())
       : [];
+    const canArchiveOrCancelBottle = roleMatches(getCurrentUserRoleKey(user), ["ADMIN", "CHEF_CAVE"]);
 
     return (
       <div>
@@ -3442,6 +3545,11 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
             </div>
             <div style={{ display:"flex", gap:10, flexWrap:"wrap", alignItems:"center" }}>
               <Btn variant="secondary" onClick={handlePrintPDF}>📄 Générer PDF</Btn>
+              {canArchiveOrCancelBottle && !lot.archivedAt && normalizedBottleStatus !== "ARCHIVE" && (
+                <Btn variant="ghost" onClick={() => setModal("archiveBottleLot" as any)} style={{ color: T.red }}>
+                  Archiver
+                </Btn>
+              )}
               {!isDeadBottle && (
                 <>
                   {normalizedBottleStatus === "DEGORGE" && (
@@ -3493,6 +3601,18 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
                      </span>
                    </div>
                    <div style={{ fontSize:12, color:T.text, marginTop:6 }}>{e.comment || e.note || "--"}</div>
+                   {canArchiveOrCancelBottle && (e.eventType || e.type) === "EXPEDITION" && !e.cancelledAt && (
+                     <div style={{ marginTop:8 }}>
+                       <Btn variant="ghost" onClick={() => { setSelectedBottleEvent(e); setModal("cancelBottleEvent" as any); }} style={{ color:T.red, fontSize:10, padding:"5px 8px" }}>
+                         Annuler l'expédition
+                       </Btn>
+                     </div>
+                   )}
+                   {e.cancelledAt && (
+                     <div style={{ marginTop:8, fontSize:11, color:T.red }}>
+                       Annulé le {new Date(e.cancelledAt).toLocaleDateString("fr-FR")} · {e.cancelReason || "raison non renseignée"}
+                     </div>
+                   )}
                    <BottleEventMetadataDetails metadata={e.metadata} />
                  </div>
                </div>
@@ -3522,6 +3642,8 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
         {/* Modales Bouteilles (Déjà Sécurisées !) */}
         {modal === "habiller" && <HabillerModal bl={lot} onClose={() => setModal(null)} />}
         {modal === "expedier" && <ExpedierModal bl={lot} onClose={() => setModal(null)} />}
+        {modal === "archiveBottleLot" && <ArchiveBottleLotModal bl={lot} onClose={() => setModal(null)} />}
+        {modal === "cancelBottleEvent" && selectedBottleEvent && <CancelBottleEventModal event={selectedBottleEvent} onClose={() => { setSelectedBottleEvent(null); setModal(null); }} />}
       </div>
     );
   }
@@ -5083,6 +5205,10 @@ export default function App() {
                   type: link.event?.eventType,
                   eventDatetime: link.event?.eventDatetime,
                   createdAt: link.event?.createdAt,
+                  cancelledAt: link.event?.cancelledAt,
+                  cancelledBy: link.event?.cancelledBy,
+                  cancelReason: link.event?.cancelReason,
+                  cancelEventId: link.event?.cancelEventId,
                   comment: link.event?.comment || "",
                   note: link.event?.comment || "",
                   metadata: link.event?.metadata || null,
@@ -5122,6 +5248,9 @@ export default function App() {
             degorgementDate: b.degorgementDate ? new Date(b.degorgementDate).toISOString().split('T')[0] : "",
             rawStatus: b.status,
             status: normalizeBottleLotStatus(b.status, b.type),
+            archivedAt: b.archivedAt || null,
+            archivedBy: b.archivedBy || null,
+            archiveReason: b.archiveReason || "",
             dosage: b.dosageValue ? `${b.dosageValue} ${b.dosageUnit}` : "",
             dosageValue: b.dosageValue != null ? Number(b.dosageValue) : null,
             dosageUnit: b.dosageUnit || "",

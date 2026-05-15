@@ -221,6 +221,9 @@ model BottleLot {
   locationZone        String?   @map("location_zone")
   locationRack        String?   @map("location_rack")
   locationPalette     String?   @map("location_palette")
+  archivedAt          DateTime? @map("archived_at")
+  archivedBy          String?   @map("archived_by")
+  archiveReason       String?   @map("archive_reason")
   createdAt           DateTime  @default(now()) @map("created_at")
 
   sourceLot           Lot?              @relation(fields: [sourceLotId], references: [id])
@@ -237,6 +240,10 @@ model BottleEvent {
   operatorUserId  Int      @map("operator_user_id")
   comment         String?
   metadata        Json?
+  cancelledAt     DateTime? @map("cancelled_at")
+  cancelledBy     String?   @map("cancelled_by")
+  cancelReason    String?   @map("cancel_reason")
+  cancelEventId   Int?      @map("cancel_event_id")
   createdAt       DateTime @default(now()) @map("created_at")
 
   operator        User              @relation(fields: [operatorUserId], references: [id])
@@ -279,6 +286,8 @@ model ShipmentLine {
   shipmentId   Int @map("shipment_id")
   bottleLotId  Int @map("bottle_lot_id")
   bottleCount  Int @map("bottle_count")
+  cancelledAt  DateTime? @map("cancelled_at")
+  cancelReason String?   @map("cancel_reason")
 
   shipment     Shipment  @relation(fields: [shipmentId], references: [id])
   bottleLot    BottleLot @relation(fields: [bottleLotId], references: [id])

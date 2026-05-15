@@ -1,5 +1,4 @@
 import { BusinessLogicError } from '@/lib/errors';
-import { Prisma } from '@prisma/client';
 import { BottlesService } from '@/services/bottles.service';
 import {
   DegorgerInput,
@@ -7,6 +6,8 @@ import {
   HabillerInput,
   ListBottleLotsQueryInput,
   UpdateBottleStatusInput,
+  ArchiveBottleLotInput,
+  CancelBottleEventInput,
 } from '@/server/modules/bottles/bottle.schemas';
 import { RequestActor } from '@/server/shared/request-context';
 import { prisma } from '@/server/shared/prisma';
@@ -77,43 +78,10 @@ export class BottleModuleService {
 
   // Legacy dangerous delete. Disabled at route level. Do not call for production workflows.
   static async delete(id: number, actor: RequestActor) {
-    const fmtHL = { '37.5cl': 0.00375, '75cl': 0.0075, '150cl': 0.015, '300cl': 0.03 } as const;
-
-    return prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const bottleLot = await tx.bottleLot.findUnique({ where: { id } });
-      if (!bottleLot) {
-        throw new BusinessLogicError('Lot de bouteilles introuvable.', 404);
-      }
-
-      await tx.bottleEventLink.deleteMany({ where: { bottleLotId: id } });
-
-      if (bottleLot.sourceLotId) {
-        const volumeToRestore =
-          bottleLot.initialBottleCount * (fmtHL[bottleLot.formatCode as keyof typeof fmtHL] ?? 0.0075);
-
-        const lot = await tx.lot.findUnique({ where: { id: bottleLot.sourceLotId } });
-        if (lot) {
-          await tx.lot.update({
-            where: { id: bottleLot.sourceLotId },
-            data: {
-              currentVolume: Number(lot.currentVolume) + volumeToRestore,
-              status: lot.status === 'TIRE' ? 'ACTIF' : lot.status,
-            },
-          });
-        }
-      }
-
-      await tx.bottleLot.delete({ where: { id } });
-      await tx.auditLog.create({
-        data: {
-          action: 'BOTTLE_LOT_DELETED',
-          details: `Suppression lot bouteilles #${id}`,
-          userId: actor.email,
-        },
-      });
-
-      return { status: 'SUCCESS' };
-    });
+    throw new BusinessLogicError(
+      `La suppression physique du lot bouteilles #${id} est désactivée pour ${actor.email}. Utilise l'archivage contrôlé.`,
+      405,
+    );
   }
 
   static async updateStatus(input: UpdateBottleStatusInput, actor: RequestActor) {
@@ -143,6 +111,22 @@ export class BottleModuleService {
   static async expedier(input: ExpedierInput, actor: RequestActor) {
     try {
       return await BottlesService.expedier(input, actor.email);
+    } catch (error) {
+      mapBottleError(error);
+    }
+  }
+
+  static async archive(input: ArchiveBottleLotInput, actor: RequestActor) {
+    try {
+      return await BottlesService.archive(input, actor.email);
+    } catch (error) {
+      mapBottleError(error);
+    }
+  }
+
+  static async cancelEvent(input: CancelBottleEventInput, actor: RequestActor) {
+    try {
+      return await BottlesService.cancelEvent(input, actor.email);
     } catch (error) {
       mapBottleError(error);
     }

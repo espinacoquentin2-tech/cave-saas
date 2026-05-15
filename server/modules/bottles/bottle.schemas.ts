@@ -54,8 +54,22 @@ export const expedierSchema = z.object({
   idempotencyKey: z.string().trim().min(10),
 });
 
+export const archiveBottleLotSchema = z.object({
+  bottleLotId: z.coerce.number().int().positive(),
+  reason: z.string().trim().min(3, "La raison d'archivage est obligatoire."),
+  note: z.string().trim().optional().nullable(),
+});
+
+export const cancelBottleEventSchema = z.object({
+  eventId: z.coerce.number().int().positive(),
+  reason: z.string().trim().min(3, "La raison d'annulation est obligatoire."),
+  note: z.string().trim().optional().nullable(),
+});
+
 export type ListBottleLotsQueryInput = z.infer<typeof listBottleLotsQuerySchema>;
 export type UpdateBottleStatusInput = z.infer<typeof updateBottleStatusSchema>;
 export type DegorgerInput = z.infer<typeof degorgerSchema>;
 export type HabillerInput = z.infer<typeof habillerSchema>;
 export type ExpedierInput = z.infer<typeof expedierSchema>;
+export type ArchiveBottleLotInput = z.infer<typeof archiveBottleLotSchema>;
+export type CancelBottleEventInput = z.infer<typeof cancelBottleEventSchema>;
