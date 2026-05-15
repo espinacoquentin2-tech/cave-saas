@@ -3849,8 +3849,29 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
     .filter((e: any) => e.type === "DISTILLERIE" || (e.type === "PERTE" && e.note?.includes("[DISTILLERIE]")))
     .sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const citernesEtComps = (state.containers || []).filter((c: any) => c.type === "CITERNE" || c.type === "COMPARTIMENT");
-  const vracLots = (state.lots || []).filter((l: any) => citernesEtComps.some((c: any) => String(c.id) === String(l.currentContainerId)));
+  const isVracShipmentContainer = (container: any) => ["CITERNE", "COMPARTIMENT"].includes(container?.type);
+  const findLotContainer = (lot: any) => {
+    const lotContainerId = lot.currentContainerId || lot.containerId || lot.currentContainer?.id;
+    return (state.containers || []).find((c: any) => String(c.id) === String(lotContainerId)) || lot.currentContainer || null;
+  };
+  const findVracShipmentEvent = (lot: any, container: any) => (state.events || []).find((event: any) => {
+    if (event.type !== "TRANSFERT") return false;
+    const eventLotIds = event.lotIds || (event.lotId ? [event.lotId] : []);
+    const eventContainerIds = event.containerIds || (event.containerId ? [event.containerId] : []);
+    return eventLotIds.some((id: any) => String(id) === String(lot.id))
+      || (container && eventContainerIds.some((id: any) => String(id) === String(container.id)));
+  });
+  const vracRows = (state.lots || [])
+    .map((lot: any) => {
+      const container = findLotContainer(lot);
+      return { lot, container, shipmentEvent: findVracShipmentEvent(lot, container) };
+    })
+    .filter(({ container }: any) => isVracShipmentContainer(container))
+    .sort((a: any, b: any) => {
+      const dateA = new Date(a.shipmentEvent?.eventDatetime || a.lot.createdAt || a.lot.date || 0).getTime();
+      const dateB = new Date(b.shipmentEvent?.eventDatetime || b.lot.createdAt || b.lot.date || 0).getTime();
+      return dateB - dateA;
+    });
 
   // --- ACTION SÉCURISÉE ---
   const executeDelivery = async () => {
@@ -4075,7 +4096,7 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
             BOUTEILLES ({expeditionsBouteilles.length})
           </button>
           <button onClick={() => setTab("vrac")} style={{ background: tab==="vrac" ? T.accent : "transparent", color: tab==="vrac" ? T.bg : T.accent, border: `1px solid ${T.accent}`, padding: "9px 18px", borderRadius: 3, fontSize: 11, fontWeight: "bold", letterSpacing: 1, cursor: "pointer", fontFamily: "monospace", transition:"all .2s" }}>
-            VRAC / CITERNE ({vracLots.length})
+            VRAC / CITERNE ({vracRows.length})
           </button>
           <button onClick={() => setTab("distillerie")} style={{ background: tab==="distillerie" ? T.red : "transparent", color: tab==="distillerie" ? T.bg : T.red, border: `1px solid ${T.red}`, padding: "9px 18px", borderRadius: 3, fontSize: 11, fontWeight: "bold", letterSpacing: 1, cursor: "pointer", fontFamily: "monospace", transition:"all .2s" }}>
             DISTILLERIE ({expeditionsDistillerie.length})
@@ -4116,6 +4137,43 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
                   <div style={{ fontSize:12, color:T.textDim }}>{e.operator}</div>
 	                  <div onClick={() => setConfirmDeliveryId(e.id)} style={{cursor:"pointer", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
                     <Badge label={isDelivered ? "Livré ✅" : "En livraison 🚚"} color={isDelivered ? T.textDim : T.accent} />
+                  </div>
+                </div>
+              );
+            })}
+          </>
+        )}
+
+        {tab === "vrac" && (
+          <>
+            {vracRows.length === 0 ? (
+              <div style={{ padding:"40px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucune expédition vrac / citerne à afficher.</div>
+            ) : vracRows.map(({ lot, container, shipmentEvent }: any, i: any) => {
+              const shipmentDate = shipmentEvent?.date
+                ? shipmentEvent.date.split(" à ")[0]
+                : lot.createdAt
+                ? new Date(lot.createdAt).toLocaleDateString('fr-FR')
+                : "--";
+              const containerName = container ? (container.displayName || container.name || container.code) : "Citerne";
+              const details = [
+                containerName,
+                container?.code && container?.code !== containerName ? container.code : null,
+                container?.zone ? `Zone : ${container.zone}` : null,
+                lot.notes || null,
+              ].filter(Boolean).join(" • ");
+              const statusLabel = formatStatus(container?.status || lot.status || "EN COURS");
+
+              return (
+                <div key={lot.id} style={{ display:"grid", gridTemplateColumns:gridCols, gap:16, padding:"16px 16px", alignItems:"center", borderBottom: i<vracRows.length-1 ? `1px solid ${T.border}` : "none", textAlign: "center" }}>
+                  <div style={{ fontSize:12, color:T.textDim, fontFamily:"monospace" }}>{shipmentDate}</div>
+                  <div onClick={() => lot && onSelectLot && onSelectLot(lot)} style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, cursor: lot ? "pointer" : "default", textDecoration: lot ? "underline" : "none" }}>
+                    {lot.businessCode || lot.code || "--"}
+                  </div>
+                  <div style={{ fontSize:13, color:T.textStrong }}>{formatVolShort(lot.currentVolume || lot.volume || 0)}</div>
+                  <div style={{ fontSize:13, color:T.text }}>🚛 {details || "Citerne / compartiment"}</div>
+                  <div style={{ fontSize:12, color:T.textDim }}>{shipmentEvent?.operator || "--"}</div>
+                  <div style={{ display: "flex", justifyContent: "center" }}>
+                    <Badge label={statusLabel} color={container?.status === "LIVRE" ? T.textDim : T.accent} />
                   </div>
                 </div>
               );
@@ -5164,6 +5222,7 @@ export default function App() {
               currentVolumeUnit: l.currentVolumeUnit || "hL",
               containerId: l.currentContainerId?.toString(),
               currentContainerId: l.currentContainerId?.toString(),
+              createdAt: l.createdAt,
               currentContainer: l.currentContainer
                 ? {
                     id: l.currentContainer.id?.toString(),
@@ -5260,7 +5319,28 @@ export default function App() {
       });
       fetchSafe(`/api/events?t=${t}`).then((d: any) => {
         if (!Array.isArray(d)) return;
-        dispatch({type:"SET_EVENTS", payload: safeMap(d, (e: any)=>{const dD=new Date(e.eventDatetime); return{id:e.id.toString(),type:e.eventType,date:`${dD.toLocaleDateString('fr-FR')} à ${dD.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`,lotId:e.lots?.[0]?.lotId?.toString(),containerId:e.containers?.[0]?.containerId?.toString(),volumeIn:e.eventType==='CREATION'?e.lots?.[0]?.volumeChange||0:0,volumeOut:e.eventType==='TRANSFERT'?e.lots?.[0]?.volumeChange||0:0,operator: e.operator || "Inconnu",note:e.comment||""};})});
+        dispatch({type:"SET_EVENTS", payload: safeMap(d, (e: any) => {
+          const dD = new Date(e.eventDatetime);
+          const lotLinks = Array.isArray(e.lots) ? e.lots : [];
+          const containerLinks = Array.isArray(e.containers) ? e.containers : [];
+          const operatorName = typeof e.operator === "string"
+            ? e.operator
+            : e.operator?.name || e.operator?.email || "Inconnu";
+          return {
+            id: e.id.toString(),
+            type: e.eventType,
+            eventDatetime: e.eventDatetime,
+            date: `${dD.toLocaleDateString('fr-FR')} à ${dD.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}`,
+            lotId: lotLinks[0]?.lotId?.toString(),
+            lotIds: lotLinks.map((link: any) => link.lotId?.toString()).filter(Boolean),
+            containerId: containerLinks[0]?.containerId?.toString(),
+            containerIds: containerLinks.map((link: any) => link.containerId?.toString()).filter(Boolean),
+            volumeIn: e.eventType==='CREATION' ? lotLinks[0]?.volumeChange || 0 : 0,
+            volumeOut: e.eventType==='TRANSFERT' ? lotLinks[0]?.volumeChange || 0 : 0,
+            operator: operatorName,
+            note: e.comment || "",
+          };
+        })});
       });
       fetchSafe(`/api/pressings?t=${t}`).then((d: any) => { if (Array.isArray(d)) dispatch({type:"SET_PRESSINGS", payload: d.map((p: any) => ({...p, id: p.id.toString()}))}); });
       fetchSafe(`/api/users?t=${t}`).then((d: any) => {
