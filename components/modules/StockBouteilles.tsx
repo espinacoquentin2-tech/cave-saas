@@ -344,6 +344,7 @@ export function ExpedierModal({ bl, onClose }: { bl: any; onClose: any }) {
   const submit = async () => {
     if (!qtyNum || qtyNum <= 0 || qtyNum > max) return alert("Quantité invalide.");
     if (!clientName.trim()) return alert("Nom du client requis.");
+    if (!destination.trim()) return alert("Destination requise.");
     if (!expeditionDate) return alert("Date d'expédition requise.");
     if (!eligibility.eligible) return alert(`Lot non éligible: ${eligibility.reason}`);
 

@@ -3,10 +3,16 @@ import { ZodError } from 'zod';
 import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { createVracShipmentSchema } from '@/server/modules/expeditions/vrac.schemas';
 import { VracExpeditionService } from '@/server/modules/expeditions/vrac.service';
-import { logger } from '@/server/shared/logger';
+import { logger, serializeErrorDetails } from '@/server/shared/logger';
 import { assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
 const VRAC_SHIPMENT_ROLES = ['ADMIN', 'CHEF_CAVE'] as const;
+
+const isBusinessLogicErrorLike = (error: unknown): error is BusinessLogicError =>
+  error instanceof BusinessLogicError ||
+  (error instanceof Error &&
+    error.name === 'BusinessLogicError' &&
+    typeof (error as Partial<BusinessLogicError>).statusCode === 'number');
 
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
@@ -74,7 +80,7 @@ export async function POST(request: Request) {
       );
     }
 
-    if (error instanceof BusinessLogicError) {
+    if (isBusinessLogicErrorLike(error)) {
       logger.warn({
         action: 'expeditions.vrac.post.business_rejected',
         requestId,
@@ -90,7 +96,7 @@ export async function POST(request: Request) {
     logger.error({
       action: 'expeditions.vrac.post.unhandled_error',
       requestId,
-      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+      details: serializeErrorDetails(error),
     });
 
     return NextResponse.json(

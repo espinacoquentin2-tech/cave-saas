@@ -4006,7 +4006,7 @@ function Expeditions({ onSelectLot }: { onSelectLot: any }) {
             volumeHl: volumeNum,
             client: client.trim(),
             destination: destination.trim(),
-            mode,
+            mode: String(mode).toUpperCase(),
             note: note.trim() || null,
             idempotencyKey,
           }),
