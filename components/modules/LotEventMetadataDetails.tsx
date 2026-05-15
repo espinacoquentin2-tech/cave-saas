@@ -45,7 +45,12 @@ export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
   }
 
   const operation = String(metadata.operation || "").toUpperCase();
-  if (operation !== "EXPEDITION_VRAC" && operation !== "INTRANT" && operation !== "TRANSFERT") {
+  if (
+    operation !== "EXPEDITION_VRAC" &&
+    operation !== "INTRANT" &&
+    operation !== "TRANSFERT" &&
+    operation !== "CORRECTION_VOLUME"
+  ) {
     return null;
   }
 
@@ -66,6 +71,16 @@ export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
             ["Reliquat", formatNumber(metadata.remainingVolumeHl, " hL")],
             ["Statut reliquat", metadata.remainderStatus || null],
             ["Destinations", formatTransferDestinations(metadata.destinations)],
+            ["Note", metadata.note || null],
+          ]
+      : operation === "CORRECTION_VOLUME"
+        ? [
+            ["Ancien volume", formatNumber(metadata.previousVolumeHl, " hL")],
+            ["Nouveau volume", formatNumber(metadata.newVolumeHl, " hL")],
+            ["Delta", formatNumber(metadata.deltaHl, " hL")],
+            ["Sens", metadata.eventType === "CORRECTION_HAUSSE" ? "Hausse" : metadata.eventType === "CORRECTION_BAISSE" ? "Baisse" : null],
+            ["Contenant", metadata.containerId ? `#${metadata.containerId}` : null],
+            ["Raison", metadata.reason || null],
             ["Note", metadata.note || null],
           ]
       : [

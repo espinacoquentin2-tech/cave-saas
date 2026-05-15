@@ -121,17 +121,31 @@ export class LotModuleService {
 
       const updatedLot = await LotRepository.updateLotVolume(tx, lot.id, toDecimal(input.newVolume));
       const eventType = diff > 0 ? 'CORRECTION_HAUSSE' : 'CORRECTION_BAISSE';
+      const previousVolume = toNumber(lot.currentVolume);
+      const note = input.note?.trim() || null;
       const event = await LotRepository.createLotEvent(tx, {
         eventType,
         operatorUserId: operator.id,
         comment: [
-          `Ancien volume: ${toNumber(lot.currentVolume)} hL.`,
+          `Ancien volume: ${previousVolume} hL.`,
           `Nouveau volume: ${input.newVolume} hL.`,
           `Delta: ${diff > 0 ? '+' : ''}${diff} hL.`,
-          input.note?.trim() ? `Motif: ${input.note.trim()}` : null,
+          note ? `Motif: ${note}` : null,
         ]
           .filter(Boolean)
           .join(' '),
+        metadata: {
+          operation: 'CORRECTION_VOLUME',
+          eventType,
+          lotId: updatedLot.id,
+          containerId: updatedLot.currentContainerId,
+          previousVolumeHl: previousVolume,
+          newVolumeHl: input.newVolume,
+          deltaHl: diff,
+          reason: note,
+          note,
+          idempotencyKey: input.idempotencyKey,
+        },
       });
 
       await LotRepository.createLotEventLink(tx, {

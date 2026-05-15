@@ -100,7 +100,13 @@ export class LotRepository {
 
   static createLotEvent(
     tx: LotTransaction,
-    data: { eventType: string; operatorUserId: number; comment: string; eventDatetime?: Date },
+    data: {
+      eventType: string;
+      operatorUserId: number;
+      comment: string;
+      eventDatetime?: Date;
+      metadata?: Prisma.InputJsonValue;
+    },
   ) {
     return tx.lotEvent.create({ data });
   }
