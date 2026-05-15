@@ -127,7 +127,7 @@ export class TracabiliteService {
           id: `bulk-event-${e.id}`,
           eventDatetime: e.eventDatetime,
           comment: e.comment || 'Expédition',
-          metadata: null,
+          metadata: e.metadata,
         }));
     }
 

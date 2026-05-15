@@ -7,6 +7,7 @@ import { LOT_STATUS_COLORS, useStore, useTheme } from "@/lib/store";
 import { getBottleStatusLabel } from "@/lib/bottles";
 import { buildApiHeaders } from "@/lib/client-app-helpers";
 import { BottleEventMetadataDetails } from "@/components/modules/BottleEventMetadataDetails";
+import { LotEventMetadataDetails } from "@/components/modules/LotEventMetadataDetails";
 
 export function Tracabilite({ onSelectLot }: { onSelectLot: any }) {
   const T = useTheme(); 
@@ -237,6 +238,7 @@ export function Tracabilite({ onSelectLot }: { onSelectLot: any }) {
                           <div style={{ fontSize: 12, fontWeight: "bold", color: T.green }}>📦 {e.comment || "Expédition"}</div>
                           <div style={{ fontSize: 10, color: T.textDim, marginTop: 4 }}>{new Date(e.eventDatetime).toLocaleDateString('fr-FR')}</div>
                           <BottleEventMetadataDetails metadata={e.metadata} />
+                          <LotEventMetadataDetails metadata={e.metadata} />
                         </div>
                       </div>
                     ))}

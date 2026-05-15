@@ -51,6 +51,7 @@ import { PlanificateurVendanges } from "@/components/modules/PlanificateurVendan
 import { Stocks } from "@/components/modules/Stocks";
 import { ExpedierModal, HabillerModal, StockBouteilles } from "@/components/modules/StockBouteilles";
 import { BottleEventMetadataDetails } from "@/components/modules/BottleEventMetadataDetails";
+import { LotEventMetadataDetails } from "@/components/modules/LotEventMetadataDetails";
 import { Tracabilite } from "@/components/modules/Tracabilite";
 import { WorkOrdersAdmin } from "@/components/modules/WorkOrdersAdmin";
 import {
@@ -3779,6 +3780,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
                   <span style={{ fontSize:10, color:T.textDim, fontFamily:"monospace" }}>{e.createdAt ? new Date(e.createdAt).toLocaleDateString('fr-FR') : e.date}</span>
                 </div>
                 <div style={{ fontSize:12, color:T.text, marginTop:6 }}>{e.comment || e.note || "--"}</div>
+                <LotEventMetadataDetails metadata={e.metadata} />
               </div>
             </div>
           ))}
@@ -5533,6 +5535,7 @@ export default function App() {
             volumeOut: (e.eventType==='TRANSFERT' || e.eventType==='EXPEDITION_VRAC') ? lotLinks[0]?.volumeChange || 0 : 0,
             operator: operatorName,
             comment: e.comment || "",
+            metadata: e.metadata || null,
             note: e.comment || "",
           };
         })});

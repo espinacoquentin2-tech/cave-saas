@@ -118,6 +118,7 @@ export class VracExpeditionService {
           const operatorId = await this.getUserId(tx, userEmail);
           const shipmentDate = new Date();
           const shipmentVolume = new Prisma.Decimal(input.volumeHl);
+          const previousLotStatus = lot.status;
 
           const decrementResult = await tx.lot.updateMany({
             where: {
@@ -141,12 +142,13 @@ export class VracExpeditionService {
           }
 
           const remainingVolume = roundVolume(availableVolume - input.volumeHl);
+          const newLotStatus = remainingVolume <= EMPTY_VOLUME_EPSILON ? 'ARCHIVE' : lot.status;
           if (remainingVolume <= EMPTY_VOLUME_EPSILON) {
             await tx.lot.update({
               where: { id: lot.id },
               data: {
                 currentVolume: new Prisma.Decimal(0),
-                status: 'ARCHIVE',
+                status: newLotStatus,
               },
             });
           }
@@ -182,6 +184,23 @@ export class VracExpeditionService {
               eventDatetime: shipmentDate,
               operatorUserId: operatorId,
               comment,
+              metadata: {
+                operation: 'EXPEDITION_VRAC',
+                lotId: lot.id,
+                containerId: container.id,
+                volumeHl: input.volumeHl,
+                client: input.client,
+                destination: input.destination,
+                mode: input.mode,
+                note: input.note ?? null,
+                previousLotVolumeHl: roundVolume(availableVolume),
+                remainingLotVolumeHl: Math.max(0, remainingVolume),
+                previousLotStatus,
+                newLotStatus,
+                containerType: container.type,
+                containerCode: container.code,
+                idempotencyKey: input.idempotencyKey ?? null,
+              },
             },
           });
           await tx.lotEventLot.create({
@@ -227,7 +246,7 @@ export class VracExpeditionService {
             containerId: container.id,
             shippedVolumeHl: input.volumeHl,
             remainingVolumeHl: Math.max(0, remainingVolume),
-            lotStatus: remainingVolume <= EMPTY_VOLUME_EPSILON ? 'ARCHIVE' : lot.status,
+            lotStatus: newLotStatus,
             containerStatus: remainingVolume <= EMPTY_VOLUME_EPSILON && otherActiveLotsInContainer === 0 ? 'VIDE' : container.status,
           };
         },
