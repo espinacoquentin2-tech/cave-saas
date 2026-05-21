@@ -53,7 +53,16 @@ export class BottleModuleService {
       include: {
         bottleEventLinks: {
           include: {
-            event: true,
+            event: {
+              include: {
+                operator: {
+                  select: {
+                    name: true,
+                    email: true,
+                  },
+                },
+              },
+            },
           },
           orderBy: { id: 'desc' },
         },

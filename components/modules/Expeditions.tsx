@@ -39,9 +39,8 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
 
   const [tab, setTab] = useState("bouteilles");
 
-  // Plus de deliveredIds local !
-  // On utilise l'état du serveur via confirmDeliveryId
-  const [confirmDeliveryId, setConfirmDeliveryId] = useState(null);
+  // Plus de deliveredIds local : la confirmation est portée par le serveur.
+  const [confirmDeliveryTarget, setConfirmDeliveryTarget] = useState<any | null>(null);
   const [isValidatingDelivery, setIsValidatingDelivery] = useState(false);
   const [modalDistillerie, setModalDistillerie] = useState(false);
   const [modalBouteilles, setModalBouteilles] = useState(false);
@@ -49,10 +48,34 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
   const [selectedBottleShipmentLot, setSelectedBottleShipmentLot] = useState<any | null>(null);
 
   // --- LOGIQUE MÉTIER ---
-  // On filtre les expéditions depuis les événements du store (chargés via fetchAll)
-  const expeditionsBouteilles = (state.events || [])
-    .filter((e: any) => e.type === "EXPEDITION")
-    .sort((a: any,b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  const bottleRows = (state.bottleLots || [])
+    .flatMap((lot: any) => (lot.bottleEvents || [])
+      .filter((event: any) => event.type === "EXPEDITION" && event.roleInEvent === "SOURCE" && !event.cancelledAt)
+      .map((event: any) => {
+        const metadata = event.metadata || {};
+        const destination = typeof metadata.destination === "string" && metadata.destination.trim()
+          ? metadata.destination.trim()
+          : null;
+        const customer = typeof metadata.customer === "string" && metadata.customer.trim()
+          ? metadata.customer.trim()
+          : "";
+
+        return {
+          id: event.id,
+          deliveryType: "BOTTLE",
+          eventDatetime: event.eventDatetime,
+          date: event.eventDatetime ? new Date(event.eventDatetime).toLocaleDateString("fr-FR") : "--",
+          lot,
+          quantity: Number(metadata.quantity || event.bottleCount || 0),
+          details: [
+            customer ? `Client : ${customer}` : null,
+            destination ? `Destination : ${destination}` : null,
+          ].filter(Boolean).join(" • ") || event.comment || "Client non renseigné",
+          operator: event.operator || "--",
+          status: metadata.deliveryStatus === "LIVRE" ? "LIVRE" : "EN_LIVRAISON",
+        };
+      }))
+    .sort((a: any,b: any) => new Date(b.eventDatetime || 0).getTime() - new Date(a.eventDatetime || 0).getTime());
 
   const expeditionsDistillerie = (state.events || [])
     .filter((e: any) => e.type === "DISTILLERIE" || (e.type === "PERTE" && e.note?.includes("[DISTILLERIE]")))
@@ -93,49 +116,35 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
 
   // --- ACTION SÉCURISÉE ---
   const executeDelivery = async () => {
-    if (!confirmDeliveryId) return;
+    if (!confirmDeliveryTarget || isValidatingDelivery) return;
     setIsValidatingDelivery(true);
 
     try {
-      // On met à jour le statut DIRECTEMENT en base de données
-      const res = await fetch('/api/containers', {
-        method: 'PUT',
+      const payload = {
+        type: confirmDeliveryTarget.type,
+        id: Number(confirmDeliveryTarget.id),
+      };
+      const res = await fetch('/api/expeditions/confirm-delivery', {
+        method: 'POST',
         headers: buildApiHeaders(user),
-        body: JSON.stringify({
-          id: parseInt(confirmDeliveryId),
-          status: 'LIVRE' // Le backend devient le seul juge du statut
-        })
+        body: JSON.stringify(payload),
       });
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.error || "Erreur serveur");
+        throw new Error(extractApiErrorMessage(data, "Erreur lors de la confirmation de livraison."));
       }
 
-      dispatch({ type: "TOAST_ADD", payload: { msg: "Expédition archivée et marquée comme livrée.", color: T.green } });
+      dispatch({ type: "TOAST_ADD", payload: { msg: "Livraison confirmée.", color: T.green } });
 
-      // On rafraîchit les données pour que tous les utilisateurs voient le changement
       if (refreshData) await refreshData();
 
     } catch(e: any) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: e?.message || "Erreur serveur", color: T.red } });
+      dispatch({ type: "TOAST_ADD", payload: { msg: e?.message || "Erreur lors de la confirmation de livraison.", color: T.red } });
     } finally {
       setIsValidatingDelivery(false);
-      setConfirmDeliveryId(null);
+      setConfirmDeliveryTarget(null);
     }
-  };
-
-  const parseBottleNote = (note: any) => {
-    const match = note?.match(/(\d+)\s*btl/);
-    const qty = match ? match[0] : "--";
-    let details = note || "";
-    if (details.includes("- Client :")) {
-       details = "Client : " + details.split("- Client :")[1].trim();
-    } else {
-       details = details.replace(/Expédition de \d+ btl.*\.?/i, "").trim();
-       if (!details) details = "Destinataire non renseigné";
-    }
-    return { qty, details };
   };
 
   const gridCols = "140px 160px 120px 1fr 120px 140px";
@@ -477,7 +486,7 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
       <div style={{ display:"flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom:20 }}>
         <div style={{ display:"flex", gap: 10 }}>
           <button onClick={() => setTab("bouteilles")} style={{ background: tab==="bouteilles" ? T.accent : "transparent", color: tab==="bouteilles" ? T.bg : T.accent, border: `1px solid ${T.accent}`, padding: "9px 18px", borderRadius: 3, fontSize: 11, fontWeight: "bold", letterSpacing: 1, cursor: "pointer", fontFamily: "monospace", transition:"all .2s" }}>
-            BOUTEILLES ({expeditionsBouteilles.length})
+            BOUTEILLES ({bottleRows.length})
           </button>
           <button onClick={() => setTab("vrac")} style={{ background: tab==="vrac" ? T.accent : "transparent", color: tab==="vrac" ? T.bg : T.accent, border: `1px solid ${T.accent}`, padding: "9px 18px", borderRadius: 3, fontSize: 11, fontWeight: "bold", letterSpacing: 1, cursor: "pointer", fontFamily: "monospace", transition:"all .2s" }}>
             VRAC / CITERNE ({vracRows.length})
@@ -513,23 +522,22 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
         {/* ... L'affichage des vues Bouteilles, Vrac et Distillerie reste identique visuellement ... */}
         {tab === "bouteilles" && (
           <>
-            {expeditionsBouteilles.length === 0 ? (
+            {bottleRows.length === 0 ? (
               <div style={{ padding:"40px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucune expédition de bouteilles enregistrée.</div>
-            ) : expeditionsBouteilles.map((e: any, i: any) => {
-              const { qty, details } = parseBottleNote(e.comment || e.note);
-              const isDelivered = e.status === "LIVRE";
-              const lotObj = (state.bottleLots || []).find((l: any) => String(l.id) === String(e.lotId || e.bottleLotId));
+            ) : bottleRows.map((row: any, i: any) => {
+              const isDelivered = row.status === "LIVRE";
+              const lotObj = row.lot;
 
               return (
-                <div key={e.id} style={{ display:"grid", gridTemplateColumns:gridCols, gap:16, padding:"16px 16px", alignItems:"center", borderBottom: i<expeditionsBouteilles.length-1 ? `1px solid ${T.border}` : "none", textAlign: "center" }}>
-                  <div style={{ fontSize:12, color:T.textDim, fontFamily:"monospace" }}>{e.date ? e.date.split(" à ")[0] : new Date(e.eventDatetime).toLocaleDateString('fr-FR')}</div>
+                <div key={row.id} style={{ display:"grid", gridTemplateColumns:gridCols, gap:16, padding:"16px 16px", alignItems:"center", borderBottom: i<bottleRows.length-1 ? `1px solid ${T.border}` : "none", textAlign: "center" }}>
+                  <div style={{ fontSize:12, color:T.textDim, fontFamily:"monospace" }}>{row.date}</div>
                   <div onClick={() => lotObj && onSelectLot && onSelectLot(lotObj)} style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, cursor: lotObj ? "pointer" : "default", textDecoration: lotObj ? "underline" : "none" }}>
-                    {lotObj ? lotObj.code : "--"}
+                    {lotObj ? (lotObj.businessCode || lotObj.code) : "--"}
                   </div>
-                  <div style={{ fontSize:13, color:T.textStrong }}>{qty}</div>
-                  <div style={{ fontSize:13, color:T.text }}>📦 {details}</div>
-                  <div style={{ fontSize:12, color:T.textDim }}>{e.operator}</div>
-                  <div onClick={() => setConfirmDeliveryId(e.id)} style={{cursor:"pointer", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
+                  <div style={{ fontSize:13, color:T.textStrong }}>{row.quantity ? `${row.quantity} btl` : "--"}</div>
+                  <div style={{ fontSize:13, color:T.text }}>📦 {row.details}</div>
+                  <div style={{ fontSize:12, color:T.textDim }}>{row.operator}</div>
+                  <div onClick={() => setConfirmDeliveryTarget({ type: "BOTTLE", id: row.id, label: lotObj?.businessCode || lotObj?.code })} style={{cursor:"pointer", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
                     <Badge label={isDelivered ? "Livré ✅" : "En livraison 🚚"} color={isDelivered ? T.textDim : T.accent} />
                   </div>
                 </div>
@@ -556,7 +564,8 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
                 !shipmentEvent ? lot.notes || null : null,
               ].filter(Boolean).join(" • ");
               const displayVolume = shipmentEvent?.volumeOut ? shipmentEvent.volumeOut : (lot.currentVolume || lot.volume || 0);
-              const statusLabel = formatStatus(container?.status || lot.status || "EN COURS");
+              const isDelivered = shipmentEvent?.metadata?.deliveryStatus === "LIVRE" || container?.status === "LIVRE";
+              const statusLabel = formatStatus(isDelivered ? "LIVRE" : (container?.status || lot.status || "EN COURS"));
 
               return (
                 <div key={lot.id} style={{ display:"grid", gridTemplateColumns:gridCols, gap:16, padding:"16px 16px", alignItems:"center", borderBottom: i<vracRows.length-1 ? `1px solid ${T.border}` : "none", textAlign: "center" }}>
@@ -567,8 +576,11 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
                   <div style={{ fontSize:13, color:T.textStrong }}>{formatVolShort(displayVolume)}</div>
                   <div style={{ fontSize:13, color:T.text }}>🚛 {details || "Citerne / compartiment"}</div>
                   <div style={{ fontSize:12, color:T.textDim }}>{shipmentEvent?.operator || "--"}</div>
-                  <div style={{ display: "flex", justifyContent: "center" }}>
-                    <Badge label={statusLabel} color={container?.status === "LIVRE" ? T.textDim : T.accent} />
+                  <div
+                    onClick={() => shipmentEvent && setConfirmDeliveryTarget({ type: "VRAC", id: shipmentEvent.id, label: lot.businessCode || lot.code })}
+                    style={{ cursor: shipmentEvent ? "pointer" : "default", display: "flex", justifyContent: "center" }}
+                  >
+                    <Badge label={statusLabel} color={isDelivered ? T.textDim : T.accent} />
                   </div>
                 </div>
               );
@@ -600,7 +612,7 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
                   <div style={{ fontSize:14, color:T.red, fontWeight: "bold", fontFamily: "monospace" }}>{displayVol} hL</div>
                   <div style={{ fontSize:13, color:T.textStrong }}>🏭 {cleanNote}</div>
                   <div style={{ fontSize:12, color:T.textDim }}>{e.operator}</div>
-                  <div onClick={() => setConfirmDeliveryId(e.id)} style={{cursor:"pointer", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
+                  <div onClick={() => setConfirmDeliveryTarget({ type: "DISTILLERIE", id: e.id, label: lotObj?.businessCode || lotObj?.code || e.lotId })} style={{cursor:"pointer", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
                     <Badge label={isDelivered ? "Livré ✅" : "En livraison 🚚"} color={isDelivered ? T.textDim : T.accent} />
                   </div>
                 </div>
@@ -610,14 +622,14 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
         )}
       </div>
 
-      {confirmDeliveryId && (
-        <Modal title="Confirmation de livraison" onClose={() => setConfirmDeliveryId(null)}>
+      {confirmDeliveryTarget && (
+        <Modal title="Confirmation de livraison" onClose={() => setConfirmDeliveryTarget(null)}>
           <div style={{ padding:"20px 0", color:T.text, lineHeight:1.5 }}>
-            Confirmez-vous que cette citerne est bien arrivée chez le client ?<br/><br/>
-            La cuve passera au statut LIVRÉ en base de données.
+            Confirmez-vous que cette expédition est bien arrivée chez le client ?<br/><br/>
+            La livraison sera marquée comme confirmée en base de données.
           </div>
           <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-            <Btn variant="secondary" onClick={() => setConfirmDeliveryId(null)} disabled={isValidatingDelivery}>Annuler</Btn>
+            <Btn variant="secondary" onClick={() => setConfirmDeliveryTarget(null)} disabled={isValidatingDelivery}>Annuler</Btn>
             <Btn onClick={executeDelivery} disabled={isValidatingDelivery} style={{ background: isValidatingDelivery ? T.textDim : T.green, color:T.bg, borderColor: isValidatingDelivery ? T.textDim : T.green }}>
               {isValidatingDelivery ? "Validation..." : "Oui, confirmer la livraison"}
             </Btn>

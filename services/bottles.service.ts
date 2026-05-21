@@ -772,6 +772,8 @@ export class BottlesService {
           const operatorId = await this.getUserId(tx, userEmail);
           const expeditionDate = ensureValidDate(data.expeditionDate, "Date d'expédition");
           const eligibility = getExpeditionEligibility(sourceLot);
+          const destination = data.destination?.trim() || null;
+          const note = data.note?.trim() || null;
 
           if (!eligibility.eligible) {
             throw new BusinessLogicError(
@@ -819,8 +821,8 @@ export class BottlesService {
               shipmentDate: expeditionDate,
               customerName: data.clientName,
               comment: buildComment(
-                data.destination ? `Destination: ${data.destination}.` : null,
-                data.note ?? null,
+                destination ? `Destination: ${destination}.` : null,
+                note,
               ),
             },
           });
@@ -839,18 +841,18 @@ export class BottlesService {
               eventDatetime: expeditionDate,
               comment: buildComment(
                 `Expédition de ${data.count} btl vers ${data.clientName}.`,
-                data.destination ? `Destination: ${data.destination}.` : null,
-                data.note ?? null,
+                destination ? `Destination: ${destination}.` : null,
+                note,
               ),
               metadata: {
                 operation: 'EXPEDITION',
                 quantity: data.count,
                 customer: data.clientName,
-                destination: data.destination ?? null,
+                destination,
                 shipmentId: shipment.id,
                 shipmentLineId: shipmentLine.id,
                 sourceBottleLotId: sourceLot.id,
-                notes: data.note ?? null,
+                notes: note,
               },
             },
           });

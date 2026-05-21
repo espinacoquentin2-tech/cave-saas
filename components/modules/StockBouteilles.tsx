@@ -344,7 +344,6 @@ export function ExpedierModal({ bl, onClose }: { bl: any; onClose: any }) {
   const submit = async () => {
     if (!qtyNum || qtyNum <= 0 || qtyNum > max) return alert("Quantité invalide.");
     if (!clientName.trim()) return alert("Nom du client requis.");
-    if (!destination.trim()) return alert("Destination requise.");
     if (!expeditionDate) return alert("Date d'expédition requise.");
     if (!eligibility.eligible) return alert(`Lot non éligible: ${eligibility.reason}`);
 
@@ -357,9 +356,9 @@ export function ExpedierModal({ bl, onClose }: { bl: any; onClose: any }) {
           blId: parseInt(bl.id),
           count: qtyNum,
           expeditionDate,
-          clientName,
-          destination,
-          note,
+          clientName: clientName.trim(),
+          destination: destination.trim() || null,
+          note: note.trim() || null,
           idempotencyKey,
         }),
       });
@@ -426,7 +425,7 @@ export function ExpedierModal({ bl, onClose }: { bl: any; onClose: any }) {
       </FF>
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
-        <Btn onClick={submit} disabled={isSubmitting || !count || quantityInvalid || !clientName || !expeditionDate || !eligibility.eligible}>
+        <Btn onClick={submit} disabled={isSubmitting || !count || quantityInvalid || !clientName.trim() || !expeditionDate || !eligibility.eligible}>
           {isSubmitting ? "Traitement..." : "Valider l'expédition"}
         </Btn>
       </div>

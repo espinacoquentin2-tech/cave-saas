@@ -4859,6 +4859,7 @@ export default function App() {
                   cancelledBy: link.event?.cancelledBy,
                   cancelReason: link.event?.cancelReason,
                   cancelEventId: link.event?.cancelEventId,
+                  operator: link.event?.operator?.name || link.event?.operator?.email || "",
                   comment: link.event?.comment || "",
                   note: link.event?.comment || "",
                   metadata: link.event?.metadata || null,

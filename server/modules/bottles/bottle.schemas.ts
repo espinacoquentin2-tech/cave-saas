@@ -49,7 +49,7 @@ export const expedierSchema = z.object({
   count: z.coerce.number().int().positive(),
   expeditionDate: isoDateString,
   clientName: z.string().trim().min(2, 'Le nom du client est requis'),
-  destination: z.string().trim().min(1, 'La destination est obligatoire.'),
+  destination: z.string().trim().optional().nullable(),
   note: z.string().trim().optional().nullable(),
   idempotencyKey: z.string().trim().min(10),
 });
