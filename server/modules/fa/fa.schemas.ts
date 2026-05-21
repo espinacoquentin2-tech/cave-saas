@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FA_DENSITY_MAX, FA_DENSITY_MIN, FA_TEMPERATURE_MAX, FA_TEMPERATURE_MIN } from '@/validations/lots.schema';
 
 const optionalNullableNumber = (schema: z.ZodTypeAny) =>
   z.preprocess((value) => (value === '' || value === undefined ? null : value), schema.nullable().optional());
@@ -6,8 +7,8 @@ const optionalNullableNumber = (schema: z.ZodTypeAny) =>
 const faReadingSchema = z.object({
   lotId: z.coerce.number().int().positive(),
   date: z.string().trim().min(1),
-  density: optionalNullableNumber(z.coerce.number().min(980).max(1150)),
-  temperature: optionalNullableNumber(z.coerce.number().min(-5).max(45)),
+  density: optionalNullableNumber(z.coerce.number().min(FA_DENSITY_MIN).max(FA_DENSITY_MAX)),
+  temperature: optionalNullableNumber(z.coerce.number().min(FA_TEMPERATURE_MIN).max(FA_TEMPERATURE_MAX)),
 });
 
 export const saveFaTourSchema = z.object({

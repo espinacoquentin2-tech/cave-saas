@@ -81,6 +81,26 @@ export class PressingService {
       // Définition d'un type local pour les paramètres de destination
       type DestinationInput = { cuveId: number; vol: number };
 
+      const buildPressurageMetadata = (
+        lotId: number,
+        destinationContainer: { id: number; code: string; displayName: string },
+        volumeHl: number,
+        note: string,
+      ) => ({
+        operation: "PRESSURAGE",
+        pressingId: null,
+        pressoirId: press.id,
+        parcelleId: null,
+        parcelle: press.parcelle ?? null,
+        cepage: press.cepage ?? null,
+        weightKg: press.loadKg ?? null,
+        juiceVolumeHl: volumeHl,
+        destinationLotId: lotId,
+        destinationContainerId: destinationContainer.id,
+        destinationContainerCode: destinationContainer.code,
+        note,
+      });
+
       // Correction 2 & 3 : Typage explicite des arguments de la fonction locale
       const createLot = async (
         dests: DestinationInput[], 
@@ -106,7 +126,11 @@ export class PressingService {
             }
           });
 
-          await tx.container.update({ where: { id: dest.cuveId }, data: { status: "PLEIN" } });
+          const destinationContainer = await tx.container.update({
+            where: { id: dest.cuveId },
+            data: { status: "PLEIN" },
+            select: { id: true, code: true, displayName: true },
+          });
           
           // Traçabilité de l'opérateur via l'événement (Puisque 'operator' n'est pas sur Lot)
           const user = await tx.user.findFirst({ where: { name: data.operator } });
@@ -114,12 +138,17 @@ export class PressingService {
             data: {
               eventType: 'PRESSURAGE',
               operatorUserId: user?.id || 1,
-              comment: `Jus écoulé du pressoir ${press.nom}`
+              comment: `Jus écoulé du pressoir ${press.nom}`,
+              metadata: buildPressurageMetadata(lot.id, destinationContainer, dest.vol, desc),
             }
           });
 
           await tx.lotEventLot.create({
             data: { eventId: event.id, lotId: lot.id, roleInEvent: 'CIBLE', volumeChange: dest.vol }
+          });
+
+          await tx.lotEventContainer.create({
+            data: { eventId: event.id, containerId: destinationContainer.id, roleInEvent: 'CIBLE' }
           });
           
           newLots.push(lot);

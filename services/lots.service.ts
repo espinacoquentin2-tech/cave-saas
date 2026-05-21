@@ -3,12 +3,69 @@ import { z } from 'zod';
 import { prisma } from '@/server/shared/prisma';
 import { 
   AddIntrantSchema, 
+  FA_DENSITY_MAX,
+  FA_DENSITY_MIN,
+  FA_TEMPERATURE_MAX,
+  FA_TEMPERATURE_MIN,
   SaveFaTourSchema,
   CreateLotSchema, 
   UpdateLotStatusSchema, 
   UpdateLotVolumeSchema 
 } from '../validations/lots.schema';
 
+const isProvided = (value: unknown) => value !== null && value !== undefined && value !== '';
+
+const toFiniteNumber = (value: unknown) => {
+  if (!isProvided(value)) return null;
+  const numberValue = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(numberValue) ? numberValue : null;
+};
+
+const validateFaTourBusinessRules = (data: z.infer<typeof SaveFaTourSchema>) => {
+  if (!data || !Array.isArray(data.readings) || data.readings.length === 0) {
+    throw new Error('Aucun relevé à sauvegarder.');
+  }
+
+  if (typeof data.idempotencyKey !== 'string' || data.idempotencyKey.trim().length < 10) {
+    throw new Error('Clé d’idempotence FA invalide.');
+  }
+
+  let hasMeasurement = false;
+
+  data.readings.forEach((reading, index) => {
+    const label = `Relevé FA #${index + 1}`;
+
+    if (!reading || !Number.isInteger(reading.lotId) || reading.lotId <= 0) {
+      throw new Error(`${label} : lot invalide.`);
+    }
+
+    if (typeof reading.date !== 'string' || !reading.date.trim()) {
+      throw new Error(`${label} : date obligatoire.`);
+    }
+
+    if (isProvided(reading.density)) {
+      hasMeasurement = true;
+      const density = toFiniteNumber(reading.density);
+
+      if (density === null || density < FA_DENSITY_MIN || density > FA_DENSITY_MAX) {
+        throw new Error(`${label} : densité invalide (${FA_DENSITY_MIN}-${FA_DENSITY_MAX}).`);
+      }
+    }
+
+    if (isProvided(reading.temperature)) {
+      hasMeasurement = true;
+      const temperature = toFiniteNumber(reading.temperature);
+
+      if (temperature === null || temperature < FA_TEMPERATURE_MIN || temperature > FA_TEMPERATURE_MAX) {
+        throw new Error(`${label} : température invalide (${FA_TEMPERATURE_MIN}-${FA_TEMPERATURE_MAX} °C).`);
+      }
+    }
+  });
+
+  if (!hasMeasurement) {
+    throw new Error('Aucune donnée valide à enregistrer.');
+  }
+};
 
 export class LotsService {
   
@@ -77,6 +134,8 @@ export class LotsService {
   // 2. SAUVEGARDE TOUR FA (AVEC RÈGLE MÉTIER DE FERMETURE)
   // =========================================================================
   static async saveFaTour(data: z.infer<typeof SaveFaTourSchema>, userEmail: string) {
+    validateFaTourBusinessRules(data);
+
     return await prisma.$transaction(async (tx) => {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
       if (existingTx) throw new Error("ALREADY_APPLIED: Relevés déjà enregistrés.");

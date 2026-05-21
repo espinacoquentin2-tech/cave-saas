@@ -1,6 +1,11 @@
 // validations/lots.schema.ts
 import { z } from 'zod';
 
+export const FA_DENSITY_MIN = 980;
+export const FA_DENSITY_MAX = 1150;
+export const FA_TEMPERATURE_MIN = -5;
+export const FA_TEMPERATURE_MAX = 45;
+
 export const AddIntrantSchema = z.object({
   lotId: z.number().int().positive(),
   intrant: z.string().min(1),
@@ -12,8 +17,8 @@ export const AddIntrantSchema = z.object({
 export const FaReadingRowSchema = z.object({
   lotId: z.number().int().positive(),
   date: z.string().min(1),
-  density: z.number().min(980).max(1150).optional().nullable(),
-  temperature: z.number().min(-5).max(45).optional().nullable(),
+  density: z.number().min(FA_DENSITY_MIN).max(FA_DENSITY_MAX).optional().nullable(),
+  temperature: z.number().min(FA_TEMPERATURE_MIN).max(FA_TEMPERATURE_MAX).optional().nullable(),
 });
 
 export const SaveFaTourSchema = z.object({
