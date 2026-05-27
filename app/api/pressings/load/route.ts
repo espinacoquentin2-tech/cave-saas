@@ -58,7 +58,15 @@ export async function POST(request: Request) {
     }
 
     const message = error instanceof Error ? error.message : 'unknown_error';
-    const status = message.includes('ALREADY_APPLIED') ? 400 : message.includes('MIX_WARNING') ? 409 : 500;
+    const status = message.includes('ALREADY_APPLIED')
+      ? 400
+      : message.includes('MIX_WARNING')
+        ? 409
+        : message.includes('introuvable')
+          ? 404
+          : message.includes('supérieur au disponible')
+            ? 409
+            : 500;
 
     logger.error({
       action: 'pressings.load.post.unhandled_error',
@@ -72,4 +80,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

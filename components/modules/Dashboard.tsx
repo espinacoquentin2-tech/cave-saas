@@ -101,8 +101,8 @@ export function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh, canSho
 
   const totalAlertsCount = caveAlerts.length + stockAlerts.length;
 
-  // Utilisation des createdAt BDD
-  const recentEvts = [...events].sort((a: any, b: any) => new Date(b.createdAt || b.date).getTime() - new Date(a.createdAt || a.date).getTime()).slice(0, 6);
+  const getEventTimestamp = (event: any) => event.eventDatetime || event.createdAt || event.date;
+  const recentEvts = [...events].sort((a: any, b: any) => new Date(getEventTimestamp(b)).getTime() - new Date(getEventTimestamp(a)).getTime()).slice(0, 6);
   const getLotCode = (id: any) => lots.find((l: any) => String(l.id) === String(id))?.businessCode || lots.find((l: any) => String(l.id) === String(id))?.code || id;
   const getContainerName = (id: any) => containers.find((c: any) => String(c.id) === String(id))?.displayName || containers.find((c: any) => String(c.id) === String(id))?.name || id;
 
@@ -283,7 +283,7 @@ export function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh, canSho
             <div style={{ color:T.textDim, fontSize:12, fontStyle:"italic", textAlign:"center", padding:"30px 0" }}>Aucune activité enregistrée</div>
           ) : recentEvts.map((e, i) => (
             <div key={e.id} style={{ display:"grid", gridTemplateColumns:"120px 110px 1fr 28px", gap:8, alignItems:"center", padding:"10px 0", borderBottom:i < recentEvts.length-1 ? `1px solid ${T.border}` : "none" }}>
-              <div style={{ fontSize:10, color:T.textDim, fontFamily:"monospace" }}>{new Date(e.createdAt || e.date).toLocaleDateString('fr-FR')}</div>
+              <div style={{ fontSize:10, color:T.textDim, fontFamily:"monospace" }}>{new Date(getEventTimestamp(e)).toLocaleDateString('fr-FR')}</div>
               <Badge label={e.eventType || e.type} />
               <div style={{ fontSize:11, color:T.textStrong, fontFamily:"monospace", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getLotCode(e.lotId)}</div>
               <div style={{ fontSize:10, color:T.textDim }}>{e.operator?.split("@")[0] || e.operator}</div>

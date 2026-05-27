@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { ZodError } from 'zod';
+import { Prisma } from '@prisma/client';
 import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { LotModuleService } from '@/server/modules/lots/lot.service';
 import { createLotSchema } from '@/server/modules/lots/lot.schemas';
@@ -173,6 +174,25 @@ export async function POST(request: Request) {
         },
         {
           status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      logger.warn({
+        action: 'lots.post.duplicate_conflict',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        {
+          error: 'BUSINESS_RULE_VIOLATION',
+          message: 'Un lot avec ce code existe déjà.',
+        },
+        {
+          status: 409,
           headers: { 'x-request-id': requestId },
         },
       );
