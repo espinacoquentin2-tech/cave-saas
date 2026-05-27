@@ -85,34 +85,77 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
     .filter((b: any) => getExpeditionEligibility(b).eligible && !b.archivedAt && !b.cancelledAt)
     .sort((a: any, b: any) => String(a.businessCode || a.code || "").localeCompare(String(b.businessCode || b.code || "")));
 
-  const isVracShipmentContainer = (container: any) => ["CITERNE", "COMPARTIMENT"].includes(container?.type);
   const vracShipmentAllowedStatuses = new Set(["VIN_DE_BASE", "ASSEMBLAGE", "ASSEMBLE", "RESERVE"]);
-  const findLotContainer = (lot: any) => {
-    const lotContainerId = lot.currentContainerId || lot.containerId || lot.currentContainer?.id;
-    return (state.containers || []).find((c: any) => String(c.id) === String(lotContainerId)) || lot.currentContainer || null;
+  const lotById = new Map<string, any>((state.lots || []).map((lot: any) => [String(lot.id), lot]));
+  const containerById = new Map<string, any>((state.containers || []).map((container: any) => [String(container.id), container]));
+  const normalizeVracShipment = (event: any) => {
+    const metadata = event.metadata || {};
+    const rawLines = Array.isArray(metadata.lines) && metadata.lines.length > 0
+      ? metadata.lines
+      : [{
+          lotId: metadata.lotId || event.lotId || event.lotIds?.[0],
+          lotCode: metadata.lotCode,
+          volumeHl: metadata.volumeHl || event.volumeOut || 0,
+          compartmentLabel: metadata.compartmentLabel || null,
+          mode: metadata.mode || "VRAC",
+          note: metadata.note || null,
+          legacyContainerId: metadata.containerId || event.containerId || event.containerIds?.[0],
+        }];
+    const lines = rawLines.map((line: any, index: number) => {
+      const lot = lotById.get(String(line.lotId));
+      const legacyContainerId = line.legacyContainerId || metadata.containerId || event.containerId || event.containerIds?.[0];
+      const legacyContainer = legacyContainerId ? containerById.get(String(legacyContainerId)) : null;
+      return {
+        ...line,
+        key: `${event.id}-${line.lotId || index}-${index}`,
+        lot,
+        lotId: line.lotId,
+        lotCode: line.lotCode || lot?.businessCode || lot?.code || `Lot ${line.lotId || "?"}`,
+        volumeHl: Number(line.volumeHl || 0),
+        compartmentLabel: line.compartmentLabel || (metadata.lines ? "" : "ancien format"),
+        mode: line.mode || metadata.mode || "VRAC",
+        note: line.note || "",
+        legacyContainer,
+      };
+    });
+    const status = metadata.status === "LIVREE" || metadata.deliveryStatus === "LIVRE" ? "LIVREE" : (metadata.status || "PREPAREE");
+    const totalVolume = Number(metadata.totalVolumeHl || lines.reduce((sum: number, line: any) => sum + Number(line.volumeHl || 0), 0));
+    const client = metadata.client || "Client non renseigné";
+    const destination = metadata.destination || "";
+    const transporter = metadata.transporter || "";
+    const reference = [metadata.truckPlate, metadata.transportReference].filter(Boolean).join(" / ");
+
+    return {
+      id: event.id,
+      type: "VRAC",
+      eventDatetime: event.eventDatetime,
+      date: event.date ? event.date.split(" à ")[0] : (event.eventDatetime ? new Date(event.eventDatetime).toLocaleDateString("fr-FR") : "--"),
+      client,
+      destination,
+      transporter,
+      reference,
+      status,
+      isDelivered: status === "LIVREE",
+      totalVolume,
+      lineCount: Number(metadata.lineCount || lines.length),
+      operator: event.operator || "--",
+      logisticsNote: metadata.logisticsNote || metadata.note || "",
+      legacy: !Array.isArray(metadata.lines),
+      lines,
+    };
   };
-  const findVracShipmentEvent = (lot: any, container: any) => (state.events || []).find((event: any) => {
-    if (event.type !== "EXPEDITION_VRAC" && !(event.type === "EXPEDITION" && String(event.note || event.comment || "").toLowerCase().includes("expedition vrac"))) return false;
-    const eventLotIds = event.lotIds || (event.lotId ? [event.lotId] : []);
-    const eventContainerIds = event.containerIds || (event.containerId ? [event.containerId] : []);
-    return eventLotIds.some((id: any) => String(id) === String(lot.id))
-      || (container && eventContainerIds.some((id: any) => String(id) === String(container.id)));
-  });
-  const vracRows = (state.lots || [])
-    .map((lot: any) => {
-      const container = findLotContainer(lot);
-      return { lot, container, shipmentEvent: findVracShipmentEvent(lot, container) };
-    })
-    .filter(({ container }: any) => isVracShipmentContainer(container))
+  const vracRows = (state.events || [])
+    .filter((event: any) => event.type === "EXPEDITION_VRAC")
+    .map(normalizeVracShipment)
     .sort((a: any, b: any) => {
-      const dateA = new Date(a.shipmentEvent?.eventDatetime || a.lot.createdAt || a.lot.date || 0).getTime();
-      const dateB = new Date(b.shipmentEvent?.eventDatetime || b.lot.createdAt || b.lot.date || 0).getTime();
+      const dateA = new Date(a.eventDatetime || 0).getTime();
+      const dateB = new Date(b.eventDatetime || 0).getTime();
       return dateB - dateA;
     });
-  const eligibleVracRows = vracRows.filter(({ lot }: any) => {
+  const eligibleVracLots = (state.lots || []).filter((lot: any) => {
     const status = String(lot.status || "");
     return (lot.currentVolume || lot.volume || 0) > 0 && vracShipmentAllowedStatuses.has(status);
-  });
+  }).sort((a: any, b: any) => String(a.businessCode || a.code || "").localeCompare(String(b.businessCode || b.code || "")));
 
   // --- ACTION SÉCURISÉE ---
   const executeDelivery = async () => {
@@ -147,7 +190,7 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
     }
   };
 
-  const gridCols = "140px 160px 120px 1fr 120px 140px";
+  const gridCols = tab === "vrac" ? "120px 1fr 1fr 1fr 1fr 110px 90px 120px" : "140px 160px 120px 1fr 120px 140px";
 
   const BottleShipmentSelectModal = () => (
     <Modal title="Nouvel envoi bouteilles" onClose={() => setModalBouteilles(false)}>
@@ -185,22 +228,47 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
   );
 
   const VracShipmentModal = () => {
-    const [lotId, setLotId] = useState("");
-    const [volume, setVolume] = useState("");
     const [client, setClient] = useState("");
     const [destination, setDestination] = useState("");
-    const [mode, setMode] = useState("CITERNE");
-    const [note, setNote] = useState("");
+    const [transporter, setTransporter] = useState("");
+    const [truckPlate, setTruckPlate] = useState("");
+    const [transportReference, setTransportReference] = useState("");
+    const [plannedAt, setPlannedAt] = useState("");
+    const [logisticsNote, setLogisticsNote] = useState("");
+    const [lines, setLines] = useState([{ lotId: "", volume: "", compartmentLabel: "Compartiment 1", mode: "VRAC", note: "" }]);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [submitError, setSubmitError] = useState("");
     const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
-    const selectedRow = eligibleVracRows.find(({ lot }: any) => String(lot.id) === String(lotId));
-    const selectedLot = selectedRow?.lot;
-    const selectedContainer = selectedRow?.container;
-    const maxVolume = selectedLot ? Number(selectedLot.currentVolume || selectedLot.volume || 0) : 0;
-    const volumeNum = parseFloat(String(volume).replace(",", "."));
-    const volumeInvalid = !!volume && (!Number.isFinite(volumeNum) || volumeNum <= 0 || volumeNum > maxVolume);
-    const formValid = !!selectedLot && !!selectedContainer && Number.isFinite(volumeNum) && volumeNum > 0 && volumeNum <= maxVolume && client.trim().length > 0 && destination.trim().length > 0 && !!mode;
+    const getLineLot = (line: any) => eligibleVracLots.find((lot: any) => String(lot.id) === String(line.lotId));
+    const getLineVolume = (line: any) => parseFloat(String(line.volume).replace(",", "."));
+    const updateLine = (index: number, patch: any) => {
+      setLines((current) => current.map((line, i) => i === index ? { ...line, ...patch } : line));
+      setSubmitError("");
+    };
+    const addLine = () => {
+      setLines((current) => [...current, { lotId: "", volume: "", compartmentLabel: `Compartiment ${current.length + 1}`, mode: "VRAC", note: "" }]);
+      setSubmitError("");
+    };
+    const removeLine = (index: number) => {
+      setLines((current) => current.length <= 1 ? current : current.filter((_, i) => i !== index));
+      setSubmitError("");
+    };
+    const lineErrors = lines.map((line: any) => {
+      const lot = getLineLot(line);
+      const volumeNum = getLineVolume(line);
+      const maxVolume = lot ? Number(lot.currentVolume || lot.volume || 0) : 0;
+      if (!line.lotId) return "Lot obligatoire.";
+      if (!lot) return "Lot non éligible.";
+      if (!Number.isFinite(volumeNum) || volumeNum <= 0) return "Volume invalide.";
+      if (volumeNum > maxVolume) return `Max ${formatVolShort(maxVolume)}.`;
+      if (!["VRAC", "CITERNE", "AUTRE"].includes(String(line.mode))) return "Mode invalide.";
+      return "";
+    });
+    const totalVolume = lines.reduce((sum: number, line: any) => {
+      const volumeNum = getLineVolume(line);
+      return sum + (Number.isFinite(volumeNum) && volumeNum > 0 ? volumeNum : 0);
+    }, 0);
+    const formValid = client.trim().length > 0 && lines.length > 0 && lineErrors.every((error: string) => !error);
 
     const submit = async () => {
       if (!formValid || isSubmitting) return;
@@ -212,13 +280,20 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
           method: 'POST',
           headers: buildApiHeaders(user),
           body: JSON.stringify({
-            lotId: Number(selectedLot.id),
-            containerId: Number(selectedContainer.id),
-            volumeHl: volumeNum,
             client: client.trim(),
-            destination: destination.trim(),
-            mode: String(mode).toUpperCase(),
-            note: note.trim() || null,
+            destination: destination.trim() || null,
+            transporter: transporter.trim() || null,
+            truckPlate: truckPlate.trim() || null,
+            transportReference: transportReference.trim() || null,
+            plannedAt: plannedAt || null,
+            logisticsNote: logisticsNote.trim() || null,
+            lines: lines.map((line: any) => ({
+              lotId: Number(line.lotId),
+              volumeHl: getLineVolume(line),
+              compartmentLabel: line.compartmentLabel.trim() || null,
+              mode: String(line.mode).toUpperCase(),
+              note: line.note.trim() || null,
+            })),
             idempotencyKey,
           }),
         });
@@ -239,65 +314,85 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
 
     return (
       <Modal title="Nouvel envoi vrac / citerne" onClose={() => setModalVrac(false)}>
-        <FF label="Lot vrac éligible">
-          <Select value={lotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setLotId(e.target.value); setVolume(""); setSubmitError(""); }} disabled={eligibleVracRows.length === 0 || isSubmitting}>
-            <option value="">Sélectionner un lot</option>
-            {eligibleVracRows.map(({ lot, container }: any) => (
-              <option key={lot.id} value={lot.id}>
-                {(lot.businessCode || lot.code)} · {(container.displayName || container.name || container.code)} · {formatVolShort(lot.currentVolume || lot.volume || 0)}
-              </option>
-            ))}
-          </Select>
-        </FF>
-
-        {selectedLot && (
-          <div style={{ background: T.surfaceHigh, border: `1px solid ${T.border}`, borderRadius: 4, padding: 14, marginBottom: 14 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1 }}>Contenant actuel</div>
-                <div style={{ fontSize: 13, color: T.textStrong }}>{selectedContainer?.displayName || selectedContainer?.name || selectedContainer?.code || "--"}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1 }}>Type</div>
-                <div style={{ fontSize: 13, color: T.textStrong }}>{selectedContainer?.type || "--"}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 10, color: T.textDim, textTransform: "uppercase", letterSpacing: 1 }}>Volume disponible</div>
-                <div style={{ fontSize: 13, color: T.textStrong }}>{formatVolShort(maxVolume)}</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-          <FF label={`Volume à expédier${selectedLot ? ` (max ${formatVolShort(maxVolume)})` : ""}`}>
-            <div style={{ display: "flex", gap: 8 }}>
-              <Input type="number" step="0.1" value={volume} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setVolume(e.target.value); setSubmitError(""); }} placeholder="0.0" disabled={isSubmitting} style={{ flex: 1, color: volumeInvalid ? T.red : T.text }} />
-              <Btn variant="secondary" onClick={() => setVolume(maxVolume.toString())} disabled={!selectedLot || isSubmitting}>MAX</Btn>
-            </div>
-            {volumeInvalid && <div style={{ color: T.red, fontSize: 11, marginTop: 6 }}>Volume invalide ou supérieur au disponible.</div>}
-          </FF>
-          <FF label="Mode d'envoi">
-            <Select value={mode} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setMode(e.target.value); setSubmitError(""); }} disabled={isSubmitting}>
-              <option value="CITERNE">Citerne</option>
-              <option value="VRAC">Vrac</option>
-              <option value="AUTRE">Autre</option>
-            </Select>
-          </FF>
-        </div>
-
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <FF label="Client">
-            <Input value={client} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setClient(e.target.value); setSubmitError(""); }} placeholder="Nom client" disabled={isSubmitting} />
+            <Input value={client} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setClient(e.target.value); setSubmitError(""); }} placeholder="MUMM" disabled={isSubmitting} />
           </FF>
           <FF label="Destination">
-            <Input value={destination} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setDestination(e.target.value); setSubmitError(""); }} placeholder="Destination" disabled={isSubmitting} />
+            <Input value={destination} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setDestination(e.target.value); setSubmitError(""); }} placeholder="REIMS" disabled={isSubmitting} />
           </FF>
         </div>
 
-        <FF label="Note optionnelle">
-          <Input value={note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNote(e.target.value)} placeholder="Bon, transporteur, consignes..." disabled={isSubmitting} />
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <FF label="Transporteur">
+            <Input value={transporter} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setTransporter(e.target.value); setSubmitError(""); }} placeholder="Transport Durand" disabled={isSubmitting} />
+          </FF>
+          <FF label="Immatriculation / citerne">
+            <Input value={truckPlate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setTruckPlate(e.target.value); setSubmitError(""); }} placeholder="AB-123-CD" disabled={isSubmitting} />
+          </FF>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <FF label="Référence transport">
+            <Input value={transportReference} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setTransportReference(e.target.value); setSubmitError(""); }} placeholder="BL-2026-001" disabled={isSubmitting} />
+          </FF>
+          <FF label="Date prévue d'enlèvement">
+            <Input type="date" value={plannedAt} onChange={(e: React.ChangeEvent<HTMLInputElement>) => { setPlannedAt(e.target.value); setSubmitError(""); }} disabled={isSubmitting} />
+          </FF>
+        </div>
+
+        <FF label="Note logistique">
+          <Input value={logisticsNote} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setLogisticsNote(e.target.value)} placeholder="Consignes, documents, remarques..." disabled={isSubmitting} />
         </FF>
+
+        <div style={{ marginTop: 18, marginBottom: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontSize: 11, color: T.textDim, textTransform: "uppercase", letterSpacing: 1, fontWeight: "bold" }}>Lots chargés · {formatVolShort(totalVolume)}</div>
+          <Btn variant="secondary" onClick={addLine} disabled={isSubmitting}>+ Ajouter ligne</Btn>
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, maxHeight: 360, overflowY: "auto" }}>
+          {lines.map((line: any, index: number) => {
+            const selectedLot = getLineLot(line);
+            const maxVolume = selectedLot ? Number(selectedLot.currentVolume || selectedLot.volume || 0) : 0;
+            const error = lineErrors[index];
+            return (
+              <div key={index} style={{ background: T.surfaceHigh, border: `1px solid ${error && line.lotId ? T.red : T.border}`, borderRadius: 4, padding: 12 }}>
+                <div style={{ display: "grid", gridTemplateColumns: "1.5fr 100px 120px 1fr 36px", gap: 8, alignItems: "end" }}>
+                  <FF label="Lot">
+                    <Select value={line.lotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateLine(index, { lotId: e.target.value, volume: "" })} disabled={eligibleVracLots.length === 0 || isSubmitting}>
+                      <option value="">Sélectionner</option>
+                      {eligibleVracLots.map((lot: any) => (
+                        <option key={lot.id} value={lot.id}>
+                          {(lot.businessCode || lot.code)} · {formatVolShort(lot.currentVolume || lot.volume || 0)}
+                        </option>
+                      ))}
+                    </Select>
+                  </FF>
+                  <FF label="Volume hL">
+                    <Input type="number" step="0.01" value={line.volume} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateLine(index, { volume: e.target.value })} placeholder="0.00" disabled={isSubmitting} style={{ color: error && line.volume ? T.red : T.text }} />
+                  </FF>
+                  <FF label="Mode">
+                    <Select value={line.mode} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => updateLine(index, { mode: e.target.value })} disabled={isSubmitting}>
+                      <option value="VRAC">Vrac</option>
+                      <option value="CITERNE">Citerne</option>
+                      <option value="AUTRE">Autre</option>
+                    </Select>
+                  </FF>
+                  <FF label="Compartiment">
+                    <Input value={line.compartmentLabel} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateLine(index, { compartmentLabel: e.target.value })} placeholder={`Compartiment ${index + 1}`} disabled={isSubmitting} />
+                  </FF>
+                  <Btn variant="secondary" onClick={() => removeLine(index)} disabled={isSubmitting || lines.length <= 1} style={{ padding: "7px 9px" }}>×</Btn>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 10, alignItems: "center", marginTop: 8 }}>
+                  <Input value={line.note} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateLine(index, { note: e.target.value })} placeholder="Note ligne optionnelle" disabled={isSubmitting} />
+                  <div style={{ fontSize: 11, color: error ? T.red : T.textDim, minWidth: 110, textAlign: "right" }}>
+                    {selectedLot ? `Dispo ${formatVolShort(maxVolume)}` : error}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
 
         {submitError && (
           <div style={{ background: T.red + "11", border: `1px solid ${T.red}33`, color: T.red, borderRadius: 4, padding: 12, marginTop: 12, fontSize: 12 }}>
@@ -516,7 +611,15 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
       <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:4, overflow:"hidden" }}>
 
         <div style={{ display:"grid", gridTemplateColumns:gridCols, gap:16, padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1, textAlign: "center", background: T.surfaceHigh }}>
-          <div>Date d'expédition</div><div>Lot Source</div><div>Volume - Qtité</div><div>Détails de l'envoi</div><div>Opérateur</div><div>Statut</div>
+          {tab === "vrac" ? (
+            <>
+              <div>Date</div><div>Client</div><div>Destination</div><div>Transporteur</div><div>Immat. / Réf.</div><div>Volume</div><div>Lots</div><div>Statut</div>
+            </>
+          ) : (
+            <>
+              <div>Date d'expédition</div><div>Lot Source</div><div>Volume - Qtité</div><div>Détails de l'envoi</div><div>Opérateur</div><div>Statut</div>
+            </>
+          )}
         </div>
 
         {/* ... L'affichage des vues Bouteilles, Vrac et Distillerie reste identique visuellement ... */}
@@ -550,37 +653,47 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
           <>
             {vracRows.length === 0 ? (
               <div style={{ padding:"40px", textAlign:"center", color:T.textDim, fontStyle: "italic" }}>Aucune expédition vrac / citerne à afficher.</div>
-            ) : vracRows.map(({ lot, container, shipmentEvent }: any, i: any) => {
-              const shipmentDate = shipmentEvent?.date
-                ? shipmentEvent.date.split(" à ")[0]
-                : lot.createdAt
-                ? new Date(lot.createdAt).toLocaleDateString('fr-FR')
-                : "--";
-              const containerName = container ? (container.displayName || container.name || container.code) : "Citerne";
-              const details = [
-                shipmentEvent?.note || shipmentEvent?.comment || containerName,
-                container?.code && container?.code !== containerName ? container.code : null,
-                container?.zone ? `Zone : ${container.zone}` : null,
-                !shipmentEvent ? lot.notes || null : null,
-              ].filter(Boolean).join(" • ");
-              const displayVolume = shipmentEvent?.volumeOut ? shipmentEvent.volumeOut : (lot.currentVolume || lot.volume || 0);
-              const isDelivered = shipmentEvent?.metadata?.deliveryStatus === "LIVRE" || container?.status === "LIVRE";
-              const statusLabel = formatStatus(isDelivered ? "LIVRE" : (container?.status || lot.status || "EN COURS"));
-
+            ) : vracRows.map((shipment: any, i: any) => {
               return (
-                <div key={lot.id} style={{ display:"grid", gridTemplateColumns:gridCols, gap:16, padding:"16px 16px", alignItems:"center", borderBottom: i<vracRows.length-1 ? `1px solid ${T.border}` : "none", textAlign: "center" }}>
-                  <div style={{ fontSize:12, color:T.textDim, fontFamily:"monospace" }}>{shipmentDate}</div>
-                  <div onClick={() => lot && onSelectLot && onSelectLot(lot)} style={{ fontSize:13, color:T.accent, fontFamily:"monospace", fontWeight:600, cursor: lot ? "pointer" : "default", textDecoration: lot ? "underline" : "none" }}>
-                    {lot.businessCode || lot.code || "--"}
+                <div key={shipment.id} style={{ borderBottom: i<vracRows.length-1 ? `1px solid ${T.border}` : "none" }}>
+                  <div style={{ display:"grid", gridTemplateColumns:gridCols, gap:16, padding:"16px 16px 10px", alignItems:"center", textAlign: "center" }}>
+                    <div style={{ fontSize:12, color:T.textDim, fontFamily:"monospace" }}>{shipment.date}</div>
+                    <div style={{ fontSize:13, color:T.textStrong, fontWeight:700 }}>{shipment.client}</div>
+                    <div style={{ fontSize:13, color:T.text }}>{shipment.destination || "--"}</div>
+                    <div style={{ fontSize:12, color:T.text }}>{shipment.transporter || "--"}</div>
+                    <div style={{ fontSize:12, color:T.textDim, fontFamily:"monospace" }}>{shipment.reference || "--"}</div>
+                    <div style={{ fontSize:13, color:T.textStrong }}>{formatVolShort(shipment.totalVolume)}</div>
+                    <div style={{ fontSize:13, color:T.text }}>{shipment.lineCount}</div>
+                    <div
+                      onClick={() => !shipment.isDelivered && setConfirmDeliveryTarget({ type: "VRAC", id: shipment.id, label: shipment.client })}
+                      style={{ cursor: shipment.isDelivered ? "default" : "pointer", display: "flex", justifyContent: "center" }}
+                    >
+                      <Badge label={shipment.isDelivered ? "Livrée" : formatStatus(shipment.status)} color={shipment.isDelivered ? T.textDim : T.accent} />
+                    </div>
                   </div>
-                  <div style={{ fontSize:13, color:T.textStrong }}>{formatVolShort(displayVolume)}</div>
-                  <div style={{ fontSize:13, color:T.text }}>🚛 {details || "Citerne / compartiment"}</div>
-                  <div style={{ fontSize:12, color:T.textDim }}>{shipmentEvent?.operator || "--"}</div>
-                  <div
-                    onClick={() => shipmentEvent && setConfirmDeliveryTarget({ type: "VRAC", id: shipmentEvent.id, label: lot.businessCode || lot.code })}
-                    style={{ cursor: shipmentEvent ? "pointer" : "default", display: "flex", justifyContent: "center" }}
-                  >
-                    <Badge label={statusLabel} color={isDelivered ? T.textDim : T.accent} />
+                  <div style={{ padding:"0 16px 14px 16px" }}>
+                    <div style={{ background:T.surfaceHigh, border:`1px solid ${T.border}`, borderRadius:4, overflow:"hidden" }}>
+                      {shipment.lines.map((line: any, lineIndex: number) => (
+                        <div key={line.key} style={{ display:"grid", gridTemplateColumns:"1.2fr 90px 1fr 90px 1.4fr", gap:10, alignItems:"center", padding:"9px 12px", borderTop: lineIndex === 0 ? "none" : `1px solid ${T.border}`, fontSize:12 }}>
+                          <div onClick={() => line.lot && onSelectLot && onSelectLot(line.lot)} style={{ color:T.accent, fontFamily:"monospace", fontWeight:700, cursor: line.lot ? "pointer" : "default", textDecoration: line.lot ? "underline" : "none" }}>
+                            {line.lotCode}
+                          </div>
+                          <div style={{ color:T.textStrong }}>{formatVolShort(line.volumeHl)}</div>
+                          <div style={{ color:T.textDim }}>{line.compartmentLabel || "--"}</div>
+                          <div><Badge label={line.mode} color={T.textDim} /></div>
+                          <div style={{ color:T.textDim, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={line.note || line.legacyContainer?.displayName || ""}>
+                            {line.note || (line.legacyContainer ? `Ancien format · ${line.legacyContainer.displayName || line.legacyContainer.code}` : (shipment.legacy ? "Ancien format" : "--"))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    {(shipment.logisticsNote || shipment.operator) && (
+                      <div style={{ marginTop:8, fontSize:11, color:T.textDim }}>
+                        {shipment.operator ? `Opérateur : ${shipment.operator}` : null}
+                        {shipment.operator && shipment.logisticsNote ? " · " : ""}
+                        {shipment.logisticsNote || ""}
+                      </div>
+                    )}
                   </div>
                 </div>
               );

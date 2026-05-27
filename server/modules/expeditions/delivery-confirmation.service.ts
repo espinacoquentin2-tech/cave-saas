@@ -66,7 +66,6 @@ export class DeliveryConfirmationService {
     return prisma.$transaction(async (tx) => {
       const event = await tx.lotEvent.findUnique({
         where: { id: input.id },
-        include: { containers: true },
       });
 
       if (!event || event.eventType !== 'EXPEDITION_VRAC') {
@@ -74,35 +73,20 @@ export class DeliveryConfirmationService {
       }
 
       const metadata = asObject(event.metadata);
-      if (metadata.deliveryStatus === 'LIVRE') {
+      if (metadata.deliveryStatus === 'LIVRE' || metadata.status === 'LIVREE') {
         throw new BusinessLogicError('Cette expédition vrac est déjà confirmée livrée.', 409);
       }
 
-      const containerId = Number(metadata.containerId || event.containers[0]?.containerId || 0);
-      if (!Number.isInteger(containerId) || containerId <= 0) {
-        throw new BusinessLogicError("Contenant d'expédition vrac introuvable.", 404);
-      }
-
-      const container = await tx.container.findUnique({ where: { id: containerId } });
-      if (!container) {
-        throw new BusinessLogicError('Contenant introuvable.', 404);
-      }
-
       const deliveredAt = new Date();
-      await tx.container.update({
-        where: { id: container.id },
-        data: { status: 'LIVRE' },
-      });
-
       const updated = await tx.lotEvent.update({
         where: { id: event.id },
         data: {
           metadata: {
             ...metadata,
+            status: 'LIVREE',
             deliveryStatus: 'LIVRE',
             deliveredAt: deliveredAt.toISOString(),
             deliveredBy: userEmail,
-            deliveredContainerId: container.id,
           } satisfies Prisma.InputJsonObject,
         },
       });
@@ -110,7 +94,7 @@ export class DeliveryConfirmationService {
       await tx.auditLog.create({
         data: {
           action: 'BULK_SHIPMENT_DELIVERED',
-          details: `Livraison vrac #${event.id} confirmée pour ${container.displayName} par ${userEmail}.`,
+          details: `Livraison vrac #${event.id} confirmée par ${userEmail}.`,
           userId: userEmail,
         },
       });
@@ -119,7 +103,6 @@ export class DeliveryConfirmationService {
         status: 'SUCCESS',
         type: input.type,
         id: event.id,
-        containerId: container.id,
         deliveryStatus: 'LIVRE',
         deliveredAt,
         updated,

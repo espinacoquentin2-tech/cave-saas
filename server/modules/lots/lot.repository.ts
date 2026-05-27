@@ -7,8 +7,9 @@ const containerInclude = {
   currentLots: {
     where: {
       status: {
-        in: ['ACTIF', 'BOURBES', 'LIES', 'ASSEMBLAGE'],
+        notIn: ['ARCHIVE', 'ARCHIVÉ', 'TIRE', 'MIS_EN_BOUTEILLE'],
       },
+      currentVolume: { gt: new Prisma.Decimal(0) },
     },
     select: {
       id: true,
@@ -88,6 +89,7 @@ export class LotRepository {
       currentVolume: Prisma.Decimal;
       currentContainerId: number;
       status: string;
+      qualiteLot?: string | null;
       notes?: string | null;
     },
   ) {

@@ -21,7 +21,6 @@ const REFUSED_LOT_STATUSES = new Set([
   'MIS_EN_BOUTEILLE',
   'ARCHIVE',
 ]);
-const VRAC_SHIPMENT_CONTAINER_TYPES = new Set(['CITERNE', 'COMPARTIMENT']);
 const EMPTY_VOLUME_EPSILON = 0.0001;
 
 const roundVolume = (value: number) => Math.round(value * 1000) / 1000;
@@ -68,112 +67,136 @@ export class VracExpeditionService {
             }
           }
 
-          const [lot, container] = await Promise.all([
-            tx.lot.findUnique({ where: { id: input.lotId } }),
-            tx.container.findUnique({ where: { id: input.containerId } }),
-          ]);
+          const uniqueLotIds = [...new Set(input.lines.map((line) => line.lotId))];
+          const lots = await tx.lot.findMany({ where: { id: { in: uniqueLotIds } } });
+          const lotsById = new Map(lots.map((lot) => [lot.id, lot]));
 
-          if (!lot) {
-            throw new BusinessLogicError('Lot vrac introuvable.', 404);
-          }
-          if (!container) {
-            throw new BusinessLogicError('Contenant introuvable.', 404);
+          if (lots.length !== uniqueLotIds.length) {
+            throw new BusinessLogicError('Un ou plusieurs lots vrac sont introuvables.', 404);
           }
 
-          const lotStatus = String(lot.status || '').toUpperCase();
-          const availableVolume = Number(lot.currentVolume);
-
-          if (!Number.isFinite(availableVolume) || availableVolume <= 0) {
-            throw new BusinessLogicError(`Le lot ${lot.businessCode} ne contient plus de volume disponible.`, 409);
+          const requestedByLot = new Map<number, number>();
+          for (const line of input.lines) {
+            requestedByLot.set(line.lotId, roundVolume((requestedByLot.get(line.lotId) || 0) + line.volumeHl));
           }
 
-          if (input.volumeHl > availableVolume) {
-            throw new BusinessLogicError(
-              `Volume insuffisant sur ${lot.businessCode}. Disponible: ${roundVolume(availableVolume)} hL, requis: ${input.volumeHl} hL.`,
-              409,
-            );
-          }
+          for (const [lotId, requestedVolume] of requestedByLot.entries()) {
+            const lot = lotsById.get(lotId);
+            if (!lot) {
+              throw new BusinessLogicError('Lot vrac introuvable.', 404);
+            }
 
-          if (lot.currentContainerId !== container.id) {
-            throw new BusinessLogicError(`Le lot ${lot.businessCode} n'est pas dans le contenant fourni.`, 409);
-          }
+            const lotStatus = String(lot.status || '').toUpperCase();
+            const availableVolume = Number(lot.currentVolume);
 
-          if (!VRAC_SHIPMENT_CONTAINER_TYPES.has(container.type)) {
-            throw new BusinessLogicError(
-              `Le contenant ${container.displayName} est de type ${container.type}. Types autorises: CITERNE, COMPARTIMENT.`,
-              409,
-            );
-          }
+            if (!Number.isFinite(availableVolume) || availableVolume <= 0) {
+              throw new BusinessLogicError(`Le lot ${lot.businessCode} ne contient plus de volume disponible.`, 409);
+            }
 
-          if (!ELIGIBLE_LOT_STATUSES.has(lotStatus)) {
-            const reason = REFUSED_LOT_STATUSES.has(lotStatus)
-              ? `statut refuse: ${lot.status}`
-              : `statut non autorise: ${lot.status}`;
-            throw new BusinessLogicError(
-              `Le lot ${lot.businessCode} ne peut pas etre expedie en vrac (${reason}). Statuts autorises: ${VracExpeditionService.eligibleLotStatuses.join(', ')}.`,
-              409,
-            );
+            if (requestedVolume > availableVolume) {
+              throw new BusinessLogicError(
+                `Volume insuffisant sur ${lot.businessCode}. Disponible: ${roundVolume(availableVolume)} hL, requis: ${requestedVolume} hL.`,
+                409,
+              );
+            }
+
+            if (!ELIGIBLE_LOT_STATUSES.has(lotStatus)) {
+              const reason = REFUSED_LOT_STATUSES.has(lotStatus)
+                ? `statut refuse: ${lot.status}`
+                : `statut non autorise: ${lot.status}`;
+              throw new BusinessLogicError(
+                `Le lot ${lot.businessCode} ne peut pas etre expedie en vrac (${reason}). Statuts autorises: ${VracExpeditionService.eligibleLotStatuses.join(', ')}.`,
+                409,
+              );
+            }
           }
 
           const operatorId = await this.getUserId(tx, userEmail);
           const shipmentDate = new Date();
-          const shipmentVolume = new Prisma.Decimal(input.volumeHl);
-          const previousLotStatus = lot.status;
+          const lotSnapshots = new Map<number, {
+            lotCode: string;
+            previousLotVolumeHl: number;
+            remainingLotVolumeHl: number;
+            previousLotStatus: string;
+            newLotStatus: string;
+          }>();
 
-          const decrementResult = await tx.lot.updateMany({
-            where: {
-              id: lot.id,
-              currentContainerId: container.id,
-              status: { in: VracExpeditionService.eligibleLotStatuses },
-              currentVolume: { gte: shipmentVolume },
-            },
-            data: {
-              currentVolume: {
-                decrement: shipmentVolume,
+          for (const [lotId, requestedVolume] of requestedByLot.entries()) {
+            const lot = lotsById.get(lotId);
+            if (!lot) {
+              throw new BusinessLogicError('Lot vrac introuvable.', 404);
+            }
+
+            const shipmentVolume = new Prisma.Decimal(requestedVolume);
+            const availableVolume = Number(lot.currentVolume);
+            const remainingVolume = roundVolume(availableVolume - requestedVolume);
+            const newLotStatus = remainingVolume <= EMPTY_VOLUME_EPSILON ? 'ARCHIVE' : lot.status;
+
+            const decrementResult = await tx.lot.updateMany({
+              where: {
+                id: lot.id,
+                status: { in: VracExpeditionService.eligibleLotStatuses },
+                currentVolume: { gte: shipmentVolume },
               },
-            },
-          });
-
-          if (decrementResult.count !== 1) {
-            throw new BusinessLogicError(
-              "Le volume du lot a change pendant l'expedition. Rechargez les donnees puis reessayez.",
-              409,
-            );
-          }
-
-          const remainingVolume = roundVolume(availableVolume - input.volumeHl);
-          const newLotStatus = remainingVolume <= EMPTY_VOLUME_EPSILON ? 'ARCHIVE' : lot.status;
-          if (remainingVolume <= EMPTY_VOLUME_EPSILON) {
-            await tx.lot.update({
-              where: { id: lot.id },
               data: {
-                currentVolume: new Prisma.Decimal(0),
-                status: newLotStatus,
+                currentVolume: remainingVolume <= EMPTY_VOLUME_EPSILON ? new Prisma.Decimal(0) : { decrement: shipmentVolume },
+                ...(remainingVolume <= EMPTY_VOLUME_EPSILON ? { status: newLotStatus } : {}),
               },
             });
-          }
 
-          const otherActiveLotsInContainer = await tx.lot.count({
-            where: {
-              currentContainerId: container.id,
-              id: { not: lot.id },
-              status: { not: 'ARCHIVE' },
-              currentVolume: { gt: new Prisma.Decimal(0) },
-            },
-          });
-          if (remainingVolume <= EMPTY_VOLUME_EPSILON && otherActiveLotsInContainer === 0) {
-            await tx.container.update({
-              where: { id: container.id },
-              data: { status: 'VIDE' },
+            if (decrementResult.count !== 1) {
+              throw new BusinessLogicError(
+                "Le volume du lot a change pendant l'expedition. Rechargez les donnees puis reessayez.",
+                409,
+              );
+            }
+
+            lotSnapshots.set(lot.id, {
+              lotCode: lot.businessCode,
+              previousLotVolumeHl: roundVolume(availableVolume),
+              remainingLotVolumeHl: Math.max(0, remainingVolume),
+              previousLotStatus: lot.status,
+              newLotStatus,
             });
           }
 
+          const lineRemainingByLot = new Map<number, number>(
+            lots.map((lot) => [lot.id, roundVolume(Number(lot.currentVolume))]),
+          );
+          const metadataLines = input.lines.map((line) => {
+            const lot = lotsById.get(line.lotId);
+            const snapshot = lotSnapshots.get(line.lotId);
+            if (!lot || !snapshot) {
+              throw new BusinessLogicError('Lot vrac introuvable.', 404);
+            }
+
+            const previousLineVolume = lineRemainingByLot.get(line.lotId) ?? snapshot.previousLotVolumeHl;
+            const remainingLineVolume = Math.max(0, roundVolume(previousLineVolume - line.volumeHl));
+            lineRemainingByLot.set(line.lotId, remainingLineVolume);
+
+            return {
+              lotId: line.lotId,
+              lotCode: snapshot.lotCode,
+              volumeHl: line.volumeHl,
+              compartmentLabel: line.compartmentLabel ?? null,
+              mode: line.mode,
+              note: line.note ?? null,
+              previousLotVolumeHl: previousLineVolume,
+              remainingLotVolumeHl: remainingLineVolume,
+              previousLotStatus: snapshot.previousLotStatus,
+              newLotStatus: snapshot.newLotStatus,
+            };
+          });
+          const totalVolumeHl = roundVolume(input.lines.reduce((sum, line) => sum + line.volumeHl, 0));
+          const destinationLabel = input.destination || 'destination non renseignee';
           const comment = [
-            `Expedition vrac de ${input.volumeHl} hL du lot ${lot.businessCode} vers ${input.client} / ${input.destination}, mode ${input.mode}.`,
-            `LotId: ${lot.id}.`,
-            `ContainerId: ${container.id}.`,
+            `Expedition vrac de ${totalVolumeHl} hL vers ${input.client} / ${destinationLabel}.`,
+            `${input.lines.length} ligne(s): ${metadataLines.map((line) => `${line.lotCode} ${line.volumeHl} hL${line.compartmentLabel ? ` (${line.compartmentLabel})` : ''}`).join(', ')}.`,
+            input.transporter ? `Transporteur: ${input.transporter}.` : null,
+            input.truckPlate ? `Immatriculation/citerne: ${input.truckPlate}.` : null,
+            input.transportReference ? `Reference transport: ${input.transportReference}.` : null,
             `Utilisateur: ${userEmail}.`,
-            input.note ? `Note: ${input.note}` : null,
+            input.logisticsNote ? `Note: ${input.logisticsNote}` : null,
           ]
             .filter(Boolean)
             .join(' ');
@@ -186,38 +209,29 @@ export class VracExpeditionService {
               comment,
               metadata: {
                 operation: 'EXPEDITION_VRAC',
-                lotId: lot.id,
-                containerId: container.id,
-                volumeHl: input.volumeHl,
+                status: 'PREPAREE',
                 client: input.client,
-                destination: input.destination,
-                mode: input.mode,
-                note: input.note ?? null,
-                previousLotVolumeHl: roundVolume(availableVolume),
-                remainingLotVolumeHl: Math.max(0, remainingVolume),
-                previousLotStatus,
-                newLotStatus,
-                containerType: container.type,
-                containerCode: container.code,
+                destination: input.destination ?? null,
+                transporter: input.transporter ?? null,
+                truckPlate: input.truckPlate ?? null,
+                transportReference: input.transportReference ?? null,
+                plannedAt: input.plannedAt ?? null,
+                logisticsNote: input.logisticsNote ?? null,
+                totalVolumeHl,
+                lineCount: input.lines.length,
+                lines: metadataLines,
                 idempotencyKey: input.idempotencyKey ?? null,
               },
             },
           });
-          await tx.lotEventLot.create({
-            data: {
+          await tx.lotEventLot.createMany({
+            data: input.lines.map((line) => ({
               eventId: lotEvent.id,
-              lotId: lot.id,
+              lotId: line.lotId,
               roleInEvent: 'SOURCE',
-              volumeChange: shipmentVolume,
+              volumeChange: new Prisma.Decimal(line.volumeHl),
               unit: 'hL',
-            },
-          });
-          await tx.lotEventContainer.create({
-            data: {
-              eventId: lotEvent.id,
-              containerId: container.id,
-              roleInEvent: 'SOURCE',
-            },
+            })),
           });
 
           if (input.idempotencyKey) {
@@ -233,7 +247,7 @@ export class VracExpeditionService {
           await tx.auditLog.create({
             data: {
               action: 'BULK_SHIPMENT_EXECUTED',
-              details: `Expedition vrac du lot ${lot.businessCode} depuis ${container.displayName}: ${input.volumeHl} hL vers ${input.client} / ${input.destination}, mode ${input.mode}, reste ${Math.max(0, remainingVolume)} hL.`,
+              details: `Expedition vrac #${lotEvent.id}: ${totalVolumeHl} hL, ${input.lines.length} ligne(s), vers ${input.client} / ${destinationLabel}.`,
               userId: userEmail,
             },
           });
@@ -241,13 +255,15 @@ export class VracExpeditionService {
           return {
             status: 'SUCCESS',
             lotEventId: lotEvent.id,
-            lotId: lot.id,
-            lotCode: lot.businessCode,
-            containerId: container.id,
-            shippedVolumeHl: input.volumeHl,
-            remainingVolumeHl: Math.max(0, remainingVolume),
-            lotStatus: newLotStatus,
-            containerStatus: remainingVolume <= EMPTY_VOLUME_EPSILON && otherActiveLotsInContainer === 0 ? 'VIDE' : container.status,
+            shippedVolumeHl: totalVolumeHl,
+            lineCount: input.lines.length,
+            lines: metadataLines.map((line) => ({
+              lotId: line.lotId,
+              lotCode: line.lotCode,
+              shippedVolumeHl: line.volumeHl,
+              remainingVolumeHl: line.remainingLotVolumeHl,
+              lotStatus: line.newLotStatus,
+            })),
           };
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },

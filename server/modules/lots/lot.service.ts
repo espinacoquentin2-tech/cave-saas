@@ -41,6 +41,12 @@ export class LotModuleService {
       const occupiedVolume = container.currentLots.reduce((sum, lot) => sum + toNumber(lot.currentVolume), 0);
       const capacity = toNumber(container.capacityValue);
       const nextVolume = occupiedVolume + input.volume;
+      if (occupiedVolume > 0.0001) {
+        throw new BusinessLogicError(
+          `La cuve ${container.displayName} n'est pas vide (${occupiedVolume} hL présents).`,
+          409,
+        );
+      }
       if (nextVolume > capacity) {
         throw new BusinessLogicError(
           `Capacité dépassée pour ${container.displayName}. ${nextVolume} hL > ${capacity} hL.`,
@@ -59,7 +65,8 @@ export class LotModuleService {
         sequenceNumber: 1,
         currentVolume: toDecimal(input.volume),
         currentContainerId: input.containerId,
-        status: 'ACTIF',
+        status: input.status,
+        qualiteLot: input.qualiteLot?.trim() || null,
         notes: input.notes?.trim() || null,
       });
 
@@ -69,6 +76,18 @@ export class LotModuleService {
         eventType: 'CREATION',
         operatorUserId: operator.id,
         comment: input.notes?.trim() || 'Création initiale du lot',
+        metadata: {
+          operation: 'CREATION',
+          lotId: lot.id,
+          lotCode: lot.businessCode,
+          containerId: input.containerId,
+          status: lot.status,
+          volumeHl: input.volume,
+          originType: input.originType ?? null,
+          originLabel: input.originLabel?.trim() || null,
+          note: input.notes?.trim() || null,
+          idempotencyKey: input.idempotencyKey,
+        },
       });
 
       await LotRepository.createLotEventLink(tx, {

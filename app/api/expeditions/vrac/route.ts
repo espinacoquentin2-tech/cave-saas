@@ -29,11 +29,9 @@ export async function POST(request: Request) {
       userEmail: actor.email,
       role: actor.role,
       details: {
-        lotId: payload.lotId,
-        containerId: payload.containerId,
-        volumeHl: payload.volumeHl,
+        lineCount: payload.lines.length,
+        totalVolumeHl: payload.lines.reduce((sum, line) => sum + line.volumeHl, 0),
         client: payload.client,
-        mode: payload.mode,
       },
     });
 
