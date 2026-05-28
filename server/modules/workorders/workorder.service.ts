@@ -4,6 +4,12 @@ import { CreateWorkOrderInput } from '@/server/modules/workorders/workorder.sche
 import { RequestActor } from '@/server/shared/request-context';
 
 export class WorkOrderModuleService {
+  static async list() {
+    return {
+      workOrders: await AdminService.listWorkOrders(),
+    };
+  }
+
   static async create(input: CreateWorkOrderInput, actor: RequestActor) {
     try {
       return await AdminService.createWorkOrder(input, actor.email);
@@ -16,6 +22,26 @@ export class WorkOrderModuleService {
 
       if (message.includes('insuffisant') || message.includes('introuvable') || message.includes('trop petite')) {
         throw new BusinessLogicError(message, 400);
+      }
+
+      throw new BusinessLogicError(message, 400);
+    }
+  }
+
+  static async complete(publicId: string, evidence: unknown, actor: RequestActor) {
+    try {
+      return {
+        workOrder: await AdminService.completeWorkOrder(publicId, evidence, actor.email),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur serveur';
+
+      if (message.includes('ALREADY_APPLIED')) {
+        throw new BusinessLogicError(message, 409);
+      }
+
+      if (message.includes('introuvable')) {
+        throw new BusinessLogicError(message, 404);
       }
 
       throw new BusinessLogicError(message, 400);

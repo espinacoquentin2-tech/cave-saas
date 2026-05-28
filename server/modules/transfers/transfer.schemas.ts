@@ -13,6 +13,7 @@ export const createTransferSchema = z
     fromId: z.coerce.number().int().positive(),
     destinations: z.array(transferDestinationSchema).min(1),
     volume: z.coerce.number().positive().transform(decimalPrecision),
+    remainderVolume: z.coerce.number().positive().transform(decimalPrecision).nullable().optional(),
     remainderType: z.enum(['BOURBES', 'LIES']).nullable().optional(),
     bourbesDestId: z.coerce.number().int().positive().nullable().optional(),
     date: z.string().datetime(),
@@ -26,11 +27,21 @@ export const createTransferSchema = z
       payload.destinations.reduce((sum, destination) => sum + destination.volume, 0),
     );
 
-    if (totalDestinations !== payload.volume) {
+    const remainderVolume = payload.remainderVolume ?? 0;
+
+    if (decimalPrecision(totalDestinations + remainderVolume) !== payload.volume) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ['destinations'],
-        message: 'La somme des volumes de destination doit être égale au volume transféré.',
+        message: 'La somme des volumes de destination et de reliquat doit être égale au volume transféré.',
+      });
+    }
+
+    if (payload.remainderVolume && !payload.remainderType) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['remainderType'],
+        message: 'Le type de reliquat est obligatoire quand un volume de reliquat est renseigné.',
       });
     }
 

@@ -288,6 +288,8 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
     const vRem = parseFloat(remVol) || 0;
     
     try {
+      let operationEvidence: any = {};
+
       // 1. SOUTIRAGE SIMPLE (API TRANSACTIONS)
       if (task.recette === "SOUTIRAGE") {
         const sourceContId = lotSource?.currentContainerId || lotSource?.containerId;
@@ -309,6 +311,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
             fromId: parseInt(sourceContId), 
             destinations: [{ toId: parseInt(task.targetContainerId), volume: vMain }],
             volume: vMain + vRem, // Le total soutiré
+            remainderVolume: vRem > 0 ? vRem : undefined,
             operator: user.name,
             remainderType: (vRem > 0 && remTargetId) ? remType : undefined,
             bourbesDestId: (vRem > 0 && remTargetId) ? parseInt(remTargetId) : undefined,
@@ -316,7 +319,14 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
             idempotencyKey
           }) 
         }); 
-        if (!res.ok) throw new Error((await res.json()).error);
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(extractApiErrorMessage(payload, "Erreur de transfert"));
+        operationEvidence = {
+          endpoint: "/api/transfers",
+          result: unwrapApiData(payload),
+          executedVolumeHl: vMain,
+          remainderVolumeHl: vRem,
+        };
       } 
       
       // 2. ASSEMBLAGE MULTIPLE (API ASSEMBLAGE)
@@ -363,7 +373,13 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
             idempotencyKey
           }) 
         }); 
-        if (!res.ok) throw new Error((await res.json()).error);
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(extractApiErrorMessage(payload, "Erreur d'assemblage"));
+        operationEvidence = {
+          endpoint: "/api/lots/assemblage",
+          result: unwrapApiData(payload),
+          executedVolumeHl: vMain,
+        };
       }
 
       // 3. TIRAGE (API TIRAGE SÉCURISÉE)
@@ -386,14 +402,17 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
             isTranquille, stockItems: packagingStock.items, idempotencyKey
           }) 
         });
+        const payload = await res.json().catch(() => ({}));
         if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData.message || errorData.error || "Erreur de tirage");
+          throw new Error(extractApiErrorMessage(payload, "Erreur de tirage"));
         }
-        if (!res.ok) {
-          const errorData = await res.json();
-          throw new Error(errorData.message || errorData.error || "Erreur de tirage");
-        }
+        operationEvidence = {
+          endpoint: "/api/tirage",
+          result: unwrapApiData(payload),
+          requestedVolumeHl: requestedTirageVolume,
+          consumedVolumeHl: volUsed,
+          bottleCount: btlNeeded,
+        };
       }
 
       // 4. INTRANTS (API INTRANTS SÉCURISÉE)
@@ -407,10 +426,34 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
             operator: user.name, note: task.displayAction, idempotencyKey 
           }) 
         }); 
-        if (!res.ok) throw new Error((await res.json()).error);
+        const payload = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(extractApiErrorMessage(payload, "Erreur d'intrant"));
+        operationEvidence = {
+          endpoint: "/api/lots/intrants",
+          result: unwrapApiData(payload),
+          lotId: task.targetLotId,
+        };
       }
 
-      setWorkOrders(workOrders.filter(w => w.id !== task.id));
+      const completionRes = await fetch(`/api/workorders/${task.id}`, {
+        method: "PATCH",
+        headers: buildApiHeaders(user),
+        body: JSON.stringify({
+          status: "DONE",
+          evidence: {
+            ...operationEvidence,
+            completedFromUi: true,
+            completedAt: new Date().toISOString(),
+          },
+        }),
+      });
+      const completionPayload = await completionRes.json().catch(() => ({}));
+      if (!completionRes.ok) {
+        throw new Error(extractApiErrorMessage(completionPayload, "Opération métier exécutée, mais l'ordre n'a pas pu être marqué terminé."));
+      }
+
+      const completedWorkOrder = unwrapApiData(completionPayload);
+      setWorkOrders(workOrders.map(w => w.id === task.id ? completedWorkOrder : w));
       dispatch({ type: "TOAST_ADD", payload: { msg: `Tâche ${task.recette} exécutée avec succès !`, color: T.green } });
       if (refreshData) await refreshData();
       onClose();
@@ -4960,6 +5003,11 @@ export default function App() {
               quantity: Number(movement.quantity || 0),
             })),
           });
+        }
+      });
+      fetchSafe(`/api/workorders?t=${t}`).then(d => {
+        if (Array.isArray(d)) {
+          setWorkOrders(d);
         }
       });
 

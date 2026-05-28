@@ -85,11 +85,12 @@ export class TransferService {
         );
       }
 
+      const remainderVolume = input.remainderVolume ?? 0;
       const remainingVolume = toNumber(sourceLot.currentVolume) - input.volume;
-      if (remainderStatus && input.bourbesDestId && remainingVolume > 0) {
+      if (remainderStatus && input.bourbesDestId && remainderVolume > 0) {
         reservedVolumes.set(
           input.bourbesDestId,
-          (reservedVolumes.get(input.bourbesDestId) ?? 0) + remainingVolume,
+          (reservedVolumes.get(input.bourbesDestId) ?? 0) + remainderVolume,
         );
       }
 
@@ -153,7 +154,8 @@ export class TransferService {
         sourceContainerId: sourceLot.currentContainer?.id ?? input.fromId,
         requestedVolumeHl: roundVolume(input.volume),
         transferredVolumeHl: roundVolume(transferredVolume),
-        remainingVolumeHl: roundVolume(Math.max(remainingVolume, 0)),
+        remainderVolumeHl: roundVolume(remainderVolume),
+        remainingSourceVolumeHl: roundVolume(Math.max(remainingVolume, 0)),
         remainderStatus,
         destinations: transferDestinations,
         createdLotIds,
@@ -188,17 +190,16 @@ export class TransferService {
       if (remainingVolume <= 0) {
         await TransferRepository.updateSourceLotStatus(tx, sourceLot.id, 'ARCHIVE', null);
         await TransferRepository.updateContainerStatus(tx, sourceLot.currentContainer.id, 'NETTOYAGE');
-      } else if (remainderStatus) {
-        await TransferRepository.updateSourceLotStatus(tx, sourceLot.id, 'ARCHIVE', null);
-        await TransferRepository.updateContainerStatus(tx, sourceLot.currentContainer.id, 'NETTOYAGE');
+      }
 
+      if (remainderStatus && input.bourbesDestId && remainderVolume > 0) {
         const remainderLot = await TransferRepository.createChildLot(tx, {
           technicalCode: `${sourceLot.technicalCode}-${remainderStatus.slice(0, 2)}-${event.id}`,
           businessCode: `${sourceLot.businessCode}-${remainderStatus.slice(0, 2)}-${event.id}`,
           year: sourceLot.year,
           mainGrapeCode: sourceLot.mainGrapeCode,
           sequenceNumber: sourceLot.sequenceNumber,
-          currentVolume: toDecimal(remainingVolume),
+          currentVolume: toDecimal(remainderVolume),
           currentContainerId: input.bourbesDestId!,
           status: remainderStatus,
           notes: `Reliquat ${remainderStatus.toLowerCase()} généré par transfert #${event.id}.`,
@@ -211,7 +212,7 @@ export class TransferService {
           eventId: event.id,
           lotId: remainderLot.id,
           roleInEvent: 'RELIQUAT',
-          volumeChange: toDecimal(remainingVolume),
+          volumeChange: toDecimal(remainderVolume),
         });
         await TransferRepository.createContainerEventLink(tx, {
           eventId: event.id,

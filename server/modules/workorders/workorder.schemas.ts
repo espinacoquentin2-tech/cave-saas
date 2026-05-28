@@ -23,7 +23,7 @@ export const createWorkOrderSchema = z
     targetContainerId: z.coerce.number().int().positive().optional().nullable(),
     targetLotId: z.coerce.number().int().positive().optional().nullable(),
     details: z.string().trim().max(500).optional().nullable(),
-    sources: z.array(sourceSchema).min(1, 'Au moins un lot source est requis pour un mouvement'),
+    sources: z.array(sourceSchema).default([]),
     idempotencyKey: z.string().trim().min(10),
   })
   .refine((data) => {
@@ -31,7 +31,7 @@ export const createWorkOrderSchema = z
     const isAssemblage = data.recette === 'ASSEMBLAGE';
     const isIntrant = !isTransfer && !isAssemblage;
 
-    if ((isTransfer || isAssemblage) && !data.targetContainerId) {
+    if ((isTransfer || isAssemblage) && (!data.targetContainerId || data.sources.length === 0)) {
       return false;
     }
 

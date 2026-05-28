@@ -6,6 +6,57 @@ import { WorkOrderModuleService } from '@/server/modules/workorders/workorder.se
 import { logger } from '@/server/shared/logger';
 import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
+export async function GET(request: Request) {
+  const requestId = getRequestId(request);
+
+  try {
+    const actor = await resolveAuthenticatedActor(request);
+    assertRole(actor, READ_ROLES);
+    const result = await WorkOrderModuleService.list();
+
+    return NextResponse.json(
+      {
+        status: 'SUCCESS',
+        data: result.workOrders,
+      },
+      {
+        headers: { 'x-request-id': requestId },
+      },
+    );
+  } catch (error) {
+    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
+      return NextResponse.json(
+        {
+          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
+          message: error.message,
+        },
+        {
+          status: error.statusCode,
+          headers: { 'x-request-id': requestId },
+        },
+      );
+    }
+
+    logger.error({
+      action: 'workorders.get.unhandled_error',
+      requestId,
+      details: {
+        error: error instanceof Error ? error.message : 'unknown_error',
+      },
+    });
+
+    return NextResponse.json(
+      {
+        error: 'INTERNAL_SERVER_ERROR',
+      },
+      {
+        status: 500,
+        headers: { 'x-request-id': requestId },
+      },
+    );
+  }
+}
+
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
 
@@ -132,4 +183,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

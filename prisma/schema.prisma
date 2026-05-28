@@ -482,3 +482,24 @@ model AuditLog {
 
   @@map("audit_logs")
 }
+
+model WorkOrder {
+  id                Int      @id @default(autoincrement())
+  publicId          String   @unique @map("public_id")
+  recette           String
+  status            String   @default("PENDING")
+  targetContainerId Int?     @map("target_container_id")
+  targetLotId       Int?     @map("target_lot_id")
+  details           String?
+  sources           Json
+  plannedVolume     Decimal  @map("planned_volume")
+  createdBy         String?  @map("created_by")
+  operator          String?
+  executionEvidence Json?    @map("execution_evidence")
+  executedAt        DateTime? @map("executed_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@map("work_orders")
+}

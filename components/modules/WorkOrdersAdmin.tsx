@@ -58,17 +58,14 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
 
     try {
       // 2. Préparation du Payload pour l'API
-      const payload = {
+      const payload: any = {
         recette: form.recette,
-        targetContainerId: form.targetContainerId,
-        targetLotId: form.targetLotId,
-        details: form.details,
-        // On n'envoie que les sources valides pour éviter les erreurs Zod
-        sources: isIntrant 
-          ? [{ lotId: form.targetLotId, volume: "1" }] // Volume factice pour passer la validation Zod si intrant
-          : form.sources.filter((s: any) => s.lotId && s.volume),
+        details: form.details || undefined,
+        sources: isIntrant ? [] : form.sources.filter((s: any) => s.lotId && s.volume),
         idempotencyKey
       };
+      if (form.targetContainerId) payload.targetContainerId = form.targetContainerId;
+      if (form.targetLotId) payload.targetLotId = form.targetLotId;
 
       const res = await fetch('/api/workorders', {
         method: 'POST',

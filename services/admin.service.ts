@@ -1,8 +1,45 @@
 // services/admin.service.ts
+import { randomUUID } from 'crypto';
 import { CreateWorkOrderPayload } from '../validations/admin.schema';
 import { formatRoleLabel, normalizeRoleKey } from '@/lib/roles';
 import type { UpsertUserInput } from '@/server/modules/users/user.schemas';
 import { prisma } from '@/server/shared/prisma';
+
+const toWorkOrderDto = (workOrder: {
+  id: number;
+  publicId: string;
+  recette: string;
+  status: string;
+  targetContainerId: number | null;
+  targetLotId: number | null;
+  details: string | null;
+  sources: unknown;
+  plannedVolume: unknown;
+  createdBy: string | null;
+  operator: string | null;
+  executionEvidence: unknown | null;
+  executedAt: Date | null;
+  createdAt: Date;
+}) => ({
+  id: workOrder.publicId,
+  dbId: workOrder.id,
+  date: workOrder.createdAt.toISOString(),
+  recette: workOrder.recette,
+  status: workOrder.status,
+  targetContainerId: workOrder.targetContainerId,
+  targetLotId: workOrder.targetLotId,
+  details: workOrder.details,
+  sources: Array.isArray(workOrder.sources) ? workOrder.sources : [],
+  volume: Number(workOrder.plannedVolume || 0),
+  displaySource: Array.isArray(workOrder.sources)
+    ? workOrder.sources.map((source: any) => `Lot #${source.lotId} (${source.volume} hL)`).join(', ')
+    : null,
+  displayAction: workOrder.details || (workOrder.targetContainerId ? `Vers cuve ID ${workOrder.targetContainerId}` : 'Opération planifiée'),
+  operator: workOrder.operator || workOrder.createdBy,
+  createdBy: workOrder.createdBy,
+  executionEvidence: workOrder.executionEvidence,
+  executedAt: workOrder.executedAt?.toISOString() || null,
+});
 
 
 export class AdminService {
@@ -51,10 +88,24 @@ export class AdminService {
         data: { key: data.idempotencyKey, action: "CREATE_WORKORDER", userId: userEmail }
       });
 
-      const auditRecord = await tx.auditLog.create({
+      const workOrder = await tx.workOrder.create({
+        data: {
+          publicId: `WO-${randomUUID()}`,
+          recette: data.recette,
+          targetContainerId: data.targetContainerId ?? null,
+          targetLotId: data.targetLotId ?? null,
+          details: data.details?.trim() || null,
+          sources: data.sources,
+          plannedVolume: totalVolume,
+          createdBy: userEmail,
+          operator: userEmail,
+        },
+      });
+
+      await tx.auditLog.create({
         data: { 
           action: `WO_PLANIFIED_${data.recette}`, 
-          details: `Planifié: ${data.recette} - Vol total: ${totalVolume}hL - ${displayAction}`, 
+          details: `Planifié: ${data.recette} - ${workOrder.publicId} - Vol total: ${totalVolume}hL - ${displayAction}`,
           userId: userEmail 
         }
       });
@@ -62,16 +113,50 @@ export class AdminService {
       // Retourner un objet formaté pour le frontend
       return { 
         status: "SUCCESS", 
-        workOrder: {
-          id: `WO-${auditRecord.id}`,
-          date: new Date().toISOString(),
-          recette: data.recette,
-          status: "PENDING",
-          volume: totalVolume,
-          displayAction: displayAction,
-          operator: userEmail
-        }
+        workOrder: toWorkOrderDto(workOrder)
       };
+    });
+  }
+
+  static async listWorkOrders() {
+    const workOrders = await prisma.workOrder.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+
+    return workOrders.map(toWorkOrderDto);
+  }
+
+  static async completeWorkOrder(publicId: string, evidence: unknown, userEmail: string) {
+    return await prisma.$transaction(async (tx) => {
+      const workOrder = await tx.workOrder.findUnique({ where: { publicId } });
+      if (!workOrder) {
+        throw new Error('Ordre de travail introuvable.');
+      }
+
+      if (workOrder.status === 'DONE') {
+        throw new Error('ALREADY_APPLIED: Cet ordre de travail est déjà terminé.');
+      }
+
+      const updated = await tx.workOrder.update({
+        where: { publicId },
+        data: {
+          status: 'DONE',
+          operator: userEmail,
+          executionEvidence: evidence as any,
+          executedAt: new Date(),
+        },
+      });
+
+      await tx.auditLog.create({
+        data: {
+          action: `WO_EXECUTED_${updated.recette}`,
+          details: `Exécuté: ${updated.recette} - ${updated.publicId}`,
+          userId: userEmail,
+        },
+      });
+
+      return toWorkOrderDto(updated);
     });
   }
 
