@@ -1032,6 +1032,13 @@ export class BottlesService {
           }
 
           const metadata = asObject(event.metadata);
+          if (metadata.deliveryStatus === 'LIVRE' || metadata.status === 'LIVREE') {
+            throw new BusinessLogicError(
+              'Impossible d’annuler une expédition déjà livrée. Utilise une future opération de retour/correction après livraison.',
+              409,
+            );
+          }
+
           const sourceBottleLotId =
             asNumber(metadata.sourceBottleLotId) ??
             event.links.find((link) => link.roleInEvent === 'SOURCE')?.bottleLotId ??
