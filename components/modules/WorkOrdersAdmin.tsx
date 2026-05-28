@@ -34,6 +34,7 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
 
   const isTransfer = form.recette === "SOUTIRAGE";
   const isAssemblage = form.recette === "ASSEMBLAGE";
+  const isTirage = form.recette === "TIRAGE";
   const isIntrant = ["LEVURAGE", "SULFITAGE", "CHAPTALISATION", "ACIDIFICATION", "COLLAGE", "FILTRATION", "STABILISATION TARTRIQUE", "OUILLAGE", "AJOUT AUTRE PRODUIT"].includes(form.recette);
 
   const updateSource = (index: any, field: any, value: any) => {
@@ -48,6 +49,8 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
     // 1. Validation Frontend rapide
     if (isTransfer) {
       if (!form.sources[0].lotId || !form.targetContainerId || !form.sources[0].volume) return alert("Remplissez tous les champs pour le soutirage.");
+    } else if (isTirage) {
+      if (!form.sources[0].lotId || !form.sources[0].volume) return alert("Choisissez un lot et un volume pour le tirage.");
     } else if (isAssemblage) {
       if (!form.targetContainerId || form.sources.some((s: any) => !s.lotId || !s.volume)) return alert("Remplissez tous les champs et volumes des lots à assembler.");
     } else if (isIntrant) {
@@ -121,28 +124,30 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
         <Modal title="Nouveau plan de travail" onClose={() => setModal(false)}>
           <FF label="Type d'opération">
             <Select value={form.recette} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, recette: e.target.value})} disabled={isSubmitting}>
-              {["SOUTIRAGE","ASSEMBLAGE","LEVURAGE","SULFITAGE","CHAPTALISATION","ACIDIFICATION","COLLAGE","FILTRATION","STABILISATION TARTRIQUE","OUILLAGE","AJOUT AUTRE PRODUIT"].map((r: any)=><option key={r}>{r}</option>)}
+              {["SOUTIRAGE","ASSEMBLAGE","TIRAGE","LEVURAGE","SULFITAGE","CHAPTALISATION","ACIDIFICATION","COLLAGE","FILTRATION","STABILISATION TARTRIQUE","OUILLAGE","AJOUT AUTRE PRODUIT"].map((r: any)=><option key={r}>{r}</option>)}
             </Select>
           </FF>
 
-          {isTransfer && (
+          {(isTransfer || isTirage) && (
             <>
               <FF label="Lot source (Cuve de départ)">
                 <Select value={form.sources[0].lotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>updateSource(0, "lotId", e.target.value)} disabled={isSubmitting}>
-                  <option value="">-- Choisir un lot à soutirer --</option>
+                  <option value="">-- Choisir un lot source --</option>
                   {availLots.map((l: any)=><option key={l.id} value={l.id}>{l.code} (Dispo: {formatVolShort(l.volume)})</option>)}
                 </Select>
               </FF>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-                <FF label="Volume (hL) à transférer">
+              <div style={{ display:"grid", gridTemplateColumns: isTirage ? "1fr" : "1fr 1fr", gap:12 }}>
+                <FF label={isTirage ? "Volume (hL) à tirer" : "Volume (hL) à transférer"}>
                   <Input type="number" step="0.1" value={form.sources[0].volume} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateSource(0, "volume", e.target.value)} disabled={isSubmitting} />
                 </FF>
-                <FF label="Cuve de destination">
-                  <Select value={form.targetContainerId} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, targetContainerId:e.target.value})} disabled={isSubmitting}>
-                    <option value="">-- Choisir une cuve vide --</option>
-                    {availCuves.map((c: any)=><option key={c.id} value={c.id}>{c.displayName || c.name} (Capacité: {c.capacity} hL)</option>)}
-                  </Select>
-                </FF>
+                {!isTirage && (
+                  <FF label="Cuve de destination">
+                    <Select value={form.targetContainerId} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>setForm({...form, targetContainerId:e.target.value})} disabled={isSubmitting}>
+                      <option value="">-- Choisir une cuve vide --</option>
+                      {availCuves.map((c: any)=><option key={c.id} value={c.id}>{c.displayName || c.name} (Capacité: {c.capacity} hL)</option>)}
+                    </Select>
+                  </FF>
+                )}
               </div>
             </>
           )}

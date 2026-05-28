@@ -5,7 +5,7 @@ import { formatRoleLabel, normalizeRoleKey } from '@/lib/roles';
 // Validation pour les Ordres de Travail
 export const CreateWorkOrderSchema = z.object({
   recette: z.enum([
-    "SOUTIRAGE", "ASSEMBLAGE", "LEVURAGE", "SULFITAGE", 
+    "SOUTIRAGE", "ASSEMBLAGE", "TIRAGE", "LEVURAGE", "SULFITAGE",
     "CHAPTALISATION", "ACIDIFICATION", "COLLAGE", "FILTRATION", 
     "STABILISATION TARTRIQUE", "OUILLAGE", "AJOUT AUTRE PRODUIT"
   ]),
@@ -15,15 +15,17 @@ export const CreateWorkOrderSchema = z.object({
   sources: z.array(z.object({
     lotId: z.number().int().positive("L'ID du lot source est requis"),
     volume: z.number().positive("Le volume source doit être supérieur à 0")
-  })).min(1, "Au moins un lot source est requis pour un mouvement"),
+  })).default([]),
   idempotencyKey: z.string().min(10, "Clé d'idempotence manquante")
 }).refine(data => {
   // Validation croisée selon le type de recette
   const isTransfer = data.recette === "SOUTIRAGE";
   const isAssemblage = data.recette === "ASSEMBLAGE";
-  const isIntrant = !isTransfer && !isAssemblage;
+  const isTirage = data.recette === "TIRAGE";
+  const isIntrant = !isTransfer && !isAssemblage && !isTirage;
 
-  if ((isTransfer || isAssemblage) && !data.targetContainerId) return false;
+  if ((isTransfer || isAssemblage) && (!data.targetContainerId || data.sources.length === 0)) return false;
+  if (isTirage && data.sources.length !== 1) return false;
   if (isIntrant && (!data.targetLotId || !data.details)) return false;
   return true;
 }, {

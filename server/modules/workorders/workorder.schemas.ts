@@ -10,6 +10,7 @@ export const createWorkOrderSchema = z
     recette: z.enum([
       'SOUTIRAGE',
       'ASSEMBLAGE',
+      'TIRAGE',
       'LEVURAGE',
       'SULFITAGE',
       'CHAPTALISATION',
@@ -29,9 +30,14 @@ export const createWorkOrderSchema = z
   .refine((data) => {
     const isTransfer = data.recette === 'SOUTIRAGE';
     const isAssemblage = data.recette === 'ASSEMBLAGE';
-    const isIntrant = !isTransfer && !isAssemblage;
+    const isTirage = data.recette === 'TIRAGE';
+    const isIntrant = !isTransfer && !isAssemblage && !isTirage;
 
     if ((isTransfer || isAssemblage) && (!data.targetContainerId || data.sources.length === 0)) {
+      return false;
+    }
+
+    if (isTirage && data.sources.length !== 1) {
       return false;
     }
 
