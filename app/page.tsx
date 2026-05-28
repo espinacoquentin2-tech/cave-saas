@@ -801,6 +801,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
   const [newApport, setNewApport] = useState({ parcelle: "", cepage: "CH", poids: "" });
   const [isCustomOrigin, setIsCustomOrigin] = useState(false);
   const [apportToDelete, setApportToDelete] = useState(null); 
+  const [cancelApportReason, setCancelApportReason] = useState("");
   const [customDep, setCustomDep] = useState("");
   const [customReg, setCustomReg] = useState("");
   const [customCom, setCustomCom] = useState("");
@@ -839,7 +840,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
   const pressoirs = state.pressoirs || [];
   const apports = state.pressings || []; 
-  const apportsEnAttente = apports.filter((a: any) => a.status !== "PRESSÉ");
+  const apportsEnAttente = apports.filter((a: any) => a.status === "EN_ATTENTE");
 
   const depts = Object.keys(CHAMPAGNE_GEODATA || {});
   const regions = customDep ? Object.keys((CHAMPAGNE_GEODATA as Record<string, any>)[customDep] || {}) : [];
@@ -901,15 +902,22 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
   const confirmDeleteApport = async () => {
     if (!apportToDelete) return;
+    const reason = cancelApportReason.trim();
+    if (!reason) return alert("Veuillez renseigner une raison d'annulation.");
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/pressings?id=${(apportToDelete as any).id}`, { method: 'DELETE', headers: buildApiHeaders(user) });
+      const res = await fetch(`/api/pressings?id=${(apportToDelete as any).id}`, {
+        method: 'DELETE',
+        headers: buildApiHeaders(user),
+        body: JSON.stringify({ reason }),
+      });
       if (!res.ok) throw new Error(extractApiErrorMessage(await res.json().catch(() => ({}))));
       if (refreshData) await refreshData();
     } catch(e) { 
       alert(e instanceof Error ? e.message : String(e));
     }
     setApportToDelete(null); 
+    setCancelApportReason("");
     setIsSubmitting(false);
   };
 
@@ -1487,7 +1495,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
                       <div style={{ color: T.textDim }}>~ {totalEstime} hL</div>
                       <div><Badge label="En attente" color={T.accent} /></div>
                       <div style={{ textAlign: "right" }}>
-                        {isChef && <button onClick={() => setApportToDelete(a)} disabled={isSubmitting} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, opacity: 0.7 }} title="Supprimer cet apport">🗑️</button>}
+                        {isChef && <button onClick={() => { setApportToDelete(a); setCancelApportReason(""); }} disabled={isSubmitting} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, opacity: 0.7 }} title="Annuler cet apport">🗑️</button>}
                       </div>
                     </div>
                   );
@@ -1775,13 +1783,21 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
 
       {/* --- MODALES ANNEXES --- */}
       {apportToDelete && (
-        <Modal title="Supprimer cet apport" onClose={() => setApportToDelete(null)}>
+        <Modal title="Annuler cet apport" onClose={() => { setApportToDelete(null); setCancelApportReason(""); }}>
           <div style={{ fontSize: 14, color: T.text, marginBottom: 24 }}>
-            Êtes-vous sûr de vouloir supprimer l'apport de <strong>{(apportToDelete as any).weight || (apportToDelete as any).poids} kg</strong> ?<br/><br/>Cette action effacera l'enregistrement.
+            L'apport de <strong>{(apportToDelete as any).weight || (apportToDelete as any).poids} kg</strong> sera marqué comme annulé. Il restera tracé dans l'historique.
           </div>
+          <FF label="Raison d'annulation">
+            <Input
+              value={cancelApportReason}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCancelApportReason(e.target.value)}
+              disabled={isSubmitting}
+              placeholder="Ex: erreur de saisie, doublon..."
+            />
+          </FF>
           <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-            <Btn variant="secondary" onClick={() => setApportToDelete(null)} disabled={isSubmitting}>Annuler</Btn>
-            <Btn onClick={confirmDeleteApport} disabled={isSubmitting} style={{ background: T.red, borderColor: T.red, color: "#fff" }}>{isSubmitting ? "Suppression..." : "🗑️ Supprimer définitivement"}</Btn>
+            <Btn variant="secondary" onClick={() => { setApportToDelete(null); setCancelApportReason(""); }} disabled={isSubmitting}>Fermer</Btn>
+            <Btn onClick={confirmDeleteApport} disabled={isSubmitting || !cancelApportReason.trim()} style={{ background: T.red, borderColor: T.red, color: "#fff" }}>{isSubmitting ? "Annulation..." : "Annuler l'apport"}</Btn>
           </div>
         </Modal>
       )}

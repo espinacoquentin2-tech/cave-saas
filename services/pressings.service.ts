@@ -17,6 +17,7 @@ export class PressingService {
       const apport = await tx.pressing.findUnique({ where: { id: data.apportId } }); 
 
       if (!press || !apport) throw new Error("Pressoir ou Apport introuvable.");
+      if (apport.status !== "EN_ATTENTE") throw new Error("Seul un apport en attente peut être chargé au pressoir.");
       if (data.weightToLoad > Number(apport.weight)) throw new Error("Poids demandé supérieur au disponible sur le quai.");
 
       const currentLoad = press.loadKg || 0;
