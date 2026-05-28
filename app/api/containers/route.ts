@@ -4,7 +4,7 @@ import { Prisma } from '@prisma/client';
 import { z, ZodError } from 'zod';
 import { logger, logApiError } from '@/server/shared/logger';
 import { prisma } from '@/server/shared/prisma';
-import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
+import { READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
 const createContainerSchema = z.object({
   code: z.string().trim().optional(),
@@ -22,10 +22,6 @@ const updateContainerSchema = z.object({
   id: z.coerce.number().int().positive(),
   status: z.string().trim().optional(),
   name: z.string().trim().optional(),
-});
-
-const deleteContainerQuerySchema = z.object({
-  id: z.coerce.number().int().positive(),
 });
 
 export async function GET(request: Request) {
@@ -217,69 +213,26 @@ export async function PUT(request: Request) {
 
 export async function DELETE(request: Request) {
   const requestId = getRequestId(request);
+  const message =
+    'La suppression physique d’un contenant est désactivée pour préserver la traçabilité. Utilise une future opération d’archivage contrôlée.';
 
-  try {
-    const actor = await resolveAuthenticatedActor(request);
-    assertRole(actor, DELETE_ROLES);
-    const { searchParams } = new URL(request.url);
-    const payload = deleteContainerQuerySchema.parse({ id: searchParams.get('id') });
+  logger.warn({
+    action: 'containers.delete.disabled',
+    requestId,
+    details: { message },
+  });
 
-    try {
-      await prisma.container.delete({ where: { id: payload.id } });
-
-      logger.info({
-        action: 'containers.delete.destroyed',
-        requestId,
-        userEmail: actor.email,
-        role: actor.role,
-        details: { containerId: payload.id },
-      });
-
-      return NextResponse.json({ success: true, note: 'Cuve détruite' }, { status: 200, headers: { 'x-request-id': requestId } });
-    } catch (dbError) {
-      const isConstraintError = dbError instanceof Prisma.PrismaClientKnownRequestError && dbError.code === 'P2003';
-      if (!isConstraintError) {
-        throw dbError;
-      }
-
-      await prisma.container.update({ where: { id: payload.id }, data: { status: 'ARCHIVÉE' } });
-
-      logger.info({
-        action: 'containers.delete.archived',
-        requestId,
-        userEmail: actor.email,
-        role: actor.role,
-        details: { containerId: payload.id },
-      });
-
-      return NextResponse.json({ success: true, note: 'Cuve archivée' }, { status: 200, headers: { 'x-request-id': requestId } });
-    }
-  } catch (error) {
-    if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
-      logger.warn({
-        action: 'auth.rejected',
-        requestId,
-        details: { message: error.message },
-      });
-
-      return NextResponse.json(
-        {
-          error: error instanceof UnauthorizedError ? 'UNAUTHORIZED' : 'FORBIDDEN',
-          message: error.message,
-        },
-        {
-          status: error.statusCode,
-          headers: { 'x-request-id': requestId },
-        },
-      );
-    }
-
-    if (error instanceof ZodError) {
-      logger.warn({ action: 'containers.delete.validation_failed', requestId, details: { issues: error.flatten() } });
-      return NextResponse.json({ error: 'VALIDATION_ERROR', details: error.flatten() }, { status: 400, headers: { 'x-request-id': requestId } });
-    }
-
-    logger.error({ action: 'containers.delete.unhandled_error', requestId, details: { error: error instanceof Error ? error.message : 'unknown_error' } });
-    return NextResponse.json({ error: 'INTERNAL_SERVER_ERROR' }, { status: 500, headers: { 'x-request-id': requestId } });
-  }
+  return NextResponse.json(
+    {
+      error: 'METHOD_NOT_ALLOWED',
+      message,
+    },
+    {
+      status: 405,
+      headers: {
+        Allow: 'GET, POST, PUT',
+        'x-request-id': requestId,
+      },
+    },
+  );
 }

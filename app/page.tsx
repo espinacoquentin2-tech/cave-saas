@@ -2633,29 +2633,6 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
     }
   };
 
-  const executeDelete = async () => {
-    setIsSubmitting(true);
-    try {
-      const res = await fetch(`/api/containers?id=${container.id}`, { method: 'DELETE' });
-      
-      if (res.ok) { 
-        dispatch({ type: "DELETE_CONTAINER", payload: container.id }); 
-        dispatch({ type: "TOAST_ADD", payload: { msg: "Supprimé définitivement", color: T.green } }); 
-        if (refreshData) await refreshData(); 
-        onBack(); 
-      } else { 
-        const err = await res.json();
-        throw new Error(err.error || "Raison inconnue");
-      }
-    } catch (e: unknown) {
-      const message = e instanceof Error ? e.message : "Erreur inconnue";
-      alert("BLOCAGE BASE DE DONNÉES : " + message);
-    } finally {
-      setIsSubmitting(false);
-      setModal(null);
-    }
-  };
-
   const formatEventDate = (dStr: any) => {
     if (!dStr) return "--";
     const d = new Date(dStr);
@@ -2755,8 +2732,8 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
                   <>
                     <Btn variant="ghost" onClick={() => setModal("rename" as any)} disabled={isSubmitting}>✏️ Renommer</Btn>
                     {isReallyEmpty && (
-                       <Btn variant="ghost" onClick={() => setModal("deleteConfirm" as any)} style={{ color: T.red }} disabled={isSubmitting}>
-                         🗑️ {isCiterneMere ? "Supprimer Tout" : "Supprimer"}
+                       <Btn variant="ghost" style={{ color: T.textDim }} disabled title="Archivage contrôlé à venir">
+                         Archivage à venir
                        </Btn>
                     )}
                     {container.type === "CITERNE" && (
@@ -2857,21 +2834,6 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
       {modal === "rename"    && <RenameContainerModal container={container} onClose={() => setModal(null)} />}
       {modal === "compartment" && <AddCompartmentModal container={container} onClose={() => setModal(null)} />}
       {modal === "decuvage"  && <DecuvageModal container={container} lot={lot} onClose={() => setModal(null)} />}
-      
-      {modal === "deleteConfirm" && (
-        <Modal title="Confirmation de suppression" onClose={() => setModal(null)}>
-          <div style={{ padding:"20px 0", color:T.text, lineHeight:1.5 }}>
-            Voulez-vous vraiment supprimer définitivement <strong style={{color:T.red}}>{isCiterneMere ? baseName : (container.displayName || container.name)}</strong> {isCiterneMere && "et TOUS ses compartiments"} ?<br/><br/>
-            Cette action est irréversible.
-          </div>
-          <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-            <Btn variant="secondary" onClick={() => setModal(null)} disabled={isSubmitting}>Annuler</Btn>
-            <Btn onClick={executeDelete} disabled={isSubmitting} style={{ background:T.red, color:"#fff", borderColor:T.red }}>
-              {isSubmitting ? "Suppression..." : "Oui, supprimer"}
-            </Btn>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 }
