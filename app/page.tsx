@@ -906,10 +906,10 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
     if (!reason) return alert("Veuillez renseigner une raison d'annulation.");
     setIsSubmitting(true);
     try {
-      const res = await fetch(`/api/pressings?id=${(apportToDelete as any).id}`, {
-        method: 'DELETE',
+      const res = await fetch('/api/pressings/cancel', {
+        method: 'POST',
         headers: buildApiHeaders(user),
-        body: JSON.stringify({ reason }),
+        body: JSON.stringify({ id: (apportToDelete as any).id, reason }),
       });
       if (!res.ok) throw new Error(extractApiErrorMessage(await res.json().catch(() => ({}))));
       if (refreshData) await refreshData();
