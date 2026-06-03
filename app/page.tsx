@@ -417,12 +417,18 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
       // 4. INTRANTS (API INTRANTS SÉCURISÉE)
       else if (["LEVURAGE", "SULFITAGE", "CHAPTALISATION", "ACIDIFICATION", "COLLAGE", "FILTRATION", "STABILISATION TARTRIQUE", "OUILLAGE", "AJOUT AUTRE PRODUIT"].includes(task.recette)) {
+        const intrantSource = Array.isArray(task.sources)
+          ? task.sources.find((source: any) => source?.kind === "INTRANT")
+          : null;
         const res = await fetch('/api/lots/intrants', { 
           method: 'POST', 
           headers: buildApiHeaders(user),
           body: JSON.stringify({ 
             lotId: parseInt(task.targetLotId), 
-            intrant: task.recette, quantity: 1, unit: "opération", 
+            intrant: intrantSource?.label || task.details || task.recette,
+            quantity: intrantSource?.quantity ?? 1,
+            unit: intrantSource?.unit || "opération",
+            productId: intrantSource?.productId || undefined,
             operator: user.name, note: task.displayAction, idempotencyKey 
           }) 
         }); 
@@ -689,7 +695,7 @@ function MacerationModal({ pressing, onClose, dispatch, refreshData, user, state
           volume: parseFloat(form.volumeOccupe), containerId: parseInt(form.cuveId), 
           status: "MACERATION", notes: noteMac, operator: user.name,
           idempotencyKey
-        }) 
+        })
       });
 
       if (!res.ok) throw new Error((await res.json()).error || "Erreur de création de lot");
@@ -922,7 +928,7 @@ function Vendanges({ onSelectContainer }: VendangesProps) {
           poids: safeParseFloat(newApport.poids), 
           status: "EN_ATTENTE",
           idempotencyKey,
-        }) 
+        })
       });
       
       if (!res.ok) {
@@ -1955,8 +1961,11 @@ function AddIntrantModal({ container, lot, onClose }: AddIntrantModalProps) {
   const [intrant, setIntrant] = useState("Ouillage"); 
   const [qty, setQty] = useState("1"); 
   const [unit, setUnit] = useState("opération");
+  const [productId, setProductId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const intrantProducts = (state.products || []).filter((product: any) => product.category === "Intrants");
+  const selectedProduct = intrantProducts.find((product: any) => String(product.id) === String(productId));
 
   // Analyse historique pour interface
   const lotEvents = (state.events || []).filter((e: any) => String(e.lotId) === String(lot.id) && (e.type === "INTRANT" || e.eventType === "INTRANT"));
@@ -1973,7 +1982,15 @@ function AddIntrantModal({ container, lot, onClose }: AddIntrantModalProps) {
       const res = await fetch('/api/lots/intrants', { 
         method: 'POST', 
         headers: buildApiHeaders(user), 
-        body: JSON.stringify({ lotId: lot.id, intrant, quantity: parseFloat(qty), unit, operator: user.name, idempotencyKey }) 
+        body: JSON.stringify({
+          lotId: lot.id,
+          intrant: selectedProduct?.name || intrant,
+          quantity: parseFloat(qty),
+          unit,
+          productId: productId ? parseInt(productId) : undefined,
+          operator: user.name,
+          idempotencyKey
+        })
       });
       
       if (!res.ok) throw new Error((await res.json()).error || "Erreur serveur");
@@ -2017,6 +2034,24 @@ function AddIntrantModal({ container, lot, onClose }: AddIntrantModalProps) {
             </optgroup>
           </Select>
         </FF>
+        <FF label="Produit inventaire (optionnel)">
+          <Select
+            value={productId}
+            onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+              const product = intrantProducts.find((candidate: any) => String(candidate.id) === String(e.target.value));
+              setProductId(e.target.value);
+              if (product) {
+                setUnit(product.unit);
+              }
+            }}
+            disabled={isBlockedAOC || isSubmitting}
+          >
+            <option value="">Non stocké</option>
+            {intrantProducts.map((product: any) => (
+              <option key={product.id} value={product.id}>{product.name} ({Number(product.currentStock || 0).toFixed(3)} {product.unit})</option>
+            ))}
+          </Select>
+        </FF>
         
         {isBlockedAOC && (
           <div style={{ background:T.red+"15", border:`1px solid ${T.red}44`, padding:10, borderRadius:4, marginTop:8, color:T.red, fontSize:11, fontWeight:"bold" }}>
@@ -2030,7 +2065,7 @@ function AddIntrantModal({ container, lot, onClose }: AddIntrantModalProps) {
           <Input type="number" step="0.1" value={qty} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setQty(e.target.value)} disabled={isBlockedAOC || isSubmitting} />
         </FF>
         <FF label="Unité">
-          <Select value={unit} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUnit(e.target.value)} disabled={isBlockedAOC || isSubmitting}>
+          <Select value={unit} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setUnit(e.target.value)} disabled={isBlockedAOC || isSubmitting || !!selectedProduct}>
             {["opération", "g", "kg", "mL", "cL", "L", "g/hL", "mL/hL"].map(u => <option key={u}>{u}</option>)}
           </Select>
         </FF>

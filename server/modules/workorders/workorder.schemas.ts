@@ -5,6 +5,14 @@ const sourceSchema = z.object({
   volume: z.coerce.number().positive('Le volume source doit être supérieur à 0'),
 });
 
+const intrantSourceSchema = z.object({
+  kind: z.literal('INTRANT'),
+  label: z.string().trim().min(1),
+  quantity: z.coerce.number().positive(),
+  unit: z.string().trim().min(1),
+  productId: z.coerce.number().int().positive().optional().nullable(),
+});
+
 export const createWorkOrderSchema = z
   .object({
     recette: z.enum([
@@ -24,7 +32,7 @@ export const createWorkOrderSchema = z
     targetContainerId: z.coerce.number().int().positive().optional().nullable(),
     targetLotId: z.coerce.number().int().positive().optional().nullable(),
     details: z.string().trim().max(500).optional().nullable(),
-    sources: z.array(sourceSchema).default([]),
+    sources: z.array(z.union([sourceSchema, intrantSourceSchema])).default([]),
     idempotencyKey: z.string().trim().min(10),
   })
   .refine((data) => {
@@ -32,8 +40,13 @@ export const createWorkOrderSchema = z
     const isAssemblage = data.recette === 'ASSEMBLAGE';
     const isTirage = data.recette === 'TIRAGE';
     const isIntrant = !isTransfer && !isAssemblage && !isTirage;
+    const hasOnlyVolumeSources = data.sources.every((source) => !('kind' in source));
 
     if ((isTransfer || isAssemblage) && (!data.targetContainerId || data.sources.length === 0)) {
+      return false;
+    }
+
+    if ((isTransfer || isAssemblage) && !hasOnlyVolumeSources) {
       return false;
     }
 
@@ -41,8 +54,16 @@ export const createWorkOrderSchema = z
       return false;
     }
 
+    if (isTirage && !hasOnlyVolumeSources) {
+      return false;
+    }
+
     if (isIntrant && (!data.targetLotId || !data.details)) {
       return false;
+    }
+
+    if (isIntrant && data.sources.length > 0) {
+      return data.sources.every((source) => 'kind' in source && source.kind === 'INTRANT');
     }
 
     return true;

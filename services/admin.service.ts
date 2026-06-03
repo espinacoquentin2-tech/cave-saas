@@ -32,7 +32,9 @@ const toWorkOrderDto = (workOrder: {
   sources: Array.isArray(workOrder.sources) ? workOrder.sources : [],
   volume: Number(workOrder.plannedVolume || 0),
   displaySource: Array.isArray(workOrder.sources)
-    ? workOrder.sources.map((source: any) => `Lot #${source.lotId} (${source.volume} hL)`).join(', ')
+    ? workOrder.sources
+        .map((source: any) => source?.kind === 'INTRANT' ? `Lot #${workOrder.targetLotId}` : `Lot #${source.lotId} (${source.volume} hL)`)
+        .join(', ')
     : null,
   displayAction: workOrder.details || (workOrder.targetContainerId ? `Vers cuve ID ${workOrder.targetContainerId}` : 'Opération planifiée'),
   operator: workOrder.operator || workOrder.createdBy,
@@ -41,6 +43,8 @@ const toWorkOrderDto = (workOrder: {
   executedAt: workOrder.executedAt?.toISOString() || null,
 });
 
+const isVolumeSource = (source: any): source is { lotId: number; volume: number } =>
+  source && typeof source === 'object' && 'lotId' in source && 'volume' in source;
 
 export class AdminService {
   
@@ -56,8 +60,11 @@ export class AdminService {
       }
 
       // 2. CONTRÔLES MÉTIER PRÉVENTIFS
+      const isIntrantOrder = !["SOUTIRAGE", "ASSEMBLAGE", "TIRAGE"].includes(data.recette);
+      const volumeSources = data.sources.filter(isVolumeSource);
+
       // Vérifier que les lots sources ont assez de volume
-      for (const source of data.sources) {
+      for (const source of volumeSources) {
         const lot = await tx.lot.findUnique({ where: { id: source.lotId } });
         if (!lot) throw new Error(`Lot source ID ${source.lotId} introuvable.`);
         if (Number(lot.currentVolume) < source.volume) {
@@ -70,7 +77,7 @@ export class AdminService {
         const targetContainer = await tx.container.findUnique({ where: { id: data.targetContainerId } });
         if (!targetContainer) throw new Error("Cuve de destination introuvable.");
         
-        const totalIncomingVolume = data.sources.reduce((sum, s) => sum + s.volume, 0);
+        const totalIncomingVolume = volumeSources.reduce((sum, s) => sum + s.volume, 0);
         // Tolérance de 5% de débordement théorique tolérée dans la réalité, mais stricte en base
         if (Number(targetContainer.capacityValue) < totalIncomingVolume) {
            throw new Error(`La cuve de destination est trop petite. Capacité: ${targetContainer.capacityValue}hL, Volume prévu: ${totalIncomingVolume}hL`);
@@ -81,7 +88,7 @@ export class AdminService {
       // Ici, nous créons au minimum une trace d'audit pour marquer la planification
       
       const displayAction = data.details || `Vers cuve ID ${data.targetContainerId}`;
-      const totalVolume = data.sources.reduce((sum, s) => sum + s.volume, 0);
+      const totalVolume = isIntrantOrder ? 0 : volumeSources.reduce((sum, s) => sum + s.volume, 0);
 
       // Traçabilité & Idempotence
       await tx.idempotencyRecord.create({

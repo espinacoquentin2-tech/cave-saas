@@ -1,5 +1,6 @@
 // services/lots.service.ts
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { prisma } from '@/server/shared/prisma';
 import { 
   AddIntrantSchema, 
@@ -19,6 +20,19 @@ const toFiniteNumber = (value: unknown) => {
   if (!isProvided(value)) return null;
   const numberValue = typeof value === 'number' ? value : Number(value);
   return Number.isFinite(numberValue) ? numberValue : null;
+};
+
+const toStockDecimal = (value: number) => new Prisma.Decimal(value.toFixed(3));
+
+const normalizeIntrantCodePart = (value: string) => {
+  const normalized = value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+
+  return normalized || 'INTRANT';
 };
 
 const validateFaTourBusinessRules = (data: z.infer<typeof SaveFaTourSchema>) => {
@@ -100,19 +114,57 @@ export class LotsService {
 
       const user = await tx.user.findUnique({ where: { email: userEmail } });
       const userId = user?.id || 1;
+      const quantity = toStockDecimal(data.quantity);
+      let product: Awaited<ReturnType<typeof tx.product.findUnique>> | null = null;
+      let stockBefore: number | null = null;
+      let stockAfter: number | null = null;
+      let stockMovementId: number | null = null;
+
+      if (data.productId) {
+        product = await tx.product.findUnique({ where: { id: data.productId } });
+        if (!product) throw new Error("Produit intrant introuvable.");
+        stockBefore = Number(product.currentStock);
+
+        if (stockBefore < data.quantity) {
+          throw new Error(`Stock insuffisant pour ${product.name}. Disponible: ${stockBefore.toFixed(3)} ${product.unit}, demandé: ${data.quantity}.`);
+        }
+      }
+
+      const intrantLabel = product?.name || data.intrant.trim();
+      const intrantCode = product
+        ? `PRODUCT-${product.id}`
+        : `FREE-${normalizeIntrantCodePart(intrantLabel).slice(0, 80)}`;
+      const intrantRef = await tx.intrant.upsert({
+        where: { code: intrantCode },
+        create: {
+          code: intrantCode,
+          name: intrantLabel,
+          category: product?.subCategory || "Process",
+          mainUnit: product?.unit || data.unit,
+        },
+        update: {
+          name: intrantLabel,
+          category: product?.subCategory || "Process",
+          mainUnit: product?.unit || data.unit,
+        },
+      });
 
       const event = await tx.lotEvent.create({
         data: {
           eventType: "INTRANT",
           operatorUserId: userId,
-          comment: `${data.intrant} : ${data.quantity} ${data.unit}`,
+          comment: `${intrantLabel} : ${data.quantity} ${data.unit}`,
           metadata: {
             operation: "INTRANT",
             lotId: lot.id,
-            intrant: data.intrant,
+            intrant: intrantLabel,
             quantity: data.quantity,
             unit: data.unit,
-            note: null,
+            productId: product?.id ?? null,
+            stockMovementId: null,
+            stockBefore,
+            stockAfter,
+            note: data.note || null,
             idempotencyKey: data.idempotencyKey
           }
         }
@@ -122,11 +174,76 @@ export class LotsService {
         data: { eventId: event.id, lotId: lot.id, roleInEvent: "CIBLE", volumeChange: 0 }
       });
 
+      await tx.lotEventIntrant.create({
+        data: {
+          eventId: event.id,
+          intrantId: intrantRef.id,
+          quantity,
+          unit: data.unit,
+        }
+      });
+
+      if (product) {
+        const decrementResult = await tx.product.updateMany({
+          where: {
+            id: product.id,
+            currentStock: { gte: quantity },
+          },
+          data: {
+            currentStock: { decrement: quantity },
+          },
+        });
+
+        if (decrementResult.count !== 1) {
+          throw new Error("Le stock a changé pendant l'opération. Rechargez les données puis réessayez.");
+        }
+
+        stockAfter = stockBefore === null ? null : Number((stockBefore - data.quantity).toFixed(3));
+        const movement = await tx.stockMovement.create({
+          data: {
+            productId: product.id,
+            type: "OUT",
+            quantity,
+            note: data.note || `Intrant lot ${lot.businessCode}: ${intrantLabel}`,
+            operator: userEmail,
+          },
+        });
+        stockMovementId = movement.id;
+
+        await tx.lotEvent.update({
+          where: { id: event.id },
+          data: {
+            metadata: {
+              operation: "INTRANT",
+              lotId: lot.id,
+              intrant: intrantLabel,
+              quantity: data.quantity,
+              unit: data.unit,
+              productId: product.id,
+              stockMovementId,
+              stockBefore,
+              stockAfter,
+              note: data.note || null,
+              idempotencyKey: data.idempotencyKey
+            }
+          }
+        });
+      }
+
       const autoStatusUpdate = false;
 
       await tx.idempotencyRecord.create({ data: { key: data.idempotencyKey, action: "LOT_INTRANT", userId: userEmail } });
 
-      return { status: "SUCCESS", autoStatusUpdate };
+      return {
+        status: "SUCCESS",
+        autoStatusUpdate,
+        eventId: event.id,
+        intrantId: intrantRef.id,
+        stockMovementId,
+        productId: product?.id ?? null,
+        stockBefore,
+        stockAfter,
+      };
     });
   }
 

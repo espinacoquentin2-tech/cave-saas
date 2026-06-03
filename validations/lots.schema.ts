@@ -11,6 +11,8 @@ export const AddIntrantSchema = z.object({
   intrant: z.string().min(1),
   quantity: z.number().positive(),
   unit: z.string().min(1),
+  productId: z.number().int().positive().optional().nullable(),
+  note: z.string().max(500).optional().nullable(),
   idempotencyKey: z.string().min(10)
 });
 

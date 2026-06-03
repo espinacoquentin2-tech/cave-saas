@@ -23,6 +23,9 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
     targetContainerId: "", 
     targetLotId: "",
     details: "",
+    intrantProductId: "",
+    intrantQuantity: "1",
+    intrantUnit: "opération",
     sources: [{ lotId: "", volume: "" }]
   });
 
@@ -36,6 +39,8 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
   const isAssemblage = form.recette === "ASSEMBLAGE";
   const isTirage = form.recette === "TIRAGE";
   const isIntrant = ["LEVURAGE", "SULFITAGE", "CHAPTALISATION", "ACIDIFICATION", "COLLAGE", "FILTRATION", "STABILISATION TARTRIQUE", "OUILLAGE", "AJOUT AUTRE PRODUIT"].includes(form.recette);
+  const intrantProducts = (state.products || []).filter((product: any) => product.category === "Intrants");
+  const selectedIntrantProduct = intrantProducts.find((product: any) => String(product.id) === String(form.intrantProductId));
 
   const updateSource = (index: any, field: any, value: any) => {
     const newSources: any[] = [...form.sources];
@@ -54,7 +59,7 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
     } else if (isAssemblage) {
       if (!form.targetContainerId || form.sources.some((s: any) => !s.lotId || !s.volume)) return alert("Remplissez tous les champs et volumes des lots à assembler.");
     } else if (isIntrant) {
-      if (!form.targetLotId || !form.details) return alert("Veuillez choisir un lot et indiquer les détails du produit.");
+      if (!form.targetLotId || !form.details || !(parseFloat(form.intrantQuantity) > 0) || !form.intrantUnit) return alert("Veuillez choisir un lot, indiquer le produit, la quantité et l'unité.");
     }
 
     setIsSubmitting(true);
@@ -64,7 +69,13 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
       const payload: any = {
         recette: form.recette,
         details: form.details || undefined,
-        sources: isIntrant ? [] : form.sources.filter((s: any) => s.lotId && s.volume),
+        sources: isIntrant ? [{
+          kind: "INTRANT",
+          label: form.details,
+          quantity: parseFloat(form.intrantQuantity),
+          unit: form.intrantUnit,
+          productId: form.intrantProductId ? parseInt(form.intrantProductId) : null,
+        }] : form.sources.filter((s: any) => s.lotId && s.volume),
         idempotencyKey
       };
       if (form.targetContainerId) payload.targetContainerId = form.targetContainerId;
@@ -90,7 +101,7 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
       // Réinitialisation
       setIdempotencyKey(crypto.randomUUID());
       setModal(false);
-      setForm({ recette: "SOUTIRAGE", targetContainerId: "", targetLotId: "", details: "", sources: [{ lotId: "", volume: "" }] });
+      setForm({ recette: "SOUTIRAGE", targetContainerId: "", targetLotId: "", details: "", intrantProductId: "", intrantQuantity: "1", intrantUnit: "opération", sources: [{ lotId: "", volume: "" }] });
 
     } catch (error: any) {
       alert(error?.message || "Erreur lors de la planification de l'ordre de travail.");
@@ -189,6 +200,34 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
               <FF label="Détails du produit (Nom exact, Quantité, Dosage...)">
                 <Input value={form.details} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, details:e.target.value})} disabled={isSubmitting} placeholder="Ex: 5g/hL de SO2, Levure IOC 18-2007 (500g)..." />
               </FF>
+              <FF label="Produit inventaire (optionnel)">
+                <Select
+                  value={form.intrantProductId}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                    const product = intrantProducts.find((candidate: any) => String(candidate.id) === String(e.target.value));
+                    setForm({
+                      ...form,
+                      intrantProductId: e.target.value,
+                      details: product ? product.name : form.details,
+                      intrantUnit: product ? product.unit : form.intrantUnit,
+                    });
+                  }}
+                  disabled={isSubmitting}
+                >
+                  <option value="">Non stocké</option>
+                  {intrantProducts.map((product: any) => (
+                    <option key={product.id} value={product.id}>{product.name} ({Number(product.currentStock || 0).toFixed(3)} {product.unit})</option>
+                  ))}
+                </Select>
+              </FF>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                <FF label="Quantité">
+                  <Input type="number" step="0.001" value={form.intrantQuantity} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, intrantQuantity:e.target.value})} disabled={isSubmitting} />
+                </FF>
+                <FF label="Unité">
+                  <Input value={form.intrantUnit} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>setForm({...form, intrantUnit:e.target.value})} disabled={isSubmitting || !!selectedIntrantProduct} />
+                </FF>
+              </div>
             </div>
           )}
 
