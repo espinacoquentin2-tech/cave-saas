@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { BOTTLE_STATUS_VALUES } from '@/lib/bottle-status-transitions';
 
 export const listBottleLotsQuerySchema = z.object({
   id: z.coerce.number().int().positive().optional(),
@@ -9,7 +10,7 @@ const isoDateString = z.string().trim().min(10);
 
 export const updateBottleStatusSchema = z.object({
   blId: z.coerce.number().int().positive(),
-  status: z.enum(['EN_REMUAGE', 'SUR_POINTES', 'A_DEGORGER']),
+  status: z.enum(BOTTLE_STATUS_VALUES),
   location: z.string().trim().optional().nullable(),
   note: z.string().trim().optional().nullable(),
   idempotencyKey: z.string().trim().min(10),

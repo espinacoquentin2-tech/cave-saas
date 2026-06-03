@@ -14,6 +14,7 @@ import {
   ArchiveBottleLotInput,
   CancelBottleEventInput,
 } from '@/server/modules/bottles/bottle.schemas';
+import { isBottleStatusRouteTransitionAllowed } from '@/lib/bottle-status-transitions';
 import { prisma } from '@/server/shared/prisma';
 
 type Tx = Prisma.TransactionClient;
@@ -277,6 +278,14 @@ export class BottlesService {
         const bottleLot = await tx.bottleLot.findUnique({ where: { id: data.blId } });
         if (!bottleLot) {
           throw new BusinessLogicError('Lot introuvable.', 404);
+        }
+
+        if (bottleLot.archivedAt || bottleLot.status === 'ARCHIVE' || bottleLot.status === 'EXPEDIE') {
+          throw new BusinessLogicError('Ce changement de statut doit passer par le flux métier dédié.', 409);
+        }
+
+        if (!isBottleStatusRouteTransitionAllowed(bottleLot.status, data.status)) {
+          throw new BusinessLogicError('Ce changement de statut doit passer par le flux métier dédié.', 409);
         }
 
         const operatorId = await this.getUserId(tx, userEmail);
