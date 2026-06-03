@@ -22,6 +22,7 @@ import {
   getDegorgementEligibility,
   normalizeBottleLotStatus,
 } from "@/lib/bottles";
+import { getAllowedManualLotStatusTargets } from "@/lib/lot-status-transitions";
 import {
   buildApiHeaders,
   buildTirageStockItems,
@@ -2948,7 +2949,6 @@ function TourFA({ onSelectLot }: any) {
   const [showArchived, setShowArchived] = useState(false);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [archivingLotId, setArchivingLotId] = useState<string | null>(null);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   const activeFaStatuses = ["FERMENTATION_ALCOOLIQUE", "FERMENTATION_MALOLACTIQUE", "FA_ET_FML"];
@@ -3013,30 +3013,6 @@ function TourFA({ onSelectLot }: any) {
       setIdempotencyKey(crypto.randomUUID()); // Renouvellement de la clé en cas d'erreur
     } finally {
       setIsSubmitting(false);
-    }
-  };
-
-  const archiveLot = async (lot: any) => {
-    setArchivingLotId(String(lot.id));
-    try {
-      const res = await fetch('/api/lots/statuts', {
-        method: 'POST',
-        headers: buildApiHeaders(user),
-        body: JSON.stringify({
-          lotId: lot.id,
-          newStatus: "ARCHIVE",
-          note: "Archivage depuis le suivi FA",
-          idempotencyKey: crypto.randomUUID()
-        })
-      });
-      const payload = await res.json();
-      if (!res.ok) throw new Error(extractApiErrorMessage(payload, "Erreur d'archivage"));
-      dispatch({ type: "TOAST_ADD", payload: { msg: `Lot ${lot.businessCode || lot.code} archivé`, color: T.green } });
-      if (refreshData) await refreshData();
-    } catch (e: any) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: e instanceof Error ? e.message : String(e), color: T.red } });
-    } finally {
-      setArchivingLotId(null);
     }
   };
 
@@ -3121,14 +3097,7 @@ function TourFA({ onSelectLot }: any) {
                 </div>
                 <div>
                   {isInactive ? (
-                    <Btn
-                      variant="ghost"
-                      onClick={() => archiveLot(l)}
-                      disabled={archivingLotId === String(l.id)}
-                      style={{ width: "100%", padding: "7px 8px", fontSize: 10 }}
-                    >
-                      {archivingLotId === String(l.id) ? "..." : "Archiver"}
-                    </Btn>
+                    <span style={{ color: T.textDim, fontSize: 11 }}>Flux dédié requis</span>
                   ) : (
                     <span style={{ color: T.textDim, fontSize: 11 }}>--</span>
                   )}
@@ -3713,6 +3682,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
   const lotFas     = (state.faReadings || []).filter((f: any) => f.lotId === parseInt(lot.id));
   const bulkVol    = lot.currentVolume || lot.volume || 0;
   const isDeadBulk = bulkVol <= 0 || ["ASSEMBLE", "TIRE", "ARCHIVE"].includes(lot.status);
+  const allowedManualStatusTargets = getAllowedManualLotStatusTargets(lot.status);
 
   // Ce POST tape déjà sur l'API existante /api/lots/statuts (qui devra utiliser Zod)
   const submitStatusChange = async () => {
@@ -3725,7 +3695,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
         body: JSON.stringify({ lotId: lot.id, newStatus: statusForm.status, operator: user.name, note: statusForm.note, idempotencyKey }) 
       });
       
-      if (!res.ok) throw new Error((await res.json()).error || "Erreur serveur"); // 👈 GESTION DE L'ERREUR
+      if (!res.ok) throw new Error(extractApiErrorMessage(await res.json(), "Erreur serveur")); // 👈 GESTION DE L'ERREUR
       
       dispatch({ type:"TOAST_ADD", payload:{ msg:`Statut passé à ${formatStatus(statusForm.status)}`, color:"#2d6640" } }); 
       setModal(null); 
@@ -3765,7 +3735,13 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
             
             {!isDeadBulk && (
               <>
-                <Btn variant="secondary" onClick={() => { setStatusForm({ status: lot.status, note: "" }); setModal("status" as any); }}>Modifier Statut</Btn>
+                <Btn
+                  variant="secondary"
+                  onClick={() => { setStatusForm({ status: allowedManualStatusTargets[0] || "", note: "" }); setModal("status" as any); }}
+                  disabled={allowedManualStatusTargets.length === 0}
+                >
+                  Modifier Statut
+                </Btn>
                 <Btn variant="ghost" onClick={() => setModal("tirage" as any)} disabled={!isLotTirageEligible}>
                   Tirer / Mettre en bouteille
                 </Btn>
@@ -3867,12 +3843,17 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
         <Modal title="Changer statut" onClose={() => setModal(null)}>
           <FF label="Nouveau statut">
             <Select value={statusForm.status} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setStatusForm({ ...statusForm, status: e.target.value })} disabled={isSubmitting}>
-              {LOT_STATUSES.map((s: any) => <option key={s} value={s}>{formatStatus(s)}</option>)}
+              {allowedManualStatusTargets.map((s: any) => <option key={s} value={s}>{formatStatus(s)}</option>)}
             </Select>
           </FF>
+          {allowedManualStatusTargets.length === 0 && (
+            <div style={{ color:T.textDim, fontSize:12, marginTop:8 }}>
+              Aucun changement manuel autorisé pour ce statut.
+            </div>
+          )}
           <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
             <Btn variant="secondary" onClick={() => setModal(null)} disabled={isSubmitting}>Annuler</Btn>
-            <Btn onClick={submitStatusChange} disabled={isSubmitting}>{isSubmitting ? "Enregistrement..." : "Valider"}</Btn>
+            <Btn onClick={submitStatusChange} disabled={isSubmitting || allowedManualStatusTargets.length === 0}>{isSubmitting ? "Enregistrement..." : "Valider"}</Btn>
           </div>
         </Modal>
       )}

@@ -8,6 +8,10 @@ export class LotStatusModuleService {
     try {
       return await LotsService.updateStatus(input, actor.email);
     } catch (error) {
+      if (error instanceof BusinessLogicError) {
+        throw error;
+      }
+
       const message = error instanceof Error ? error.message : 'Erreur serveur';
 
       if (message.includes('ALREADY_APPLIED')) {

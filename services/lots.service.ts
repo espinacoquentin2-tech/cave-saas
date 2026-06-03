@@ -1,6 +1,8 @@
 // services/lots.service.ts
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
+import { BusinessLogicError } from '@/lib/errors';
+import { isManualLotStatusTransitionAllowed } from '@/lib/lot-status-transitions';
 import { prisma } from '@/server/shared/prisma';
 import { 
   AddIntrantSchema, 
@@ -343,7 +345,17 @@ export class LotsService {
   static async updateStatus(data: z.infer<typeof UpdateLotStatusSchema>, userEmail: string) {
     return await prisma.$transaction(async (tx) => {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
-      if (existingTx) throw new Error("ALREADY_APPLIED: Statut déjà modifié.");
+      if (existingTx) throw new BusinessLogicError("ALREADY_APPLIED: Statut déjà modifié.", 409);
+
+      const lot = await tx.lot.findUnique({ where: { id: data.lotId } });
+      if (!lot) throw new BusinessLogicError("Lot introuvable.", 404);
+
+      if (!isManualLotStatusTransitionAllowed(lot.status, data.newStatus)) {
+        throw new BusinessLogicError(
+          `Transition de statut non autorisée : ${lot.status} -> ${data.newStatus}. Utilise le flux métier adapté.`,
+          409,
+        );
+      }
 
       await tx.lot.update({ where: { id: data.lotId }, data: { status: data.newStatus } });
 
@@ -353,6 +365,16 @@ export class LotsService {
           eventType: 'CHANGEMENT_STATUT',
           operatorUserId: user?.id || 1,
           comment: `Nouveau statut : ${data.newStatus.replace(/_/g, " ")}${data.note ? ' - ' + data.note : ''}`,
+          metadata: {
+            operation: 'CHANGEMENT_STATUT',
+            lotId: data.lotId,
+            previousStatus: lot.status,
+            newStatus: data.newStatus,
+            reason: data.note || null,
+            note: data.note || null,
+            trigger: 'manual_status_update',
+            idempotencyKey: data.idempotencyKey,
+          },
         }
       });
 

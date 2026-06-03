@@ -1,5 +1,6 @@
 // validations/lots.schema.ts
 import { z } from 'zod';
+import { LOT_STATUS_VALUES } from '@/lib/lot-status-transitions';
 
 export const FA_DENSITY_MIN = 980;
 export const FA_DENSITY_MAX = 1150;
@@ -42,7 +43,7 @@ export const CreateLotSchema = z.object({
 
 export const UpdateLotStatusSchema = z.object({
   lotId: z.number().int().positive(),
-  newStatus: z.string().min(2),
+  newStatus: z.enum(LOT_STATUS_VALUES),
   note: z.string().optional().nullable(),
   idempotencyKey: z.string().min(10)
 });
