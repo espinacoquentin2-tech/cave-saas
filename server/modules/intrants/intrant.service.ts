@@ -18,6 +18,14 @@ export class IntrantModuleService {
         throw new BusinessLogicError(message, 400);
       }
 
+      if (message.includes('Produit intrant introuvable')) {
+        throw new BusinessLogicError(message, 404);
+      }
+
+      if (message.includes('Stock insuffisant') || message.includes('stock a changé')) {
+        throw new BusinessLogicError(message, 409);
+      }
+
       throw new BusinessLogicError(message, 400);
     }
   }
