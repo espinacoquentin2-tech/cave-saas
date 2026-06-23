@@ -11,16 +11,23 @@ export default defineConfig({
   use: {
     baseURL: process.env.E2E_BASE_URL || "http://localhost:3000",
     headless: true,
+    launchOptions: {
+      args: [
+        "--disable-crash-reporter",
+        "--disable-crashpad",
+        "--crash-dumps-dir=/private/tmp/ma-cuverie-playwright-crashpad",
+      ],
+    },
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
     video: "retain-on-failure",
   },
   projects: [
     {
-      name: "chromium",
+      name: "chrome",
       use: {
         ...devices["Desktop Chrome"],
-        browserName: "chromium",
+        channel: "chrome",
       },
     },
   ],

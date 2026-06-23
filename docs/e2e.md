@@ -1,6 +1,6 @@
 # Tests E2E Playwright
 
-Ce projet utilise Playwright avec un Chromium isole. Les smoke tests UI ne lisent pas les cookies de Chrome personnel et n'utilisent pas la session navigateur principale.
+Ce projet utilise Playwright avec le Chrome systeme (`channel: "chrome"`) et un profil temporaire gere par Playwright. Les smoke tests UI ne lisent pas les cookies de Chrome personnel et n'utilisent pas la session navigateur principale.
 
 ## Variables
 
@@ -30,10 +30,24 @@ Lancer le smoke test V1 :
 npm run test:e2e:ui-v1
 ```
 
+Lancer explicitement avec le projet Chrome systeme :
+
+```bash
+npm run test:e2e:ui-v1:chrome
+```
+
 Mode visible :
 
 ```bash
-npm run test:e2e:headed -- tests/e2e/ui-v1-smoke.spec.ts
+npm run test:e2e:headed -- tests/e2e/ui-v1-smoke.spec.ts --project=chrome
 ```
 
 Le test ouvre les modules V1, verifie les ecrans et peut ouvrir/fermer certaines modales, sans soumettre de formulaire metier.
+
+## Si Chrome ne demarre pas sur macOS
+
+Si Chrome systeme echoue avant le login sur une erreur Crashpad ou framework macOS, ne pas utiliser la session Chrome personnelle et ne pas contourner les protections macOS. Options de repli :
+
+- mettre a jour macOS ;
+- epingler une version plus ancienne de Playwright compatible avec la version macOS locale ;
+- lancer le smoke sur un runner CI/Linux.

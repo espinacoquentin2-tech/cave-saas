@@ -2,6 +2,11 @@
 import { randomUUID } from 'crypto';
 import { CreateWorkOrderPayload } from '../validations/admin.schema';
 import { formatRoleLabel, normalizeRoleKey } from '@/lib/roles';
+import {
+  getWorkOrderAssemblageSourceRoleForStatus,
+  getWorkOrderAssemblageSourceRoleLabel,
+  normalizeWorkOrderAssemblageSourceRole,
+} from '@/lib/workorder-assemblage-sources';
 import type { UpsertUserInput } from '@/server/modules/users/user.schemas';
 import { prisma } from '@/server/shared/prisma';
 
@@ -33,7 +38,15 @@ const toWorkOrderDto = (workOrder: {
   volume: Number(workOrder.plannedVolume || 0),
   displaySource: Array.isArray(workOrder.sources)
     ? workOrder.sources
-        .map((source: any) => source?.kind === 'INTRANT' ? `Lot #${workOrder.targetLotId}` : `Lot #${source.lotId} (${source.volume} hL)`)
+        .map((source: any) => {
+          if (source?.kind === 'INTRANT') {
+            return `Lot #${workOrder.targetLotId}`;
+          }
+
+          const role = normalizeWorkOrderAssemblageSourceRole(source?.role ?? source?.sourceRole);
+          const roleLabel = workOrder.recette === 'ASSEMBLAGE' ? ` - ${getWorkOrderAssemblageSourceRoleLabel(role)}` : '';
+          return `Lot #${source.lotId}${roleLabel} (${source.volume} hL)`;
+        })
         .join(', ')
     : null,
   displayAction: workOrder.details || (workOrder.targetContainerId ? `Vers cuve ID ${workOrder.targetContainerId}` : 'Opération planifiée'),
@@ -43,7 +56,9 @@ const toWorkOrderDto = (workOrder: {
   executedAt: workOrder.executedAt?.toISOString() || null,
 });
 
-const isVolumeSource = (source: any): source is { lotId: number; volume: number } =>
+type WorkOrderVolumeSource = { lotId: number; volume: number; role?: string; sourceRole?: string };
+
+const isVolumeSource = (source: any): source is WorkOrderVolumeSource =>
   source && typeof source === 'object' && 'lotId' in source && 'volume' in source;
 
 export class AdminService {
@@ -61,14 +76,44 @@ export class AdminService {
 
       // 2. CONTRÔLES MÉTIER PRÉVENTIFS
       const isIntrantOrder = !["SOUTIRAGE", "ASSEMBLAGE", "TIRAGE"].includes(data.recette);
-      const volumeSources = data.sources.filter(isVolumeSource);
+      const normalizedSources = [...data.sources];
+      const isAssemblageOrder = data.recette === "ASSEMBLAGE";
 
       // Vérifier que les lots sources ont assez de volume
-      for (const source of volumeSources) {
+      for (const [index, source] of normalizedSources.entries()) {
+        if (!isVolumeSource(source)) {
+          continue;
+        }
+
         const lot = await tx.lot.findUnique({ where: { id: source.lotId } });
         if (!lot) throw new Error(`Lot source ID ${source.lotId} introuvable.`);
         if (Number(lot.currentVolume) < source.volume) {
           throw new Error(`Volume insuffisant dans le lot ${lot.businessCode}. Requis: ${source.volume}, Dispo: ${lot.currentVolume}`);
+        }
+
+        if (isAssemblageOrder) {
+          const expectedRole = getWorkOrderAssemblageSourceRoleForStatus(lot.status);
+          const storedRole = normalizeWorkOrderAssemblageSourceRole(source.role ?? source.sourceRole);
+
+          if (!expectedRole) {
+            throw new Error(`Le lot ${lot.businessCode} ne peut pas etre utilise dans un ordre d'assemblage avec le statut ${lot.status}.`);
+          }
+
+          if (storedRole && storedRole !== expectedRole) {
+            throw new Error(`Role incoherent pour le lot ${lot.businessCode}: ${storedRole} avec statut ${lot.status}. Role attendu: ${expectedRole}.`);
+          }
+
+          normalizedSources[index] = {
+            ...source,
+            role: storedRole ?? expectedRole,
+          };
+        }
+      }
+
+      const volumeSources: WorkOrderVolumeSource[] = [];
+      for (const source of normalizedSources) {
+        if (isVolumeSource(source)) {
+          volumeSources.push(source);
         }
       }
 
@@ -102,7 +147,7 @@ export class AdminService {
           targetContainerId: data.targetContainerId ?? null,
           targetLotId: data.targetLotId ?? null,
           details: data.details?.trim() || null,
-          sources: data.sources,
+          sources: normalizedSources,
           plannedVolume: totalVolume,
           createdBy: userEmail,
           operator: userEmail,

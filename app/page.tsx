@@ -59,6 +59,10 @@ import {
   roleMatches,
   toUiUser,
 } from "@/lib/roles";
+import {
+  getWorkOrderAssemblageSourceRoleForStatus,
+  normalizeWorkOrderAssemblageSourceRole,
+} from "@/lib/workorder-assemblage-sources";
 
 // =============================================================================
 // HELPERS & COMPOSANTS SUR-MESURE
@@ -333,7 +337,12 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
       // 2. ASSEMBLAGE MULTIPLE (API ASSEMBLAGE)
       else if (task.recette === "ASSEMBLAGE") {
         const sourcesToProcess = task.sources || [{ lotId: task.lotId, volume: task.volume }];
-        const fullSourceLots: any[] = sourcesToProcess.map((s: any) => (state.lots || []).find((l: any) => String(l.id) === String(s.lotId))).filter(Boolean);
+        const fullSourceLots: any[] = sourcesToProcess.map((s: any) => (state.lots || []).find((l: any) => String(l.id) === String(s.lotId)));
+
+        const missingSource = sourcesToProcess.find((s: any, index: number) => !fullSourceLots[index]);
+        if (missingSource) {
+          throw new Error(`Lot source introuvable pour l'assemblage (#${missingSource.lotId}).`);
+        }
 
         const hasCoteaux = fullSourceLots.some(l => l.status === "COTEAUX");
         const hasVinDeBase = fullSourceLots.some(l => l.status === "VIN_DE_BASE" || l.status === "FA_ET_FML" || l.status === "MOUT_DEBOURBE");
@@ -358,7 +367,29 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
         const baseCode = `${anneeLabel}-ASSEM-${String((state.lots || []).length+1).padStart(3,"0")}`;
         const codeAssem = isRose ? `${baseCode}-Rosé` : baseCode;
 
-        const sourceLotsData = sourcesToProcess.map((s: any) => ({ id: parseInt(s.lotId), volumeUsed: parseFloat(s.volume) || 0 }));
+        const componentsData = sourcesToProcess.map((source: any, index: number) => {
+          const lot = fullSourceLots[index];
+          const expectedRole = getWorkOrderAssemblageSourceRoleForStatus(lot.status);
+          const storedRole = normalizeWorkOrderAssemblageSourceRole(source.role ?? source.sourceRole);
+
+          if (!expectedRole) {
+            throw new Error(`Le lot ${lot.businessCode || lot.code} ne peut pas etre utilise dans un assemblage avec le statut ${lot.status}.`);
+          }
+
+          if (storedRole && storedRole !== expectedRole) {
+            throw new Error(`Role incoherent pour le lot ${lot.businessCode || lot.code}: ${storedRole} avec statut ${lot.status}. Role attendu: ${expectedRole}.`);
+          }
+
+          const volumeHl = parseFloat(source.volume) || 0;
+          return {
+            sourceType: "LOT",
+            lotId: parseInt(source.lotId),
+            volumeHl,
+            originUnit: "hL",
+            originQuantity: volumeHl,
+            sourceRole: storedRole ?? expectedRole,
+          };
+        });
         
         const res = await fetch('/api/lots/assemblage', { 
           method: 'POST', 
@@ -366,9 +397,10 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
           body: JSON.stringify({ 
             code: codeAssem, 
             volume: vMain, 
-            sourceLots: sourceLotsData, 
+            components: componentsData,
             targetContainerId: parseInt(task.targetContainerId), 
             operator: user.name,
+            assemblageType: isRose ? "ROSE_D_ASSEMBLAGE" : undefined,
             millesime: anneeLabel === "SA" ? "SA" : parseInt(anneeLabel),
             cepage: "MULTI",
             idempotencyKey

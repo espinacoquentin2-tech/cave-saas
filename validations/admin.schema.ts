@@ -1,10 +1,13 @@
 // validations/admin.schema.ts
 import { z } from 'zod';
+import { ASSEMBLAGE_SOURCE_ROLES } from '@/lib/assemblage';
 import { formatRoleLabel, normalizeRoleKey } from '@/lib/roles';
 
 const WorkOrderSourceSchema = z.object({
   lotId: z.number().int().positive("L'ID du lot source est requis"),
-  volume: z.number().positive("Le volume source doit être supérieur à 0")
+  volume: z.number().positive("Le volume source doit être supérieur à 0"),
+  role: z.enum(ASSEMBLAGE_SOURCE_ROLES).optional(),
+  sourceRole: z.enum(ASSEMBLAGE_SOURCE_ROLES).optional(),
 });
 
 const WorkOrderIntrantSourceSchema = z.object({

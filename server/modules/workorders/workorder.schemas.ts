@@ -1,8 +1,11 @@
 import { z } from 'zod';
+import { ASSEMBLAGE_SOURCE_ROLES } from '@/lib/assemblage';
 
 const sourceSchema = z.object({
   lotId: z.coerce.number().int().positive("L'ID du lot source est requis"),
   volume: z.coerce.number().positive('Le volume source doit être supérieur à 0'),
+  role: z.enum(ASSEMBLAGE_SOURCE_ROLES).optional(),
+  sourceRole: z.enum(ASSEMBLAGE_SOURCE_ROLES).optional(),
 });
 
 const intrantSourceSchema = z.object({

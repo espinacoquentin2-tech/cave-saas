@@ -20,6 +20,10 @@ export class WorkOrderModuleService {
         throw new BusinessLogicError(message, 409);
       }
 
+      if (message.includes('Role incoherent')) {
+        throw new BusinessLogicError(message, 409);
+      }
+
       if (message.includes('insuffisant') || message.includes('introuvable') || message.includes('trop petite')) {
         throw new BusinessLogicError(message, 400);
       }

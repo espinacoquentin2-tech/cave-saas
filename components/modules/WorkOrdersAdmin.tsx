@@ -9,6 +9,10 @@ import {
   extractApiErrorMessage,
   unwrapApiData,
 } from "@/lib/client-app-helpers";
+import {
+  getWorkOrderAssemblageSourceRoleForStatus,
+  getWorkOrderAssemblageSourceRoleLabel,
+} from "@/lib/workorder-assemblage-sources";
 
 export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any; setWorkOrders: any }) {
   const T = useTheme(); 
@@ -34,6 +38,11 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
   
   const getLotCode = (id: any) => state.lots.find((l: any) => String(l.id) === String(id))?.code || id;
   const getContainerName = (id: any) => state.containers.find((c: any) => String(c.id) === String(id))?.displayName || state.containers.find((c: any) => String(c.id) === String(id))?.name || id;
+  const getLotById = (id: any) => state.lots.find((l: any) => String(l.id) === String(id));
+  const getAssemblageSourceRole = (source: any) => {
+    const lot = getLotById(source?.lotId);
+    return getWorkOrderAssemblageSourceRoleForStatus(lot?.status);
+  };
 
   const isTransfer = form.recette === "SOUTIRAGE";
   const isAssemblage = form.recette === "ASSEMBLAGE";
@@ -75,7 +84,19 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
           quantity: parseFloat(form.intrantQuantity),
           unit: form.intrantUnit,
           productId: form.intrantProductId ? parseInt(form.intrantProductId) : null,
-        }] : form.sources.filter((s: any) => s.lotId && s.volume),
+        }] : form.sources
+          .filter((s: any) => s.lotId && s.volume)
+          .map((source: any) => {
+            if (!isAssemblage) return source;
+
+            const role = getAssemblageSourceRole(source);
+            if (!role) return source;
+
+            return {
+              ...source,
+              role,
+            };
+          }),
         idempotencyKey
       };
       if (form.targetContainerId) payload.targetContainerId = form.targetContainerId;
@@ -167,12 +188,16 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
             <div style={{ background:T.surfaceHigh, padding:14, borderRadius:6, border:`1px solid ${T.border}`, marginBottom:16 }}>
               <div style={{ fontSize:10, textTransform:"uppercase", color:T.textDim, marginBottom:10, fontWeight: "bold" }}>Composition de l'assemblage (Lots sources)</div>
               {form.sources.map((s: any, i: any) => (
-                <div key={i} style={{ display:"flex", gap:8, marginBottom:8 }}>
+                <div key={i} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 110px auto", gap:8, marginBottom:8, alignItems:"center" }}>
                   <Select value={s.lotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>)=>updateSource(i, "lotId", e.target.value)} style={{ flex:2 }} disabled={isSubmitting}>
                     <option value="">-- Sélectionner un Lot --</option>
-                    {availLots.map((l: any)=><option key={l.id} value={l.id}>{l.code} (Dispo: {formatVolShort(l.volume)})</option>)}
+                    {availLots.map((l: any) => {
+                      const role = getWorkOrderAssemblageSourceRoleForStatus(l.status);
+                      return <option key={l.id} value={l.id}>{l.code} - {getWorkOrderAssemblageSourceRoleLabel(role)} (Dispo: {formatVolShort(l.volume)})</option>;
+                    })}
                   </Select>
                   <Input type="number" step="0.1" placeholder="Vol (hL)" value={s.volume} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateSource(i, "volume", e.target.value)} style={{ flex:1 }} disabled={isSubmitting} />
+                  <Badge label={getWorkOrderAssemblageSourceRoleLabel(getAssemblageSourceRole(s))} color={T.accent} />
                   {form.sources.length > 1 && <Btn variant="ghost" onClick={()=>removeSource(i)} disabled={isSubmitting} style={{ color:T.red, padding:"0 8px" }}>✕</Btn>}
                 </div>
               ))}

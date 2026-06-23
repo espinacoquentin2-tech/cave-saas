@@ -9,7 +9,8 @@
     "lint": "eslint",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
-    "test:e2e:ui-v1": "playwright test tests/e2e/ui-v1-smoke.spec.ts"
+    "test:e2e:ui-v1": "playwright test tests/e2e/ui-v1-smoke.spec.ts",
+    "test:e2e:ui-v1:chrome": "playwright test tests/e2e/ui-v1-smoke.spec.ts --project=chrome"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
