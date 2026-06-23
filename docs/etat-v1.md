@@ -76,6 +76,7 @@ Les suppressions physiques exposees par API sont neutralisees.
 - `DELETE /api/pressings` : `405`.
 - `POST /api/pressings/cancel` remplace la suppression d'un apport par une annulation controlee.
 - Le reset dev est le seul flux destructif assume.
+- Le reset dev supprime aussi les ordres de travail persistants dans `work_orders`.
 - `prisma/seed.js` est neutralise.
 
 ## Statuts encadres
@@ -124,6 +125,8 @@ Garde-fous V1 :
 - Payload valide par schema Zod.
 
 Cette route ne doit pas etre exposee comme outil de production.
+
+Les donnees metier reinitialisees incluent notamment `work_orders`; le reseed demo ne recree pas d'ordres de travail par defaut.
 
 ## Risques restants
 

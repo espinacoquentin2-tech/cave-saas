@@ -10,6 +10,7 @@ const decimal = (value: number, precision: number = 3) =>
   new Prisma.Decimal(value.toFixed(precision));
 
 export interface AdminResetCounts {
+  workOrders: number;
   shipmentLines: number;
   shipments: number;
   bottleEventLinks: number;
@@ -122,6 +123,7 @@ export class AdminSeedError extends Error {
 }
 
 const createEmptyResetCounts = (): Omit<AdminResetCounts, 'operations'> => ({
+  workOrders: 0,
   shipmentLines: 0,
   shipments: 0,
   bottleEventLinks: 0,
@@ -176,6 +178,8 @@ export class AdminResetService {
 
     await tx.idempotencyRecord.deleteMany();
     await tx.auditLog.deleteMany();
+
+    counts.workOrders = (await tx.workOrder.deleteMany()).count;
 
     counts.shipmentLines = (await tx.shipmentLine.deleteMany()).count;
     counts.shipments = (await tx.shipment.deleteMany()).count;
