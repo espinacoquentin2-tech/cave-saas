@@ -6,9 +6,36 @@ import { prisma } from '@/server/shared/prisma';
 
 export class AnalysesModuleService {
   static async list() {
-    return prisma.analysis.findMany({
+    const records = await prisma.analysis.findMany({
+      select: {
+        id: true,
+        lotId: true,
+        analysisDate: true,
+        ph: true,
+        at: true,
+        so2Free: true,
+        so2Total: true,
+        alcohol: true,
+        fileUrl: true,
+        notes: true,
+        extraData: true,
+      },
       orderBy: { analysisDate: 'desc' },
     });
+
+    return records.map((analysis) => ({
+      id: analysis.id,
+      lotId: analysis.lotId,
+      analysisDate: analysis.analysisDate.toISOString(),
+      ph: analysis.ph,
+      at: analysis.at,
+      so2Free: analysis.so2Free,
+      so2Total: analysis.so2Total,
+      alcohol: analysis.alcohol,
+      fileUrl: analysis.fileUrl,
+      notes: analysis.notes,
+      extraData: analysis.extraData ?? {},
+    }));
   }
 
   static async save(input: SaveAnalysesInput, actor: RequestActor) {

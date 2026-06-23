@@ -3,18 +3,47 @@ import { ZodError } from 'zod';
 import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { saveAnalysesSchema } from '@/server/modules/analyses/analyses.schemas';
 import { AnalysesModuleService } from '@/server/modules/analyses/analyses.service';
-import { logger } from '@/server/shared/logger';
+import { logger, serializeErrorDetails } from '@/server/shared/logger';
 import { DELETE_ROLES, READ_ROLES, WRITE_ROLES, assertRole, getRequestId, resolveAuthenticatedActor } from '@/server/shared/request-context';
 
 export const dynamic = 'force-dynamic';
+
+const isTransientPrismaConnectionError = (error: unknown) => {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  return (
+    error.name === 'PrismaClientInitializationError' ||
+    error.message.includes("Can't reach database server") ||
+    error.message.includes('Timed out fetching a new connection')
+  );
+};
+
+const withTransientPrismaRetry = async <T,>(work: () => Promise<T>) => {
+  try {
+    return await work();
+  } catch (error) {
+    if (!isTransientPrismaConnectionError(error)) {
+      throw error;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    return work();
+  }
+};
 
 export async function GET(request: Request) {
   const requestId = getRequestId(request);
 
   try {
-    const actor = await resolveAuthenticatedActor(request);
-    assertRole(actor, READ_ROLES);
-    const records = await AnalysesModuleService.list();
+    const { actor, records } = await withTransientPrismaRetry(async () => {
+      const actor = await resolveAuthenticatedActor(request);
+      assertRole(actor, READ_ROLES);
+      const records = await AnalysesModuleService.list();
+
+      return { actor, records };
+    });
 
     logger.info({
       action: 'analyses.get.success',
@@ -70,7 +99,7 @@ export async function GET(request: Request) {
     logger.error({
       action: 'analyses.get.unhandled_error',
       requestId,
-      details: { error: error instanceof Error ? error.message : 'unknown_error' },
+      details: serializeErrorDetails(error),
     });
 
     return NextResponse.json(
@@ -206,4 +235,3 @@ export async function POST(request: Request) {
     );
   }
 }
-
