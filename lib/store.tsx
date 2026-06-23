@@ -162,6 +162,7 @@ export function storeReducer(state: any, action: any) {
     case "SET_LOTS": return { ...state, lots: action.payload };
     case "SET_EVENTS": return { ...state, events: action.payload };
     case "SET_BOTTLE_LOTS": return { ...state, bottleLots: action.payload };
+    case "SET_ANALYSES": return { ...state, analyses: action.payload };
     case "SET_FA_READINGS": return { ...state, faReadings: action.payload };
     case "SET_USERS": return { ...state, users: action.payload };
     case "SET_PRESSINGS": return { ...state, pressings: action.payload }; 

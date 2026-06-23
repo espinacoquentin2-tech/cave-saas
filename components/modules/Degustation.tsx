@@ -3,7 +3,8 @@
 
 import React, { useState } from "react";
 import { Badge, Btn, Modal } from "@/components/ui";
-import { useStore, useTheme } from "@/lib/store";
+import { useAuth, useStore, useTheme } from "@/lib/store";
+import { getCurrentUserRoleKey, roleMatches } from "@/lib/roles";
 import {
   BAIES_DATA_PREFIX,
   BAIES_LABELS,
@@ -21,10 +22,12 @@ type DegustationProps = {
 
 export function Degustation({ DegustationModal }: DegustationProps) {
   const T = useTheme();
+  const { user } = useAuth();
   const { state } = useStore();
   const [modal, setModal] = useState(false);
   const [activePhase, setActivePhase] = useState("BAIES");
   const [selectedDegustation, setSelectedDegustation] = useState<any | null>(null);
+  const canWrite = !roleMatches(getCurrentUserRoleKey(user), ["LECTURE_SEULE"]);
 
   const degustations = state.degustations || [];
   
@@ -157,7 +160,7 @@ export function Degustation({ DegustationModal }: DegustationProps) {
           <h1 style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:32, color:T.textStrong, margin:0 }}>Dégustation</h1>
           <div style={{ color:T.textDim, fontSize:13, marginTop:4 }}>Carnet de suivi sensoriel standardisé (Arborescence V5 Fizz).</div>
         </div>
-        <Btn onClick={() => setModal(true)}>+ Nouvelle Note</Btn>
+        {canWrite && <Btn onClick={() => setModal(true)}>+ Nouvelle Note</Btn>}
       </div>
 
       {/* ONGLETS DES PHASES */}

@@ -3000,6 +3000,7 @@ function TourFA({ onSelectLot }: any) {
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const canWrite = !roleMatches(getCurrentUserRoleKey(user), ["LECTURE_SEULE"]);
 
   const activeFaStatuses = ["FERMENTATION_ALCOOLIQUE", "FERMENTATION_MALOLACTIQUE", "FA_ET_FML"];
   const inactiveFaStatuses = ["VIN_DE_BASE", "VIN_ROUGE"];
@@ -3091,11 +3092,13 @@ function TourFA({ onSelectLot }: any) {
             Voir archivés
           </label>
           <FF label="Date du relevé">
-            <Input type="date" value={tourDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTourDate(e.target.value)} disabled={isSubmitting} />
+            <Input type="date" value={tourDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTourDate(e.target.value)} disabled={isSubmitting || !canWrite} />
           </FF>
-          <Btn onClick={submitTour} disabled={isSubmitting || Object.keys(readings).length === 0} style={{ background: isSubmitting ? T.textDim : T.accent, height: 38, marginTop: 16 }}>
-            {isSubmitting ? "Enregistrement sécurisé..." : "Valider le Tour"}
-          </Btn>
+          {canWrite && (
+            <Btn onClick={submitTour} disabled={isSubmitting || Object.keys(readings).length === 0} style={{ background: isSubmitting ? T.textDim : T.accent, height: 38, marginTop: 16 }}>
+              {isSubmitting ? "Enregistrement sécurisé..." : "Valider le Tour"}
+            </Btn>
+          )}
         </div>
       </div>
 
@@ -3132,7 +3135,7 @@ function TourFA({ onSelectLot }: any) {
                     placeholder="Ex: 1024" 
                     value={readings[l.id]?.density || ""} 
                     onChange={(e: any) => updateReading(l.id, 'density', e.target.value)} 
-                    disabled={isSubmitting || isInactive} 
+                    disabled={isSubmitting || isInactive || !canWrite}
                   />
                 </div>
                 <div style={{ paddingRight: 16 }}>
@@ -3142,7 +3145,7 @@ function TourFA({ onSelectLot }: any) {
                     placeholder="Ex: 18.5" 
                     value={readings[l.id]?.temperature || ""} 
                     onChange={(e: any) => updateReading(l.id, 'temperature', e.target.value)} 
-                    disabled={isSubmitting || isInactive} 
+                    disabled={isSubmitting || isInactive || !canWrite}
                   />
                 </div>
                 <div>
@@ -4355,10 +4358,12 @@ function AIImportModal({ initialFile, onClose, onSuccess }: { initialFile: any; 
 
 function Analyses() {
   const T = useTheme(); 
+  const { user } = useAuth();
   const { state, refreshData } = useStore();
   
   const [modal, setModal] = useState(null);
   const [dragOver, setDragOver] = useState(false);
+  const canWrite = !roleMatches(getCurrentUserRoleKey(user), ["LECTURE_SEULE"]);
 
   const getLotCode = (id: any) => (state.lots || []).find((l: any) => String(l.id) === String(id))?.code || "--";
 
@@ -4393,7 +4398,7 @@ function Analyses() {
           onDragOver={(e: React.DragEvent<HTMLDivElement>) => { e.preventDefault(); setDragOver(true); }}
           onDragLeave={() => setDragOver(false)}
           onDrop={handleDrop}
-          onClick={() => document.getElementById('ai-file-upload')?.click()}
+          onClick={() => canWrite && document.getElementById('ai-file-upload')?.click()}
           style={{
             background: dragOver ? T.accent+"11" : T.surfaceHigh,
             border: `2px dashed ${dragOver ? T.accent : T.border}`,
@@ -4403,22 +4408,24 @@ function Analyses() {
             flexDirection: "column",
             alignItems: "center",
             justifyContent: "center",
-            cursor: "pointer",
+            cursor: canWrite ? "pointer" : "default",
             transition: "all 0.2s"
           }}
         >
           <div style={{ fontSize: 32, marginBottom: 12 }}>✨</div>
           <div style={{ fontSize: 16, color: T.accentLight, fontFamily: "monospace", fontWeight: "bold", marginBottom: 6 }}>Assistant IA : Glissez votre rapport PDF ici</div>
-          <div style={{ fontSize: 12, color: T.textDim }}>Ou cliquez pour parcourir. L'IA extraira automatiquement les lots et les valeurs.</div>
-          <input id="ai-file-upload" type="file" accept=".pdf,.csv,.jpg,.png" style={{ display: "none" }} onChange={(e: React.ChangeEvent<HTMLInputElement>) => e.target.files?.[0] && setModal({ type: "ai", file: e.target.files[0] } as any)} />
+          <div style={{ fontSize: 12, color: T.textDim }}>{canWrite ? "Ou cliquez pour parcourir. L'IA extraira automatiquement les lots et les valeurs." : "Consultation des analyses enregistrées."}</div>
+          {canWrite && <input id="ai-file-upload" type="file" accept=".pdf,.csv,.jpg,.png" style={{ display: "none" }} onChange={(e: React.ChangeEvent<HTMLInputElement>) => e.target.files?.[0] && setModal({ type: "ai", file: e.target.files[0] } as any)} />}
         </div>
 
         {/* MANUAL ENTRY */}
-        <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "36px 20px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-          <div style={{ fontSize: 28, marginBottom: 12 }}>✍️</div>
-          <div style={{ fontSize: 14, color: T.textStrong, fontWeight: "bold", marginBottom: 16, textTransform: "uppercase" }}>Saisie Classique</div>
-          <Btn onClick={() => setModal({ type: "manual" } as any)}>+ Nouvelle Analyse</Btn>
-        </div>
+        {canWrite && (
+          <div style={{ background: T.surface, border: `1px solid ${T.border}`, borderRadius: 8, padding: "36px 20px", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ fontSize: 28, marginBottom: 12 }}>✍️</div>
+            <div style={{ fontSize: 14, color: T.textStrong, fontWeight: "bold", marginBottom: 16, textTransform: "uppercase" }}>Saisie Classique</div>
+            <Btn onClick={() => setModal({ type: "manual" } as any)}>+ Nouvelle Analyse</Btn>
+          </div>
+        )}
       </div>
 
       {/* HISTORIQUE DES ANALYSES */}
@@ -4931,6 +4938,24 @@ export default function App() {
               notes: l.notes || "",
             };
           }),
+        });
+      });
+      fetchSafe(`/api/analyses?t=${t}`).then((d: any) => {
+        if (!Array.isArray(d)) return;
+        dispatch({
+          type: "SET_ANALYSES",
+          payload: safeMap(d, (analysis: any) => ({
+            id: analysis.id?.toString(),
+            lotId: analysis.lotId?.toString(),
+            analysisDate: analysis.analysisDate,
+            ph: analysis.ph,
+            at: analysis.at,
+            so2Free: analysis.so2Free,
+            so2Total: analysis.so2Total,
+            alcohol: analysis.alcohol,
+            notes: analysis.notes,
+            extraData: analysis.extraData || {},
+          })),
         });
       });
       fetchSafe(`/api/bottles?t=${t}`).then((d: any) => {

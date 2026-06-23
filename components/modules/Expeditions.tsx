@@ -20,6 +20,7 @@ import {
   getExpeditionEligibility,
   normalizeBottleLotStatus,
 } from "@/lib/bottles";
+import { getCurrentUserRoleKey, roleMatches } from "@/lib/roles";
 
 const formatStatus = (s: string | null | undefined) => {
   if (!s) return "";
@@ -46,6 +47,7 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
   const [modalBouteilles, setModalBouteilles] = useState(false);
   const [modalVrac, setModalVrac] = useState(false);
   const [selectedBottleShipmentLot, setSelectedBottleShipmentLot] = useState<any | null>(null);
+  const canWrite = !roleMatches(getCurrentUserRoleKey(user), ["LECTURE_SEULE"]);
 
   // --- LOGIQUE MÉTIER ---
   const bottleRows = (state.bottleLots || [])
@@ -591,17 +593,17 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
           </button>
         </div>
 
-        {tab === "bouteilles" && (
+        {canWrite && tab === "bouteilles" && (
           <Btn onClick={() => setModalBouteilles(true)}>
             + Nouvel envoi
           </Btn>
         )}
-        {tab === "vrac" && (
+        {canWrite && tab === "vrac" && (
           <Btn onClick={() => setModalVrac(true)}>
             + Nouvel envoi
           </Btn>
         )}
-        {tab === "distillerie" && (
+        {canWrite && tab === "distillerie" && (
           <Btn onClick={() => setModalDistillerie(true)} style={{ background: T.red, borderColor: T.red, color: "#fff" }}>
             + Nouvel envoi
           </Btn>
@@ -640,7 +642,7 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
                   <div style={{ fontSize:13, color:T.textStrong }}>{row.quantity ? `${row.quantity} btl` : "--"}</div>
                   <div style={{ fontSize:13, color:T.text }}>📦 {row.details}</div>
                   <div style={{ fontSize:12, color:T.textDim }}>{row.operator}</div>
-                  <div onClick={() => setConfirmDeliveryTarget({ type: "BOTTLE", id: row.id, label: lotObj?.businessCode || lotObj?.code })} style={{cursor:"pointer", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
+                  <div onClick={() => canWrite && setConfirmDeliveryTarget({ type: "BOTTLE", id: row.id, label: lotObj?.businessCode || lotObj?.code })} style={{cursor: canWrite ? "pointer" : "default", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
                     <Badge label={isDelivered ? "Livré ✅" : "En livraison 🚚"} color={isDelivered ? T.textDim : T.accent} />
                   </div>
                 </div>
@@ -665,8 +667,8 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
                     <div style={{ fontSize:13, color:T.textStrong }}>{formatVolShort(shipment.totalVolume)}</div>
                     <div style={{ fontSize:13, color:T.text }}>{shipment.lineCount}</div>
                     <div
-                      onClick={() => !shipment.isDelivered && setConfirmDeliveryTarget({ type: "VRAC", id: shipment.id, label: shipment.client })}
-                      style={{ cursor: shipment.isDelivered ? "default" : "pointer", display: "flex", justifyContent: "center" }}
+                      onClick={() => canWrite && !shipment.isDelivered && setConfirmDeliveryTarget({ type: "VRAC", id: shipment.id, label: shipment.client })}
+                      style={{ cursor: canWrite && !shipment.isDelivered ? "pointer" : "default", display: "flex", justifyContent: "center" }}
                     >
                       <Badge label={shipment.isDelivered ? "Livrée" : formatStatus(shipment.status)} color={shipment.isDelivered ? T.textDim : T.accent} />
                     </div>
@@ -725,7 +727,7 @@ export function Expeditions({ onSelectLot }: { onSelectLot: any }) {
                   <div style={{ fontSize:14, color:T.red, fontWeight: "bold", fontFamily: "monospace" }}>{displayVol} hL</div>
                   <div style={{ fontSize:13, color:T.textStrong }}>🏭 {cleanNote}</div>
                   <div style={{ fontSize:12, color:T.textDim }}>{e.operator}</div>
-                  <div onClick={() => setConfirmDeliveryTarget({ type: "DISTILLERIE", id: e.id, label: lotObj?.businessCode || lotObj?.code || e.lotId })} style={{cursor:"pointer", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
+                  <div onClick={() => canWrite && setConfirmDeliveryTarget({ type: "DISTILLERIE", id: e.id, label: lotObj?.businessCode || lotObj?.code || e.lotId })} style={{cursor: canWrite ? "pointer" : "default", transition:"transform 0.1s", opacity: isDelivered ? 0.5 : 1, display: "flex", justifyContent: "center"}}>
                     <Badge label={isDelivered ? "Livré ✅" : "En livraison 🚚"} color={isDelivered ? T.textDim : T.accent} />
                   </div>
                 </div>
