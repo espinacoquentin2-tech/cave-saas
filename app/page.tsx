@@ -208,6 +208,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   const [remTargetId, setRemTargetId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [executionError, setExecutionError] = useState("");
 
   const [tirageTypeMise, setTirageTypeMise] = useState("EFFERVESCENT");
   const [tirageFormat, setTirageFormat] = useState("75cl");
@@ -282,11 +283,19 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   };
 
   const execute = async () => {
-    if (isTankCapacityIssue) return alert("Capacité insuffisante pour ce volume !");
-    if (task.recette === "TIRAGE" && lotSource && !isLotTirageEligible) {
-      return alert(`Ce lot n'est pas éligible au tirage. Statut actuel : ${lotSource.status}.`);
+    setExecutionError("");
+    if (isTankCapacityIssue) {
+      setExecutionError("Capacité insuffisante pour ce volume !");
+      return;
     }
-    if (isStockShortage) return alert("Stock insuffisant pour réaliser ce tirage !");
+    if (task.recette === "TIRAGE" && lotSource && !isLotTirageEligible) {
+      setExecutionError(`Ce lot n'est pas éligible au tirage. Statut actuel : ${lotSource.status}.`);
+      return;
+    }
+    if (isStockShortage) {
+      setExecutionError("Stock insuffisant pour réaliser ce tirage !");
+      return;
+    }
     
     setIsSubmitting(true);
     const vMain = parseFloat(volMain) || 0;
@@ -499,7 +508,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
     } catch(e) {
       const errorMessage = e instanceof Error ? e.message : String(e);
-      alert("Erreur lors de l'exécution : " + errorMessage);
+      setExecutionError("Erreur lors de l'exécution : " + errorMessage);
     } finally {
       setIsSubmitting(false);
     }
@@ -507,6 +516,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
   return (
     <Modal title={`Exécution : ${task.recette}`} onClose={onClose}>
+      <div data-testid="task-execution-modal">
       <div style={{ background:T.surfaceHigh, padding:14, borderRadius:4, marginBottom:16, fontSize:12, border:`1px solid ${T.border}` }}>
         <div style={{ color:T.textDim, marginBottom:4 }}>Tâche prévue :</div>
         <div style={{ color:T.accent, fontWeight:"bold", fontFamily:"monospace", wordBreak:"break-all" }}>{task.displaySource || task.lotId}</div>
@@ -548,7 +558,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
           
           <div style={{ marginBottom: 4, borderBottom:`1px solid ${T.border}`, paddingBottom: 16 }}>
             <FF label="Type de mise en bouteille">
-              <Select value={tirageTypeMise} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTirageTypeMise(e.target.value)} disabled={isSubmitting} style={{ fontWeight:"bold", color: tirageTypeMise === "TRANQUILLE" ? "#8b1c31" : T.accent }}>
+              <Select value={tirageTypeMise} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTirageTypeMise(e.target.value)} disabled={isSubmitting} data-testid="task-execution-tirage-type-select" aria-label="Type de mise en bouteille" style={{ fontWeight:"bold", color: tirageTypeMise === "TRANQUILLE" ? "#8b1c31" : T.accent }}>
                 <option value="EFFERVESCENT">Prise de mousse (Champagne)</option>
                 <option value="TRANQUILLE">Vin Tranquille (Coteaux / Rouge)</option>
               </Select>
@@ -578,7 +588,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
             <FF label="Format bouteille">
-              <Select value={tirageFormat} disabled={isSubmitting} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+              <Select value={tirageFormat} disabled={isSubmitting} data-testid="task-execution-tirage-format-select" aria-label="Format bouteille" onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                 setTirageFormat(e.target.value);
                 const nextPlan = calculateTiragePlan({
                   requestedVolumeHl: requestedTirageVolume,
@@ -590,7 +600,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
               </Select>
             </FF>
             <FF label="Volume à tirer (hL)">
-              <Input type="number" step="0.001" value={volMain} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVolMain(e.target.value)} disabled={isSubmitting} />
+              <Input type="number" step="0.001" value={volMain} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVolMain(e.target.value)} disabled={isSubmitting} data-testid="task-execution-volume-input" aria-label="Volume à tirer" />
             </FF>
           </div>
 
@@ -608,24 +618,24 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
           <div style={{ display:"grid", gridTemplateColumns:"1fr 2fr", gap:12 }}>
             <FF label="Bouchage">
-              <Select value={tirageBouchage} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTirageBouchage(e.target.value)} disabled={isSubmitting}>
+              <Select value={tirageBouchage} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setTirageBouchage(e.target.value)} disabled={isSubmitting} data-testid="task-execution-bouchage-select" aria-label="Bouchage">
                 <option value="Capsule">Capsule</option>
                 <option value="Liège">Liège</option>
               </Select>
             </FF>
             <FF label="Modèle (Marque - Réf)">
-              <Input value={tirageModele} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageModele(e.target.value)} placeholder="Ex: Trescases - 29x29" disabled={isSubmitting} />
+              <Input value={tirageModele} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageModele(e.target.value)} placeholder="Ex: Trescases - 29x29" disabled={isSubmitting} data-testid="task-execution-model-input" aria-label="Modèle bouchage" />
             </FF>
           </div>
 
           <FF label="Emplacement de stockage">
-            <Input value={tirageZone} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageZone(e.target.value)} placeholder="Ex: Cave 2 - Palette 15" disabled={isSubmitting} />
+            <Input value={tirageZone} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setTirageZone(e.target.value)} placeholder="Ex: Cave 2 - Palette 15" disabled={isSubmitting} data-testid="task-execution-zone-input" aria-label="Emplacement de stockage" />
           </FF>
         </div>
       ) : (
         targetContainer && (
           <FF label={`Volume de JUS CLAIR transféré vers ${targetContainer.displayName || targetContainer.name} (hL)`}>
-            <Input type="number" step="0.1" value={volMain} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVolMain(e.target.value)} disabled={isSubmitting} style={{ borderColor: isTankCapacityIssue ? T.red : T.border }} />
+            <Input type="number" step="0.1" value={volMain} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setVolMain(e.target.value)} disabled={isSubmitting} data-testid="task-execution-volume-input" aria-label="Volume à exécuter" style={{ borderColor: isTankCapacityIssue ? T.red : T.border }} />
           </FF>
         )
       )}
@@ -642,18 +652,18 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
           <div style={{ fontSize:11, color:T.accent, textTransform:"uppercase", letterSpacing:1, marginBottom:12 }}>Gestion des restes (Lies / Bourbes)</div>
           <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
             <FF label="Type de reste">
-              <Select value={remType} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setRemType(e.target.value); setRemTargetId(""); }} disabled={isSubmitting}>
+              <Select value={remType} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => { setRemType(e.target.value); setRemTargetId(""); }} disabled={isSubmitting} data-testid="task-execution-remainder-type-select" aria-label="Type de reste">
                 <option value="LIES">Lies</option>
                 <option value="BOURBES">Bourbes</option>
               </Select>
             </FF>
             <FF label="Volume récupéré (hL)">
-              <Input type="number" step="0.1" value={remVol} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRemVol(e.target.value)} placeholder="ex: 0.5" disabled={isSubmitting} />
+              <Input type="number" step="0.1" value={remVol} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setRemVol(e.target.value)} placeholder="ex: 0.5" disabled={isSubmitting} data-testid="task-execution-remainder-volume-input" aria-label="Volume récupéré" />
             </FF>
           </div>
           {parseFloat(remVol) > 0 && (
             <FF label={`Envoyer ces ${remType.toLowerCase()} vers :`}>
-              <Select value={remTargetId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRemTargetId(e.target.value)} disabled={isSubmitting}>
+              <Select value={remTargetId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setRemTargetId(e.target.value)} disabled={isSubmitting} data-testid="task-execution-remainder-target-select" aria-label="Cuve de stockage des restes">
                 <option value="">-- Choisir la cuve de stockage --</option>
                 {recoveryTanks.map((c: any) => {
                   const volDispo = Math.max(0, (c.capacityValue || c.capacity || 0) - (c.currentVolume || 0)).toFixed(1);
@@ -669,14 +679,22 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
         </div>
       )}
 
+      {executionError && (
+        <div data-testid="task-execution-error-message" role="alert" style={{ background:T.red+"15", border:`1px solid ${T.red}55`, color:T.red, borderRadius:4, padding:"10px 12px", fontSize:12, marginTop:16 }}>
+          {executionError}
+        </div>
+      )}
+
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
-        <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
+        <Btn variant="secondary" onClick={onClose} disabled={isSubmitting} data-testid="task-execution-cancel-button">Annuler</Btn>
         <Btn 
           onClick={execute} 
           disabled={isSubmitting || isTankCapacityIssue || isStockShortage || isTirageBlockedAOC || isChaptalisationBlocked || isAcidificationBlocked || (parseFloat(remVol) > 0 && !remTargetId) || (task.recette === "TIRAGE" && (!volMain || !isLotTirageEligible))}
+          data-testid="task-execution-submit-button"
         >
           {isSubmitting ? "Traitement Serveur..." : "Valider la tâche"}
         </Btn>
+      </div>
       </div>
     </Modal>
   );
@@ -2840,7 +2858,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
                 
                 {(!isCiterneMere || enfants.length === 0) && (
                   <>
-                    {!lot && isReallyEmpty && <Btn onClick={() => setModal("createLot" as any)} disabled={isSubmitting}>+ Créer lot</Btn>}
+                    {!lot && isReallyEmpty && <Btn onClick={() => setModal("createLot" as any)} disabled={isSubmitting} data-testid="container-create-lot-button">+ Créer lot</Btn>}
                     
                     {lot && <Btn variant="ghost" onClick={() => setModal("transfer" as any)} disabled={isSubmitting}>Transférer</Btn>}
                     
@@ -2895,7 +2913,7 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
                        </div>
                        <div style={{ display:"flex", justifyContent:"flex-end", gap:6 }}>
                           {isCompEmpty ? (
-                            <Btn variant="secondary" style={{fontSize:9, padding:"4px 8px", background:T.surface, color:T.textDim, borderColor:T.border}} onClick={() => setModal("createLot" as any)}>+ Créer Lot</Btn>
+                            <Btn variant="secondary" style={{fontSize:9, padding:"4px 8px", background:T.surface, color:T.textDim, borderColor:T.border}} onClick={() => setModal("createLot" as any)} data-testid="container-create-lot-button">+ Créer Lot</Btn>
                           ) : (
                             compLot && <Btn variant="secondary" style={{fontSize:9, padding:"4px 8px"}} onClick={() => {
                                if (onSelectLot) onSelectLot(compLot);
@@ -3196,11 +3214,13 @@ function CreateLotModal({ container, onClose }: { container: any; onClose: any }
   const [form, setForm] = useState({ millesime: String(new Date().getFullYear()), cepage: "CH", lieu: "", qualite: "", volume: "", status: "FERMENTATION_ALCOOLIQUE", notes: "" });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [errorMessage, setErrorMessage] = useState("");
   
   const qualiteSuffix = form.qualite === "Cuvée" ? "-C" : form.qualite === "Taille" ? "-T" : "";
   const code = form.millesime && form.cepage && form.lieu ? `${form.millesime}-${form.cepage}-${form.lieu.toUpperCase().replace(/\s+/g,"-")}${qualiteSuffix}-${seqNum}` : "";
 
   const submit = async () => {
+    setErrorMessage("");
     setIsSubmitting(true);
     try {
       const res = await fetch('/api/lots', { 
@@ -3220,7 +3240,7 @@ function CreateLotModal({ container, onClose }: { container: any; onClose: any }
       if (refreshData) await refreshData();
       onClose(); 
     } catch(e: any) {
-      alert("Erreur : " + e.message);
+      setErrorMessage(e.message || "Erreur lors de la création du lot.");
       setIdempotencyKey(crypto.randomUUID()); // 👈 NOUVELLE CLÉ GÉNÉRÉE EN CAS D'ERREUR
     } finally {
       setIsSubmitting(false);
@@ -3230,32 +3250,40 @@ function CreateLotModal({ container, onClose }: { container: any; onClose: any }
   return (
     <Modal title="Créer un lot" onClose={onClose}>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-        <FF label="Millésime"><Input type="number" value={form.millesime} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, millesime:e.target.value})} disabled={isSubmitting}/></FF>
+        <FF label="Millésime"><Input type="number" value={form.millesime} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, millesime:e.target.value})} disabled={isSubmitting} data-testid="container-lot-year-input" aria-label="Millésime du lot"/></FF>
         <FF label="Cépage">
-          <Select value={form.cepage} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, cepage:e.target.value})} disabled={isSubmitting}>
+          <Select value={form.cepage} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, cepage:e.target.value})} disabled={isSubmitting} data-testid="container-lot-grape-select" aria-label="Cépage du lot">
             {CEPAGES.map((c: any) => <option key={c}>{c}</option>)}
           </Select>
         </FF>
       </div>
       <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr", gap:12 }}>
-        <FF label="Lieu-dit / Parcelle"><Input value={form.lieu} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, lieu:e.target.value})} disabled={isSubmitting}/></FF>
+        <FF label="Lieu-dit / Parcelle"><Input value={form.lieu} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, lieu:e.target.value})} disabled={isSubmitting} data-testid="container-lot-place-input" aria-label="Lieu-dit ou parcelle du lot"/></FF>
         <FF label="Qualité">
-          <Select value={form.qualite} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, qualite:e.target.value})} disabled={isSubmitting}>
+          <Select value={form.qualite} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, qualite:e.target.value})} disabled={isSubmitting} data-testid="container-lot-quality-select" aria-label="Qualité du lot">
             <option value="">Standard</option><option value="Cuvée">Cuvée (-C)</option><option value="Taille">Taille (-T)</option>
           </Select>
         </FF>
       </div>
+      <FF label="Code lot calculé">
+        <Input value={code || "Renseigner le lieu-dit pour calculer le code"} readOnly disabled data-testid="container-lot-code-input" aria-label="Code lot calculé" />
+      </FF>
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
-        <FF label="Volume initial (hL)"><Input type="number" step="0.1" value={form.volume} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, volume:e.target.value})} disabled={isSubmitting}/></FF>
+        <FF label="Volume initial (hL)"><Input type="number" step="0.1" value={form.volume} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setForm({...form, volume:e.target.value})} disabled={isSubmitting} data-testid="container-lot-volume-input" aria-label="Volume initial du lot"/></FF>
         <FF label="Statut initial">
-          <Select value={form.status} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, status:e.target.value})} disabled={isSubmitting}>
+          <Select value={form.status} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setForm({...form, status:e.target.value})} disabled={isSubmitting} data-testid="container-lot-status-select" aria-label="Statut initial du lot">
             {LOT_STATUSES.map((s: any) => <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>)}
           </Select>
         </FF>
       </div>
+      {errorMessage && (
+        <div data-testid="container-lot-error-message" role="alert" style={{ background:T.red+"15", border:`1px solid ${T.red}55`, color:T.red, borderRadius:4, padding:"10px 12px", fontSize:12, marginTop:12 }}>
+          {errorMessage}
+        </div>
+      )}
       <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:16 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
-        <Btn onClick={submit} disabled={!form.lieu || !form.volume || isSubmitting}>{isSubmitting ? "Création..." : "Créer"}</Btn>
+        <Btn onClick={submit} disabled={!form.lieu || !form.volume || isSubmitting} data-testid="container-lot-submit-button">{isSubmitting ? "Création..." : "Créer"}</Btn>
       </div>
     </Modal>
   );

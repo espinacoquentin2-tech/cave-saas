@@ -55,6 +55,8 @@ export function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh, canSho
   const products = state.products || [];
 
   const [executingTask, setExecutingTask] = useState(null);
+  const [taskSearch, setTaskSearch] = useState("");
+  const [taskLimit, setTaskLimit] = useState(5);
 
   const toNum = (value: any) => {
     const n = Number(value);
@@ -73,11 +75,46 @@ export function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh, canSho
   const fillRate      = totalCapacity > 0 ? Math.round(totalVol / totalCapacity * 100) : 0;
   const lotsByStatus  = LOT_STATUSES.map((s: any) => ({ s, count: lots.filter((l: any) => l.status === s).length })).filter((x: any) => x.count > 0);
 
+  const getTaskDate = (w: any) => w.date || w.createdAt || w.updatedAt || "";
+  const getTaskLotCodes = (lotIds: any[]) => {
+    return lotIds
+      .map((lotId: any) => {
+        const lot = lots.find((candidate: any) => String(candidate.id) === String(lotId));
+        return [lot?.businessCode, lot?.code, lot?.technicalCode].filter(Boolean).join(" ");
+      })
+      .filter(Boolean)
+      .join(" ");
+  };
+  const getTaskSourceLotCodes = (w: any) => {
+    const sourceLotIds = Array.isArray(w.sources) ? w.sources.map((source: any) => source.lotId).filter(Boolean) : [];
+    return getTaskLotCodes(sourceLotIds);
+  };
+  const getTaskSearchText = (w: any) => [
+    w.id,
+    w.publicId,
+    w.recette,
+    w.status,
+    w.displaySource,
+    w.displayAction,
+    w.details,
+    getTaskSourceLotCodes(w),
+    getTaskLotCodes([w.targetLotId]),
+    w.lotId,
+    w.targetLotId,
+    w.targetContainerId,
+    Array.isArray(w.sources) ? w.sources.map((source: any) => [source.lotId, source.label, source.role, source.sourceRole].filter(Boolean).join(" ")).join(" ") : "",
+  ].filter(Boolean).join(" ").toLowerCase();
+  const safeTaskTestId = (id: any) => String(id).replace(/[^a-zA-Z0-9_-]/g, "-");
   const pendingTasks = workOrders.filter(w => w.status === "PENDING" || w.status === "BLOCKED").sort((a,b) => {
     if (a.status === "BLOCKED" && b.status !== "BLOCKED") return -1;
     if (a.status !== "BLOCKED" && b.status === "BLOCKED") return 1;
-    return new Date(a.date).getTime() - new Date(b.date).getTime();
+    return new Date(getTaskDate(b)).getTime() - new Date(getTaskDate(a)).getTime();
   });
+  const normalizedTaskSearch = taskSearch.trim().toLowerCase();
+  const filteredPendingTasks = normalizedTaskSearch
+    ? pendingTasks.filter((w: any) => getTaskSearchText(w).includes(normalizedTaskSearch))
+    : pendingTasks;
+  const visiblePendingTasks = filteredPendingTasks.slice(0, taskLimit);
 
   // 🚨 1. ALERTES CUVERIE & LOTS
   const caveAlerts = [
@@ -220,11 +257,31 @@ export function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh, canSho
             <span style={{ fontSize:11, textTransform:"uppercase", letterSpacing:2, color:T.textDim, fontWeight: "bold" }}>✅ Mes Tâches</span>
             {pendingTasks.length > 0 && <span style={{ fontSize:10, background:T.red+"22", color:T.red, border:`1px solid ${T.red}44`, padding:"2px 8px", borderRadius:10, fontFamily:"monospace" }}>{pendingTasks.length} en attente</span>}
           </div>
+          {pendingTasks.length > 0 && (
+            <div style={{ marginBottom:12 }}>
+              <input
+                value={taskSearch}
+                onChange={(e) => {
+                  setTaskSearch(e.target.value);
+                  setTaskLimit(5);
+                }}
+                data-testid="my-tasks-search-input"
+                aria-label="Rechercher une tâche"
+                placeholder="Rechercher code, préfixe, type..."
+                style={{ width:"100%", background:T.surface, border:`1px solid ${T.border}`, borderRadius:4, padding:"8px 10px", color:T.text, fontSize:12, fontFamily:"monospace", boxSizing:"border-box", outline:"none" }}
+              />
+              <div style={{ fontSize:10, color:T.textDim, marginTop:6, fontFamily:"monospace" }}>
+                {filteredPendingTasks.length} tâche{filteredPendingTasks.length > 1 ? "s" : ""} affichable{filteredPendingTasks.length > 1 ? "s" : ""} sur {pendingTasks.length}
+              </div>
+            </div>
+          )}
           {pendingTasks.length === 0 ? (
             <div style={{ textAlign:"center", padding:"30px 0", color:T.green }}><div style={{ fontSize:22, marginBottom:10 }}>✓</div><div style={{ fontSize:12, color:T.textDim, fontStyle: "italic" }}>Aucune tâche planifiée</div></div>
-          ) : pendingTasks.slice(0, 5).map((w, i) => (
-            <div key={w.id} style={{ display:"grid", gridTemplateColumns:"80px 1fr 90px", gap:12, alignItems:"center", padding:"12px 0", borderBottom:i < pendingTasks.length-1 ? `1px solid ${T.border}` : "none", background: w.status === "BLOCKED" ? T.red+"11" : "transparent" }}>
-              <div style={{ fontSize:10, color:T.textDim, fontFamily:"monospace" }}>{w.date.split('T')[0]}</div>
+          ) : filteredPendingTasks.length === 0 ? (
+            <div style={{ textAlign:"center", padding:"24px 0", color:T.textDim, fontSize:12, fontStyle:"italic" }}>Aucune tâche ne correspond à la recherche.</div>
+          ) : visiblePendingTasks.map((w, i) => (
+            <div key={w.id} data-testid={`my-task-card-${safeTaskTestId(w.id)}`} style={{ display:"grid", gridTemplateColumns:"80px 1fr 90px", gap:12, alignItems:"center", padding:"12px 0", borderBottom:i < visiblePendingTasks.length-1 ? `1px solid ${T.border}` : "none", background: w.status === "BLOCKED" ? T.red+"11" : "transparent" }}>
+              <div style={{ fontSize:10, color:T.textDim, fontFamily:"monospace" }}>{String(getTaskDate(w)).split('T')[0]}</div>
               <div>
                 <div style={{ fontSize:11, color: w.status === "BLOCKED" ? T.red : T.accent, textTransform:"uppercase", fontWeight:600 }}>{w.recette}</div>
                 <div style={{ fontSize:12, color:T.textStrong, marginTop:4, fontFamily:"monospace", lineHeight: 1.4 }}>
@@ -237,11 +294,21 @@ export function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh, canSho
               </div>
               <div style={{ textAlign:"right" }}>
                 {w.status !== "BLOCKED" && (
-                  <Btn variant="ghost" style={{ fontSize:10, padding:"4px 8px" }} onClick={() => setExecutingTask(w)}>EXÉCUTER</Btn>
+                  <Btn variant="ghost" style={{ fontSize:10, padding:"4px 8px" }} data-testid={`my-task-execute-${safeTaskTestId(w.id)}`} onClick={() => setExecutingTask(w)}>EXÉCUTER</Btn>
                 )}
               </div>
             </div>
           ))}
+          {filteredPendingTasks.length > taskLimit && (
+            <Btn
+              variant="secondary"
+              data-testid="my-tasks-show-more-button"
+              onClick={() => setTaskLimit(taskLimit + 10)}
+              style={{ width:"100%", marginTop:12, fontSize:10, padding:"7px 10px" }}
+            >
+              Afficher plus ({Math.min(taskLimit + 10, filteredPendingTasks.length)}/{filteredPendingTasks.length})
+            </Btn>
+          )}
         </div>
 
         {/* ALERTES (CUVERIE & STOCKS) */}

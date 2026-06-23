@@ -33,7 +33,7 @@ function ContainerTile({ c, onClick }: ContainerTileProps) {
   const formatVolShort = (vol: any) => typeof vol === "number" ? `${vol.toFixed(1)} hL` : `${vol} hL`;
 
   return (
-    <div onClick={onClick} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16, cursor:"pointer", position:"relative", overflow:"hidden", borderLeft:`3px solid ${displayStatus === "NETTOYAGE" ? T.blue : tc}`, transition: "transform 0.2s, box-shadow 0.2s" }} onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = `0 4px 12px ${T.accent}11`; }} onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}>
+    <div data-testid={`container-card-${c.id}`} onClick={onClick} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:16, cursor:"pointer", position:"relative", overflow:"hidden", borderLeft:`3px solid ${displayStatus === "NETTOYAGE" ? T.blue : tc}`, transition: "transform 0.2s, box-shadow 0.2s" }} onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => { e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = `0 4px 12px ${T.accent}11`; }} onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => { e.currentTarget.style.transform = "none"; e.currentTarget.style.boxShadow = "none"; }}>
       <div style={{ position:"absolute", bottom:0, left:0, right:0, height:`${pct}%`, background:tc+"0d", pointerEvents:"none" }} />
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:8 }}>
         <div>

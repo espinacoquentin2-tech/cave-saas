@@ -59,7 +59,7 @@ export function FF({ label, children }: any) {
   );
 }
 
-export function Input({ value, onChange, type, placeholder, readOnly, disabled, style: extra }: any) {
+export function Input({ value, onChange, type, placeholder, readOnly, disabled, style: extra, ...props }: any) {
   const T = useTheme();
   return (
     <input 
@@ -69,6 +69,7 @@ export function Input({ value, onChange, type, placeholder, readOnly, disabled, 
       placeholder={placeholder} 
       readOnly={readOnly}
       disabled={disabled}
+      {...props}
       style={{ 
         width:"100%", background:T.bg, border:`1px solid ${T.border}`, borderRadius:3, 
         padding:"8px 10px", color:T.text, fontSize:13, fontFamily:"monospace", 
@@ -81,13 +82,14 @@ export function Input({ value, onChange, type, placeholder, readOnly, disabled, 
   );
 }
 
-export function Select({ value, onChange, children, disabled, style: extra }: any) {
+export function Select({ value, onChange, children, disabled, style: extra, ...props }: any) {
   const T = useTheme();
   return (
     <select 
       value={value} 
       onChange={onChange}
       disabled={disabled}
+      {...props}
       style={{ 
         width:"100%", background:T.bg, border:`1px solid ${T.border}`, borderRadius:3, 
         padding:"8px 10px", color:T.text, fontSize:13, fontFamily:"monospace", 
@@ -155,7 +157,7 @@ export function MultiSelectDrop({ label, options, selected, onChange, format = (
   );
 }
 
-export function Btn({ onClick, disabled, children, variant, style: extra }: any) {
+export function Btn({ onClick, disabled, children, variant, style: extra, ...props }: any) {
   const T = useTheme();
   const base = { 
     border:"none", padding:"9px 18px", borderRadius:3, 
@@ -176,6 +178,7 @@ export function Btn({ onClick, disabled, children, variant, style: extra }: any)
     <button 
       onClick={disabled ? undefined : onClick} 
       disabled={disabled}
+      {...props}
       style={{ ...styles[variant || "primary"], ...extra }}
     >
       {children}
