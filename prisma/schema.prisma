@@ -217,7 +217,7 @@ model BottleLot {
   status              String    @default("EN_CAVE")
   tirageDate          DateTime? @map("tirage_date")
   degorgementDate     DateTime? @map("degorgement_date")
-  dosageValue         Decimal?    @map("dosage_value")
+  dosageValue         Float?    @map("dosage_value")
   dosageUnit          String?   @map("dosage_unit")
   locationZone        String?   @map("location_zone")
   locationRack        String?   @map("location_rack")
