@@ -138,10 +138,72 @@ export function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh, canSho
 
   const totalAlertsCount = caveAlerts.length + stockAlerts.length;
 
-  const getEventTimestamp = (event: any) => event.eventDatetime || event.createdAt || event.date;
-  const recentEvts = [...events].sort((a: any, b: any) => new Date(getEventTimestamp(b)).getTime() - new Date(getEventTimestamp(a)).getTime()).slice(0, 6);
+  const getEventTimestamp = (event: any) => event.eventDatetime || event.executedAt || event.createdAt || event.date;
   const getLotCode = (id: any) => lots.find((l: any) => String(l.id) === String(id))?.businessCode || lots.find((l: any) => String(l.id) === String(id))?.code || id;
   const getContainerName = (id: any) => containers.find((c: any) => String(c.id) === String(id))?.displayName || containers.find((c: any) => String(c.id) === String(id))?.name || id;
+  const getEvidenceBusinessOperation = (workOrder: any) => {
+    const evidence = workOrder.executionEvidence;
+    if (!evidence || typeof evidence !== "object") return null;
+    if (typeof evidence.businessOperation === "string") return evidence.businessOperation;
+    if (evidence.result && typeof evidence.result === "object" && typeof evidence.result.businessOperation === "string") {
+      return evidence.result.businessOperation;
+    }
+    return null;
+  };
+  const normalizeActivityType = (value: any) => {
+    const type = String(value || "ORDRE_EXECUTE").trim().toUpperCase().replace(/\s+/g, "_");
+    if (type === "SOUTIRAGE" || type === "TRANSFERT") return "TRANSFERT";
+    if (type === "CREATION_TIRAGE" || type === "TIRAGE") return "TIRAGE";
+    if (["LEVURAGE", "SULFITAGE", "CHAPTALISATION", "ACIDIFICATION", "COLLAGE", "FILTRATION", "STABILISATION_TARTRIQUE", "OUILLAGE", "AJOUT_AUTRE_PRODUIT", "INTRANT"].includes(type)) return "INTRANT";
+    return type;
+  };
+  const getEventLotLabel = (event: any) => {
+    const lotIds = [
+      event.lotId,
+      ...(Array.isArray(event.lots) ? event.lots.map((link: any) => link.lotId) : []),
+    ].filter(Boolean);
+    const labels = [...new Set(lotIds.map(getLotCode).filter(Boolean))];
+    return labels.length > 0 ? labels.join(", ") : (event.comment || "Opération métier");
+  };
+  const activityRows = [
+    ...events.map((event: any) => ({
+      id: `event-${event.id}`,
+      source: "event",
+      timestamp: getEventTimestamp(event),
+      type: normalizeActivityType(event.eventType || event.type),
+      label: getEventLotLabel(event),
+      user: event.operator?.email || event.operator?.name || event.operator || "—",
+    })),
+    ...workOrders
+      .filter((workOrder: any) => workOrder.status === "DONE" && workOrder.executedAt)
+      .map((workOrder: any) => ({
+        id: `workorder-${workOrder.id}`,
+        source: "workorder",
+        timestamp: workOrder.executedAt,
+        type: normalizeActivityType(getEvidenceBusinessOperation(workOrder) || workOrder.recette),
+        label: workOrder.displayAction || workOrder.details || `Ordre ${workOrder.id}`,
+        user: workOrder.operator || workOrder.createdBy || "—",
+        workOrderId: workOrder.id,
+      })),
+  ]
+    .filter((activity: any) => Number.isFinite(new Date(activity.timestamp).getTime()))
+    .sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const completedWorkOrderActivities = activityRows.filter((activity: any) => activity.source === "workorder");
+  const recentEvts = activityRows
+    .filter((activity: any) => {
+      if (activity.source === "workorder") return true;
+      return !completedWorkOrderActivities.some((workOrderActivity: any) => {
+        const timeDifference = Math.abs(
+          new Date(workOrderActivity.timestamp).getTime() - new Date(activity.timestamp).getTime()
+        );
+        const sameUser = workOrderActivity.user === activity.user
+          || String(workOrderActivity.user).split("@")[0] === String(activity.user).split("@")[0];
+        return timeDifference <= 120_000
+          && workOrderActivity.type === activity.type
+          && sameUser;
+      });
+    })
+    .slice(0, 8);
 
   const alertColors = { warn: "#d98b2b", info: T.blue, action: T.green, red: T.red };
 
@@ -344,16 +406,26 @@ export function Dashboard({ setNav, workOrders, setWorkOrders, onRefresh, canSho
       </div>
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:20 }}>
+        <div data-testid="recent-activity-card" style={{ minWidth:0, overflow:"hidden", background:T.surface, border:`1px solid ${T.border}`, borderRadius:8, padding:20 }}>
           <div style={{ fontSize:11, textTransform:"uppercase", letterSpacing:2, color:T.textDim, marginBottom:16, fontWeight: "bold" }}>Activité récente (Base de données)</div>
           {recentEvts.length === 0 ? (
             <div style={{ color:T.textDim, fontSize:12, fontStyle:"italic", textAlign:"center", padding:"30px 0" }}>Aucune activité enregistrée</div>
           ) : recentEvts.map((e, i) => (
-            <div key={e.id} style={{ display:"grid", gridTemplateColumns:"120px 110px 1fr 28px", gap:8, alignItems:"center", padding:"10px 0", borderBottom:i < recentEvts.length-1 ? `1px solid ${T.border}` : "none" }}>
-              <div style={{ fontSize:10, color:T.textDim, fontFamily:"monospace" }}>{new Date(getEventTimestamp(e)).toLocaleDateString('fr-FR')}</div>
-              <Badge label={e.eventType || e.type} />
-              <div style={{ fontSize:11, color:T.textStrong, fontFamily:"monospace", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{getLotCode(e.lotId)}</div>
-              <div style={{ fontSize:10, color:T.textDim }}>{e.operator?.split("@")[0] || e.operator}</div>
+            <div
+              key={e.id}
+              data-testid="recent-activity-row"
+              style={{ minWidth:0, overflow:"hidden", display:"grid", gridTemplateColumns:"82px minmax(84px,120px) minmax(0,1fr) minmax(80px,130px)", gap:8, alignItems:"center", padding:"10px 0", borderBottom:i < recentEvts.length-1 ? `1px solid ${T.border}` : "none" }}
+            >
+              <div style={{ fontSize:10, color:T.textDim, fontFamily:"monospace", whiteSpace:"nowrap" }}>{new Date(e.timestamp).toLocaleDateString('fr-FR')}</div>
+              <div
+                data-testid="recent-activity-type"
+                title={e.type}
+                style={{ minWidth:0, maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", border:`1px solid ${T.borderLight}`, borderRadius:10, padding:"3px 7px", fontSize:9, color:T.accent, textAlign:"center" }}
+              >
+                {e.type}
+              </div>
+              <div data-testid="recent-activity-label" title={e.label} style={{ minWidth:0, fontSize:11, color:T.textStrong, fontFamily:"monospace", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{e.label}</div>
+              <div data-testid="recent-activity-user" title={e.user} style={{ minWidth:0, maxWidth:"100%", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontSize:10, color:T.textDim }}>{e.user}</div>
             </div>
           ))}
         </div>

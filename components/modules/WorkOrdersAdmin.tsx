@@ -3,7 +3,7 @@
 
 import React, { useState } from "react";
 import { Badge, Btn, FF, Input, Modal, Select } from "@/components/ui";
-import { formatVolShort, useStore, useTheme } from "@/lib/store";
+import { formatVolShort, useAuth, useStore, useTheme } from "@/lib/store";
 import {
   buildApiHeaders,
   extractApiErrorMessage,
@@ -16,8 +16,13 @@ import {
 
 export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any; setWorkOrders: any }) {
   const T = useTheme(); 
+  const { user } = useAuth();
   const { state, dispatch } = useStore();
   const [modal, setModal] = useState(false);
+  const [cancelTask, setCancelTask] = useState<any | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState("");
+  const [isCancelling, setIsCancelling] = useState(false);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
@@ -61,6 +66,8 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
   const isIntrant = ["LEVURAGE", "SULFITAGE", "CHAPTALISATION", "ACIDIFICATION", "COLLAGE", "FILTRATION", "STABILISATION TARTRIQUE", "OUILLAGE", "AJOUT AUTRE PRODUIT"].includes(form.recette);
   const intrantProducts = (state.products || []).filter((product: any) => product.category === "Intrants");
   const selectedIntrantProduct = intrantProducts.find((product: any) => String(product.id) === String(form.intrantProductId));
+  const canCancelWorkOrders = ["ADMIN", "CHEF_CAVE"].includes(user?.roleKey);
+  const safeTaskTestId = (id: any) => String(id).replace(/[^a-zA-Z0-9_-]/g, "-");
 
   const updateSource = (index: any, field: any, value: any) => {
     const newSources: any[] = [...form.sources];
@@ -156,6 +163,57 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
     }
   };
 
+  const openCancelModal = (workOrder: any) => {
+    setCancelTask(workOrder);
+    setCancelReason("");
+    setCancelError("");
+  };
+
+  const closeCancelModal = () => {
+    if (isCancelling) return;
+    setCancelTask(null);
+    setCancelReason("");
+    setCancelError("");
+  };
+
+  const cancelWorkOrder = async () => {
+    if (!cancelTask) return;
+
+    const reason = cancelReason.trim();
+    if (reason.length < 3) {
+      setCancelError("Indiquez un motif d'au moins 3 caractères.");
+      return;
+    }
+
+    setCancelError("");
+    setIsCancelling(true);
+
+    try {
+      const response = await fetch(`/api/workorders/${cancelTask.id}/cancel`, {
+        method: "POST",
+        headers: buildApiHeaders(user),
+        body: JSON.stringify({ reason }),
+      });
+      const payload = await response.json().catch(() => ({}));
+
+      if (!response.ok) {
+        throw new Error(extractApiErrorMessage(payload, "Impossible d'annuler cet ordre de travail."));
+      }
+
+      const cancelledWorkOrder = unwrapApiData(payload);
+      setWorkOrders(workOrders.map((workOrder: any) =>
+        workOrder.id === cancelTask.id ? cancelledWorkOrder : workOrder
+      ));
+      dispatch({ type: "TOAST_ADD", payload: { msg: "Ordre de travail annulé.", color: T.green } });
+      setCancelTask(null);
+      setCancelReason("");
+    } catch (error) {
+      setCancelError(error instanceof Error ? error.message : "Impossible d'annuler cet ordre de travail.");
+    } finally {
+      setIsCancelling(false);
+    }
+  };
+
   return (
     <div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:28 }}>
@@ -163,19 +221,71 @@ export function WorkOrdersAdmin({ workOrders, setWorkOrders }: { workOrders: any
         <Btn onClick={() => setModal(true)} data-testid="workorder-create-button">+ Planifier une tâche</Btn>
       </div>
       <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:4, overflow:"hidden" }}>
-        <div style={{ display:"grid", gridTemplateColumns:"120px 150px 2fr 2fr 120px", padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
-          <div>Date</div><div>Action</div><div>Lot Source / Cible</div><div>Détails</div><div>Statut</div>
+        <div style={{ display:"grid", gridTemplateColumns:"110px 140px minmax(0,2fr) minmax(0,2fr) 110px 100px", gap:12, padding:"12px 16px", borderBottom:`1px solid ${T.border}`, fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
+          <div>Date</div><div>Action</div><div>Lot Source / Cible</div><div>Détails</div><div>Statut</div><div>Gestion</div>
         </div>
         {workOrders.length === 0 ? <div style={{ padding:"40px", textAlign:"center", color:T.textDim }}>Aucun ordre de travail planifié.</div> : workOrders.map((w: any, i: any) => (
-            <div key={w.id} style={{ display:"grid", gridTemplateColumns:"120px 150px 2fr 2fr 120px", gap:12, padding:"16px 16px", alignItems:"center", borderBottom:i<workOrders.length-1?`1px solid ${T.border}`:"none" }}>
-              <div style={{ fontSize:11, color:T.textDim, fontFamily:"monospace" }}>{w.date.split('T')[0]}</div>
+            <div key={w.id} data-testid={`workorder-row-${safeTaskTestId(w.id)}`} style={{ display:"grid", gridTemplateColumns:"110px 140px minmax(0,2fr) minmax(0,2fr) 110px 100px", gap:12, padding:"16px 16px", alignItems:"center", borderBottom:i<workOrders.length-1?`1px solid ${T.border}`:"none", opacity:w.status === "CANCELLED" ? 0.65 : 1 }}>
+              <div style={{ fontSize:11, color:T.textDim, fontFamily:"monospace" }}>{String(w.date || "").split('T')[0] || "—"}</div>
               <Badge label={w.recette} color={T.accent} />
-              <div style={{ fontSize:13, color:T.accentLight, fontFamily:"monospace", fontWeight:600 }}>{w.displaySource || "Multiples"}</div>
-              <div style={{ fontSize:13, color:T.text }}>{w.displayAction || "Opération en cours"}</div>
-              <Badge label={w.status} color={w.status === "PENDING" ? T.red : T.green} />
+              <div title={w.displaySource || "Multiples"} style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontSize:13, color:T.accentLight, fontFamily:"monospace", fontWeight:600 }}>{w.displaySource || "Multiples"}</div>
+              <div title={w.status === "CANCELLED" ? w.cancelReason : w.displayAction} style={{ minWidth:0, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontSize:13, color:T.text }}>
+                {w.status === "CANCELLED" ? `Annulé : ${w.cancelReason || "sans motif"}` : (w.displayAction || "Opération en cours")}
+              </div>
+              <Badge label={w.status} color={w.status === "PENDING" ? T.red : w.status === "CANCELLED" ? T.textDim : T.green} />
+              <div>
+                {canCancelWorkOrders && w.status === "PENDING" && (
+                  <Btn
+                    variant="ghost"
+                    onClick={() => openCancelModal(w)}
+                    data-testid={`workorder-cancel-button-${safeTaskTestId(w.id)}`}
+                    style={{ color:T.red, fontSize:10, padding:"5px 8px" }}
+                  >
+                    Annuler
+                  </Btn>
+                )}
+              </div>
             </div>
         ))}
       </div>
+
+      {cancelTask && (
+        <Modal title={`Annuler l'ordre ${cancelTask.id}`} onClose={closeCancelModal}>
+          <div style={{ fontSize:12, color:T.text, lineHeight:1.5, marginBottom:16 }}>
+            Cette action retire la tâche des listes actives sans supprimer l'ordre ni aucune donnée métier.
+          </div>
+          <FF label="Motif d'annulation">
+            <Input
+              value={cancelReason}
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) => setCancelReason(event.target.value)}
+              disabled={isCancelling}
+              data-testid="workorder-cancel-reason-input"
+              aria-label="Motif d'annulation"
+              placeholder="Ex. Erreur de planification"
+            />
+          </FF>
+          {cancelError && (
+            <div
+              data-testid="workorder-cancel-error-message"
+              role="alert"
+              style={{ background:T.red+"15", border:`1px solid ${T.red}55`, color:T.red, borderRadius:4, padding:"10px 12px", fontSize:12, marginTop:12 }}
+            >
+              {cancelError}
+            </div>
+          )}
+          <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:20 }}>
+            <Btn variant="secondary" onClick={closeCancelModal} disabled={isCancelling}>Fermer</Btn>
+            <Btn
+              onClick={cancelWorkOrder}
+              disabled={isCancelling}
+              data-testid="workorder-cancel-confirm-button"
+              style={{ background:isCancelling ? T.textDim : T.red, color:"#fff" }}
+            >
+              {isCancelling ? "Annulation..." : "Confirmer l'annulation"}
+            </Btn>
+          </div>
+        </Modal>
+      )}
 
       {modal && (
         <Modal title="Nouveau plan de travail" onClose={() => setModal(false)}>

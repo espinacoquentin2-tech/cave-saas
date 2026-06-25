@@ -9,6 +9,7 @@ import {
 } from '@/lib/workorder-assemblage-sources';
 import type { UpsertUserInput } from '@/server/modules/users/user.schemas';
 import { prisma } from '@/server/shared/prisma';
+import { WorkOrderRepository } from '@/server/modules/workorders/workorder.repository';
 
 const toWorkOrderDto = (workOrder: {
   id: number;
@@ -24,6 +25,9 @@ const toWorkOrderDto = (workOrder: {
   operator: string | null;
   executionEvidence: unknown | null;
   executedAt: Date | null;
+  cancelledAt: Date | null;
+  cancelledBy: string | null;
+  cancelReason: string | null;
   createdAt: Date;
 }) => ({
   id: workOrder.publicId,
@@ -54,6 +58,9 @@ const toWorkOrderDto = (workOrder: {
   createdBy: workOrder.createdBy,
   executionEvidence: workOrder.executionEvidence,
   executedAt: workOrder.executedAt?.toISOString() || null,
+  cancelledAt: workOrder.cancelledAt?.toISOString() || null,
+  cancelledBy: workOrder.cancelledBy,
+  cancelReason: workOrder.cancelReason,
 });
 
 type WorkOrderVolumeSource = { lotId: number; volume: number; role?: string; sourceRole?: string };
@@ -190,6 +197,10 @@ export class AdminService {
         throw new Error('ALREADY_APPLIED: Cet ordre de travail est déjà terminé.');
       }
 
+      if (workOrder.status === 'CANCELLED') {
+        throw new Error('WORK_ORDER_CANCELLED: Un ordre de travail annulé ne peut pas être exécuté.');
+      }
+
       const updated = await tx.workOrder.update({
         where: { publicId },
         data: {
@@ -206,6 +217,42 @@ export class AdminService {
           details: `Exécuté: ${updated.recette} - ${updated.publicId}`,
           userId: userEmail,
         },
+      });
+
+      return toWorkOrderDto(updated);
+    });
+  }
+
+  static async cancelWorkOrder(publicId: string, reason: string, userEmail: string) {
+    return prisma.$transaction(async (tx) => {
+      const workOrder = await WorkOrderRepository.findByPublicId(tx, publicId);
+
+      if (!workOrder) {
+        throw new Error('Ordre de travail introuvable.');
+      }
+
+      if (workOrder.status === 'DONE') {
+        throw new Error('WORK_ORDER_DONE: Un ordre exécuté ne peut pas être annulé.');
+      }
+
+      if (workOrder.status === 'CANCELLED') {
+        throw new Error('ALREADY_CANCELLED: Cet ordre de travail est déjà annulé.');
+      }
+
+      if (workOrder.status !== 'PENDING') {
+        throw new Error(`WORK_ORDER_NOT_PENDING: Un ordre au statut ${workOrder.status} ne peut pas être annulé.`);
+      }
+
+      const updated = await WorkOrderRepository.cancel(tx, publicId, {
+        cancelledAt: new Date(),
+        cancelledBy: userEmail,
+        cancelReason: reason,
+      });
+
+      await WorkOrderRepository.createAuditLog(tx, {
+        action: `WO_CANCELLED_${updated.recette}`,
+        details: `Annulé: ${updated.recette} - ${updated.publicId} - Motif: ${reason}`,
+        userId: userEmail,
       });
 
       return toWorkOrderDto(updated);

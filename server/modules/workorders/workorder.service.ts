@@ -1,6 +1,6 @@
 import { BusinessLogicError } from '@/lib/errors';
 import { AdminService } from '@/services/admin.service';
-import { CreateWorkOrderInput } from '@/server/modules/workorders/workorder.schemas';
+import { CancelWorkOrderInput, CreateWorkOrderInput } from '@/server/modules/workorders/workorder.schemas';
 import { RequestActor } from '@/server/shared/request-context';
 
 export class WorkOrderModuleService {
@@ -40,12 +40,36 @@ export class WorkOrderModuleService {
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erreur serveur';
 
-      if (message.includes('ALREADY_APPLIED')) {
+      if (message.includes('ALREADY_APPLIED') || message.includes('WORK_ORDER_CANCELLED')) {
         throw new BusinessLogicError(message, 409);
       }
 
       if (message.includes('introuvable')) {
         throw new BusinessLogicError(message, 404);
+      }
+
+      throw new BusinessLogicError(message, 400);
+    }
+  }
+
+  static async cancel(publicId: string, input: CancelWorkOrderInput, actor: RequestActor) {
+    try {
+      return {
+        workOrder: await AdminService.cancelWorkOrder(publicId, input.reason, actor.email),
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Erreur serveur';
+
+      if (message.includes('introuvable')) {
+        throw new BusinessLogicError(message, 404);
+      }
+
+      if (
+        message.includes('WORK_ORDER_DONE') ||
+        message.includes('ALREADY_CANCELLED') ||
+        message.includes('WORK_ORDER_NOT_PENDING')
+      ) {
+        throw new BusinessLogicError(message, 409);
       }
 
       throw new BusinessLogicError(message, 400);

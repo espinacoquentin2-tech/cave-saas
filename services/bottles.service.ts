@@ -409,7 +409,7 @@ export class BottlesService {
               status: 'DEGORGE',
               tirageDate: sourceLot.tirageDate,
               degorgementDate,
-              dosageValue: new Prisma.Decimal(data.dosageGramsPerLiter.toFixed(3)),
+              dosageValue: Number(data.dosageGramsPerLiter.toFixed(3)),
               dosageUnit: 'g/L',
               locationZone: sourceLot.locationZone ?? 'Habillage',
               locationRack: sourceLot.locationRack,

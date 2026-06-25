@@ -76,3 +76,9 @@ export const createWorkOrderSchema = z
   });
 
 export type CreateWorkOrderInput = z.infer<typeof createWorkOrderSchema>;
+
+export const cancelWorkOrderSchema = z.object({
+  reason: z.string().trim().min(3, 'Le motif doit contenir au moins 3 caractères.').max(500),
+});
+
+export type CancelWorkOrderInput = z.infer<typeof cancelWorkOrderSchema>;

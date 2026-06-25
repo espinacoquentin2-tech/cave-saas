@@ -497,6 +497,9 @@ model WorkOrder {
   operator          String?
   executionEvidence Json?    @map("execution_evidence")
   executedAt        DateTime? @map("executed_at")
+  cancelledAt       DateTime? @map("cancelled_at")
+  cancelledBy       String?   @map("cancelled_by")
+  cancelReason      String?   @map("cancel_reason")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
 

@@ -136,6 +136,18 @@ async function closeModal(page: Page) {
 async function smokeDashboard(page: Page) {
   await expect(page.getByRole("heading", { name: /tableau de bord/i })).toBeVisible();
   await expectAnyVisible(page, [/volume en cave/i, /lots actifs/i, /contenants actifs/i, /sur lattes/i]);
+  const recentActivityCard = page.getByTestId("recent-activity-card");
+  await expect(recentActivityCard).toBeVisible();
+  const activityRows = recentActivityCard.getByTestId("recent-activity-row");
+  if (await activityRows.count()) {
+    const hasHorizontalOverflow = await recentActivityCard.evaluate((element) =>
+      element.scrollWidth > element.clientWidth + 1
+    );
+    expect(hasHorizontalOverflow, "La carte d'activité récente ne doit pas déborder horizontalement.").toBe(false);
+    await expect(activityRows.first().getByTestId("recent-activity-type")).toBeVisible();
+    await expect(activityRows.first().getByTestId("recent-activity-label")).toBeVisible();
+    await expect(activityRows.first().getByTestId("recent-activity-user")).toBeVisible();
+  }
   const reset = page.getByText(/reset base de test/i);
   if (await reset.isVisible().catch(() => false)) {
     await expect(reset).toBeVisible();
@@ -186,6 +198,13 @@ async function smokeTirage(page: Page) {
 async function smokeWorkOrders(page: Page) {
   await go(page, /ordres de travail/i, /ordres de travail/i);
   await expectAnyVisible(page, [/liste|type|soutirage|transvasement|intrant|tirage|assemblage|aucun/i]);
+  const cancelButton = page.locator('[data-testid^="workorder-cancel-button-"]').first();
+  if (await cancelButton.isVisible().catch(() => false)) {
+    await cancelButton.click();
+    await expect(page.getByTestId("workorder-cancel-reason-input")).toBeVisible();
+    await expect(page.getByTestId("workorder-cancel-confirm-button")).toBeVisible();
+    await closeModal(page);
+  }
   if (await clickIfUsable(page.getByRole("button", { name: /nouvel|créer|ajouter/i }))) {
     await expectAnyVisible(page, [/soutirage|transvasement|intrant|tirage|assemblage/i]);
     await closeModal(page);
