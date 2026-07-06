@@ -117,7 +117,6 @@ const findUserByEmail = (users: any[], email: string | null | undefined) => {
 // =============================================================================
 function LoginScreen({ onLogin }: LoginScreenProps) {
   const T = useTheme();
-  const { state } = useStore();
   const [email, setEmail] = useState(""); 
   const [pwd, setPwd] = useState("");
   const [err, setErr] = useState(""); 
@@ -180,18 +179,18 @@ function LoginScreen({ onLogin }: LoginScreenProps) {
   };
 
   return (
-    <div style={{ minHeight:"100vh", background:T.loginBg, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
+    <div data-testid="login-page" style={{ minHeight:"100vh", background:T.loginBg, display:"flex", alignItems:"center", justifyContent:"center", padding:20 }}>
       <div style={{ width:"100%", maxWidth:400 }}>
         <div style={{ textAlign:"center", marginBottom:44 }}>
-          <div style={{ fontSize:10, letterSpacing:6, color:T.textDim, textTransform:"uppercase", marginBottom:10 }}>Domaine · Champagne</div>
-          <div style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:40, color:T.accentLight, letterSpacing:2 }}>CAVE</div>
-          <div style={{ fontSize:9, color:T.textDim, letterSpacing:4, marginTop:4, textTransform:"uppercase" }}>Gestion viticole sécurisée</div>
+          <div style={{ fontSize:10, letterSpacing:4, color:T.textDim, textTransform:"uppercase", marginBottom:10 }}>Espace sécurisé pour domaines, maisons et caves</div>
+          <div data-testid="app-brand-title" style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:42, color:T.accentLight, letterSpacing:1 }}>Ma Cuverie</div>
+          <div style={{ fontSize:11, color:T.textDim, letterSpacing:2.5, marginTop:6, textTransform:"uppercase" }}>Gestion de cave et de cuverie</div>
         </div>
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:"32px 32px 24px", borderTop:`2px solid ${T.accent}` }}>
-          <FF label="Adresse e-mail"><Input type="email" value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} disabled={loading} placeholder="vous@domaine.fr" /></FF>
-          <FF label="Mot de passe"><Input type="password" value={pwd} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPwd(e.target.value)} disabled={loading} placeholder="••••••••" /></FF>
-          {err && <div style={{ background:T.red+"22", border:`1px solid ${T.red}44`, borderRadius:3, padding:"8px 12px", fontSize:12, color:T.red, marginBottom:14 }}>{err}</div>}
-          <Btn onClick={submit} disabled={loading || !email || !pwd} style={{ width:"100%", padding:13, marginTop:6 }}>{loading ? "Vérification..." : "Se connecter ->"}</Btn>
+          <FF label="Adresse e-mail"><Input data-testid="login-email-input" type="email" value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} disabled={loading} placeholder="vous@domaine.fr" /></FF>
+          <FF label="Mot de passe"><Input data-testid="login-password-input" type="password" value={pwd} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPwd(e.target.value)} disabled={loading} placeholder="Mot de passe" /></FF>
+          {err && <div data-testid="login-error-message" style={{ background:T.red+"22", border:`1px solid ${T.red}44`, borderRadius:3, padding:"10px 12px", fontSize:12, color:T.red, marginBottom:14, lineHeight:1.4 }}>{err}</div>}
+          <Btn data-testid="login-submit-button" onClick={submit} disabled={loading || !email || !pwd} style={{ width:"100%", padding:13, marginTop:6 }}>{loading ? "Vérification..." : "Se connecter"}</Btn>
         </div>
       </div>
     </div>
@@ -3576,7 +3575,7 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
           </style>
         </head>
         <body>
-          <div class="brand">Domaine · Champagne</div>
+          <div class="brand">Ma Cuverie</div>
           <h1>Fiche de Traçabilité</h1>
           
           <div class="grid">
@@ -5177,7 +5176,32 @@ export default function App() {
   }, [user?.accessToken, configurationError]);
 
   const goNav = (id: string) => { setNav(id); setSelCont(null); setSelLot(null); };
-  const logout = () => { supabase.auth.signOut(); setUser(null); setNav("dashboard"); setSelCont(null); setSelLot(null); };
+  const logout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } finally {
+      setLatestAccessToken(undefined);
+      setUser(null);
+      setNav("dashboard");
+      setSelCont(null);
+      setSelLot(null);
+      setWorkOrders([]);
+      dispatch({ type: "SET_CONTAINERS", payload: [] });
+      dispatch({ type: "SET_LOTS", payload: [] });
+      dispatch({ type: "SET_EVENTS", payload: [] });
+      dispatch({ type: "SET_BOTTLE_LOTS", payload: [] });
+      dispatch({ type: "SET_ANALYSES", payload: [] });
+      dispatch({ type: "SET_FA_READINGS", payload: [] });
+      dispatch({ type: "SET_USERS", payload: [] });
+      dispatch({ type: "SET_PRESSINGS", payload: [] });
+      dispatch({ type: "SET_PRODUCTS", payload: [] });
+      dispatch({ type: "SET_MOVEMENTS", payload: [] });
+      dispatch({ type: "SET_PRESSOIRS", payload: [] });
+      dispatch({ type: "SET_MATURATIONS", payload: [] });
+      dispatch({ type: "SET_PARCELLES", payload: [] });
+      dispatch({ type: "SET_DEGUSTATIONS", payload: [] });
+    }
+  };
 
   const currentUser = user;
   const currentUserRoleKey = getCurrentUserRoleKey(currentUser);
@@ -5297,8 +5321,8 @@ export default function App() {
               {/* --- SIDEBAR --- */}
               <div style={{ width:240, background:T.surface, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", flexShrink:0 }}>
                 <div style={{ padding:"24px 20px 20px", borderBottom:`1px solid ${T.border}` }}>
-                  <div style={{ fontSize:22, fontFamily:"'Playfair Display', Georgia, serif", color:T.accentLight, letterSpacing:3 }}>CAVE</div>
-                  <div style={{ fontSize:9, color:T.textDim, textTransform:"uppercase", letterSpacing:3, marginTop:4 }}>Gestion viticole</div>
+                  <div data-testid="app-brand-title" style={{ fontSize:22, fontFamily:"'Playfair Display', Georgia, serif", color:T.accentLight, letterSpacing:1 }}>Ma Cuverie</div>
+                  <div style={{ fontSize:9, color:T.textDim, textTransform:"uppercase", letterSpacing:2.2, marginTop:4 }}>Suivi cuverie & traçabilité</div>
                 </div>
                 <nav style={{ padding:"16px 0", flex:1, overflowY:"auto" }}>
                   {NAV_CATEGORIES.map((cat: any, catIdx: number) => {
@@ -5355,16 +5379,20 @@ export default function App() {
                     <span style={{ display:"flex", gap:12, alignItems:"center" }}><span style={{ fontSize:15 }}>⚙️</span>Paramètres</span>
                   </button>
                 </div>
-                <div style={{ padding:"16px 20px", borderTop:`1px solid ${T.border}`, display:"flex", alignItems:"center", gap:12 }}>
-                  <div style={{ width:36, height:36, borderRadius:"50%", background:T.accent+"33", border:`1px solid ${T.accent}55`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, color:T.accent, fontFamily:"monospace", flexShrink:0 }}>{user.initials}</div>
-                  <div style={{ flex:1, minWidth:0 }}>
-                    <div style={{ fontSize:13, color:T.textStrong, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:"bold" }}>{user.name}</div>
-                    <div style={{ fontSize:11, color:T.accent, marginTop:2 }}>{user.role}</div>
-                    {user.organizationName && (
-                      <div style={{ fontSize:10, color:T.textDim, marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Espace : {user.organizationName}</div>
-                    )}
+                <div style={{ padding:"16px 20px", borderTop:`1px solid ${T.border}`, display:"flex", flexDirection:"column", gap:12 }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:12, minWidth:0 }}>
+                    <div style={{ width:36, height:36, borderRadius:"50%", background:T.accent+"33", border:`1px solid ${T.accent}55`, display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, color:T.accent, fontFamily:"monospace", flexShrink:0 }}>{user.initials}</div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:13, color:T.textStrong, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:"bold" }}>{user.name}</div>
+                      <div style={{ fontSize:11, color:T.accent, marginTop:2 }}>{user.role}</div>
+                      {user.organizationName && (
+                        <div style={{ fontSize:10, color:T.textDim, marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Espace : {user.organizationName}</div>
+                      )}
+                    </div>
                   </div>
-                  <button onClick={logout} style={{ background:"none", border:`1px solid ${T.border}`, color:T.textDim, cursor:"pointer", fontSize:12, padding:"6px 10px", borderRadius:4, fontFamily:"monospace" }}>Q</button>
+                  <button data-testid="logout-button" onClick={logout} style={{ width:"100%", background:T.surfaceHigh, border:`1px solid ${T.border}`, color:T.text, cursor:"pointer", fontSize:12, padding:"9px 12px", borderRadius:4, fontFamily:"monospace", textAlign:"center", textTransform:"uppercase", letterSpacing:1 }}>
+                    Se déconnecter
+                  </button>
                 </div>
               </div>
               

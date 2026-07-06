@@ -138,8 +138,8 @@ const dbInitialChecks = async () => {
     A: await prisma.organization.findUnique({ where: { slug: orgSlugs.A } }),
     B: await prisma.organization.findUnique({ where: { slug: orgSlugs.B } }),
   };
-  assert(orgs.A?.name === 'TEST-ORG-A-CODEX', 'Organisation A absente ou nom incorrect.');
-  assert(orgs.B?.name === 'TEST-ORG-B-CODEX', 'Organisation B absente ou nom incorrect.');
+  assert(orgs.A?.name === 'Domaine des Aulnes', 'Organisation A absente ou nom incorrect.');
+  assert(orgs.B?.name === 'Clos des Brumes', 'Organisation B absente ou nom incorrect.');
 
   const emails = Object.values(accounts).flatMap((byRole) => Object.values(byRole).map((account) => account.email));
   const users = await prisma.user.findMany({
@@ -176,7 +176,8 @@ const validateMeAndHeaders = async (sessions, orgs) => {
     for (const [roleKey, session] of Object.entries(sessions[orgKey])) {
       const me = await session.api('GET', '/api/me');
       expectOk(me, `/api/me ${session.email}`);
-      assert(me.body.organization.name === `TEST-ORG-${orgKey}-CODEX`, `${session.email}: mauvaise organisation.`);
+      const expectedOrganizationName = orgKey === 'A' ? 'Domaine des Aulnes' : 'Clos des Brumes';
+      assert(me.body.organization.name === expectedOrganizationName, `${session.email}: mauvaise organisation.`);
       assert(me.body.organization.id === orgs[orgKey].id, `${session.email}: mauvais organizationId.`);
       assert(me.body.roleKey === roleKey, `${session.email}: mauvais rôle.`);
       report.accounts.push({ email: session.email, roleKey, organization: me.body.organization.name, status: me.status });
@@ -409,7 +410,8 @@ const validateUi = async () => {
       await page.getByRole('button', { name: /se connecter/i }).click();
       await page.getByRole('heading', { name: /tableau de bord/i }).waitFor({ timeout: 30000 });
       const dashboardBody = await page.locator('body').innerText();
-      assert(dashboardBody.includes(`Espace : TEST-ORG-${orgKey}-CODEX`), `UI ${orgKey}: espace organisation absent.`);
+      const expectedOrganizationName = orgKey === 'A' ? 'Domaine des Aulnes' : 'Clos des Brumes';
+      assert(dashboardBody.includes(`Espace : ${expectedOrganizationName}`), `UI ${orgKey}: espace organisation absent.`);
       assert(!dashboardBody.includes(demoPrefixes[orgKey === 'A' ? 'B' : 'A']), `UI ${orgKey}: donnée démo croisée visible sur dashboard.`);
       assert(!/sélecteur d'organisation|choisir l'organisation/i.test(dashboardBody), `UI ${orgKey}: sélecteur d'organisation visible.`);
       assert(!/Invalid Date|Unhandled Runtime Error|hydration failed/i.test(dashboardBody), `UI ${orgKey}: erreur runtime visible.`);

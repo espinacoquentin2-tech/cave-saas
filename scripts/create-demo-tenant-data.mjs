@@ -61,6 +61,11 @@ const orgSlugCandidates = {
   B: [env.DEMO_ORG_B_SLUG, env.E2E_ORG_B_SLUG, 'clos-des-brumes', 'organisation-b', 'org-b', 'test-org-b-codex'].filter(Boolean),
 };
 
+const orgDisplayNames = {
+  A: 'Domaine des Aulnes',
+  B: 'Clos des Brumes',
+};
+
 const d = (value) => new Prisma.Decimal(String(value));
 
 const assert = (condition, message) => {
@@ -116,6 +121,17 @@ const resolveOrganization = async (orgKey) => {
   const byUser = await findOrganizationByUsers(orgKey);
   if (byUser) return byUser;
   return findOrganizationBySlug(orgKey);
+};
+
+const ensureOrganizationDisplayName = async (orgKey, org) => {
+  const expectedName = orgDisplayNames[orgKey];
+  if (!expectedName || org.name === expectedName) return org;
+  const updated = await prisma.organization.update({
+    where: { id: org.id },
+    data: { name: expectedName },
+  });
+  summary.checks.push({ label: `Nom metier organisation ${orgKey}`, previous: org.name, actual: updated.name });
+  return updated;
 };
 
 const verifyMemberships = async (orgKey, orgId) => {
@@ -889,11 +905,14 @@ const optionalApiChecks = async (orgA, orgB) => {
 };
 
 async function main() {
-  const orgA = await resolveOrganization('A');
-  const orgB = await resolveOrganization('B');
+  let orgA = await resolveOrganization('A');
+  let orgB = await resolveOrganization('B');
   assert(orgA, 'Organisation A introuvable via utilisateurs admin-a@cave.test ou slug existant.');
   assert(orgB, 'Organisation B introuvable via utilisateurs admin-b@cave.test ou slug existant.');
   assert(orgA.id !== orgB.id, 'Les organisations A et B doivent etre distinctes.');
+
+  orgA = await ensureOrganizationDisplayName('A', orgA);
+  orgB = await ensureOrganizationDisplayName('B', orgB);
 
   summary.organizations.A = redactOrg(orgA);
   summary.organizations.B = redactOrg(orgB);

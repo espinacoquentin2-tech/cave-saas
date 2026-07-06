@@ -33,6 +33,8 @@ Ces utilisateurs applicatifs existent dans `public.users` avec les roles:
 - `caviste-a@cave.test`: `CAVISTE`
 - `lecture-a@cave.test`: `LECTURE_SEULE`
 
+Organisation technique: `TEST-ORG-A-CODEX`, slug conserve `test-org-a-codex`.
+
 Chaque utilisateur a exactement un membership vers `TEST-ORG-A-CODEX`.
 
 Parcelles, total metier 15 ha:
@@ -94,6 +96,8 @@ Ces utilisateurs applicatifs existent dans `public.users` avec les roles:
 - `chef-b@cave.test`: `CHEF_CAVE`
 - `caviste-b@cave.test`: `CAVISTE`
 - `lecture-b@cave.test`: `LECTURE_SEULE`
+
+Organisation technique: `TEST-ORG-B-CODEX`, slug conserve `test-org-b-codex`.
 
 Chaque utilisateur a exactement un membership vers `TEST-ORG-B-CODEX`.
 
@@ -157,11 +161,11 @@ Les comptes Supabase Auth doivent exister separement de `public.users`; le scrip
 Validation realisee:
 
 - `/api/me` retourne `200` pour les 8 comptes E2E A/B.
-- Les comptes A retournent `TEST-ORG-A-CODEX` et leur `roleKey` attendu.
-- Les comptes B retournent `TEST-ORG-B-CODEX` et leur `roleKey` attendu.
+- Les comptes A retournent `Domaine des Aulnes` et leur `roleKey` attendu.
+- Les comptes B retournent `Clos des Brumes` et leur `roleKey` attendu.
 - Les lectures HTTP admin A/B sur lots, contenants, produits et work orders ne melangent pas les prefixes `DEMO-DOMAINE-A` et `DEMO-DOMAINE-B`.
 - Un appel avec `x-organization-id` force est refuse en `403`.
-- L'UI affiche `Espace : TEST-ORG-A-CODEX` pour admin A et `Espace : TEST-ORG-B-CODEX` pour admin B, sans selecteur d'organisation visible.
+- L'UI affiche `Espace : Domaine des Aulnes` pour admin A et `Espace : Clos des Brumes` pour admin B, sans selecteur d'organisation visible.
 
 ## Recette A/B Codex du 2026-07-06
 
