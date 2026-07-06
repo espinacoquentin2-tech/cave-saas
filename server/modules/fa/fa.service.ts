@@ -6,7 +6,7 @@ import { RequestActor } from '@/server/shared/request-context';
 export class FaModuleService {
   static async saveTour(input: SaveFaTourInput, actor: RequestActor) {
     try {
-      return await LotsService.saveFaTour(input, actor.email);
+      return await LotsService.saveFaTour(input, actor.email, actor.organizationId);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erreur serveur';
 

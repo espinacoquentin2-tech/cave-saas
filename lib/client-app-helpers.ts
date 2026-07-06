@@ -29,10 +29,15 @@ export const extractApiErrorMessage = (payload: any, fallback = "Erreur serveur"
   return fieldError || formError || payload?.message || payload?.error || fallback;
 };
 
-export const buildApiHeaders = (user: { accessToken?: string } | null | undefined, extra: Record<string, string> = {}) => ({
+export const buildApiHeaders = (
+  user: { accessToken?: string; organizationId?: string | number; organizationSlug?: string } | null | undefined,
+  extra: Record<string, string> = {},
+) => ({
   "Content-Type": "application/json",
   "x-request-id": crypto.randomUUID(),
   ...((user?.accessToken ?? latestAccessToken) ? { Authorization: `Bearer ${user?.accessToken ?? latestAccessToken}` } : {}),
+  ...(user?.organizationId ? { "x-organization-id": String(user.organizationId) } : {}),
+  ...(user?.organizationSlug && !user?.organizationId ? { "x-organization-slug": user.organizationSlug } : {}),
   ...extra,
 });
 

@@ -27,8 +27,9 @@ export class LotRepository {
     });
   }
 
-  static listLots() {
+  static listLots(organizationId: number) {
     return this.client.lot.findMany({
+      where: { organizationId },
       orderBy: { id: 'asc' },
       include: {
         currentContainer: {
@@ -70,9 +71,9 @@ export class LotRepository {
     return tx.user.findUnique({ where: { email } });
   }
 
-  static findContainerWithLots(tx: LotTransaction, containerId: number) {
-    return tx.container.findUnique({
-      where: { id: containerId },
+  static findContainerWithLots(tx: LotTransaction, containerId: number, organizationId: number) {
+    return tx.container.findFirst({
+      where: { id: containerId, organizationId },
       include: containerInclude,
     });
   }
@@ -91,13 +92,14 @@ export class LotRepository {
       status: string;
       qualiteLot?: string | null;
       notes?: string | null;
+      organizationId: number;
     },
   ) {
     return tx.lot.create({ data });
   }
 
-  static updateContainerStatus(tx: LotTransaction, containerId: number, status: string) {
-    return tx.container.update({ where: { id: containerId }, data: { status } });
+  static updateContainerStatus(tx: LotTransaction, containerId: number, organizationId: number, status: string) {
+    return tx.container.updateMany({ where: { id: containerId, organizationId }, data: { status } });
   }
 
   static createLotEvent(
@@ -108,6 +110,7 @@ export class LotRepository {
       comment: string;
       eventDatetime?: Date;
       metadata?: Prisma.InputJsonValue;
+      organizationId: number;
     },
   ) {
     return tx.lotEvent.create({ data });
@@ -127,15 +130,25 @@ export class LotRepository {
     return tx.lotEventContainer.create({ data });
   }
 
-  static createAuditLog(tx: LotTransaction, data: { action: string; details: string; userId: string }) {
+  static createAuditLog(tx: LotTransaction, data: { action: string; details: string; userId: string; organizationId: number }) {
     return tx.auditLog.create({ data });
   }
 
-  static findLotById(tx: LotTransaction, lotId: number) {
-    return tx.lot.findUnique({ where: { id: lotId } });
+  static findLotById(tx: LotTransaction, lotId: number, organizationId: number) {
+    return tx.lot.findFirst({ where: { id: lotId, organizationId } });
   }
 
-  static updateLotVolume(tx: LotTransaction, lotId: number, currentVolume: Prisma.Decimal) {
-    return tx.lot.update({ where: { id: lotId }, data: { currentVolume } });
+  static async updateLotVolume(
+    tx: LotTransaction,
+    lotId: number,
+    organizationId: number,
+    currentVolume: Prisma.Decimal,
+  ) {
+    const updateResult = await tx.lot.updateMany({ where: { id: lotId, organizationId }, data: { currentVolume } });
+    if (updateResult.count !== 1) {
+      return null;
+    }
+
+    return tx.lot.findFirst({ where: { id: lotId, organizationId } });
   }
 }

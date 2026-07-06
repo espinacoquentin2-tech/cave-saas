@@ -126,7 +126,7 @@ export async function GET(request: Request) {
       limit: searchParams.get('limit') ?? '50',
     });
 
-    const result = await StockMovementModuleService.list(query);
+    const result = await StockMovementModuleService.list(query, actor);
 
     return NextResponse.json(result.items, {
       status: 200,

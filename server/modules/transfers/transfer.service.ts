@@ -56,7 +56,7 @@ export class TransferService {
         throw new BusinessLogicError('Utilisateur opérateur introuvable.', 401);
       }
 
-      const sourceLot = await TransferRepository.findSourceLot(tx, input.lotId);
+      const sourceLot = await TransferRepository.findSourceLot(tx, input.lotId, actor.organizationId);
       if (!sourceLot || !sourceLot.currentContainer) {
         throw new BusinessLogicError('Lot source ou cuve source introuvable.', 404);
       }
@@ -70,7 +70,7 @@ export class TransferService {
           ...(input.bourbesDestId ? [input.bourbesDestId] : []),
         ]),
       ];
-      const targetContainers = await TransferRepository.findTargetContainers(tx, targetContainerIds);
+      const targetContainers = await TransferRepository.findTargetContainers(tx, targetContainerIds, actor.organizationId);
       const targetContainersById = new Map(targetContainers.map((container) => [container.id, container]));
 
       if (targetContainers.length !== targetContainerIds.length) {
@@ -118,6 +118,7 @@ export class TransferService {
       const sourceDecrement = await TransferRepository.decrementSourceLot(
         tx,
         sourceLot.id,
+        actor.organizationId,
         toDecimal(input.volume),
       );
 
@@ -166,6 +167,7 @@ export class TransferService {
       const event = await TransferRepository.createTransferEvent(tx, {
         operatorUserId: operator.id,
         eventDatetime: new Date(input.date),
+        organizationId: actor.organizationId,
         comment: [
           `Transfert de ${input.volume} hL depuis ${sourceLot.currentContainer.displayName}.`,
           note,
@@ -188,8 +190,8 @@ export class TransferService {
       });
 
       if (remainingVolume <= 0) {
-        await TransferRepository.updateSourceLotStatus(tx, sourceLot.id, 'ARCHIVE', null);
-        await TransferRepository.updateContainerStatus(tx, sourceLot.currentContainer.id, 'NETTOYAGE');
+        await TransferRepository.updateSourceLotStatus(tx, sourceLot.id, actor.organizationId, 'ARCHIVE', null);
+        await TransferRepository.updateContainerStatus(tx, sourceLot.currentContainer.id, actor.organizationId, 'NETTOYAGE');
       }
 
       if (remainderStatus && input.bourbesDestId && remainderVolume > 0) {
@@ -202,12 +204,13 @@ export class TransferService {
           currentVolume: toDecimal(remainderVolume),
           currentContainerId: input.bourbesDestId!,
           status: remainderStatus,
+          organizationId: actor.organizationId,
           notes: `Reliquat ${remainderStatus.toLowerCase()} généré par transfert #${event.id}.`,
         });
 
         createdLotIds.push(remainderLot.id);
 
-        await TransferRepository.updateContainerStatus(tx, input.bourbesDestId!, 'PLEIN');
+        await TransferRepository.updateContainerStatus(tx, input.bourbesDestId!, actor.organizationId, 'PLEIN');
         await TransferRepository.createLotEventLink(tx, {
           eventId: event.id,
           lotId: remainderLot.id,
@@ -233,6 +236,7 @@ export class TransferService {
           currentVolume: toDecimal(destination.volume),
           currentContainerId: destination.toId,
           status: targetStatus,
+          organizationId: actor.organizationId,
           qualiteLot: input.qualiteLot?.trim() || null,
           notes: input.notes?.trim() || `Lot issu du transfert #${event.id}.`,
         });
@@ -240,7 +244,7 @@ export class TransferService {
         createdLotIds.push(targetLot.id);
         transferDestinations[index].lotId = targetLot.id;
 
-        await TransferRepository.updateContainerStatus(tx, destination.toId, 'PLEIN');
+        await TransferRepository.updateContainerStatus(tx, destination.toId, actor.organizationId, 'PLEIN');
         await TransferRepository.createLotEventLink(tx, {
           eventId: event.id,
           lotId: targetLot.id,
@@ -261,6 +265,7 @@ export class TransferService {
         action: 'TRANSFER_EXECUTED',
         details: `Transfert ${event.id} exécuté par ${actor.email} sur le lot ${sourceLot.businessCode}.`,
         userId: actor.email,
+        organizationId: actor.organizationId,
       });
 
       return {

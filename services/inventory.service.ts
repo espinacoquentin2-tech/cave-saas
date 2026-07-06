@@ -5,7 +5,7 @@ import { prisma } from '@/server/shared/prisma';
 
 export class InventoryService {
   
-  static async createProduct(data: CreateProductPayload, userEmail: string) {
+  static async createProduct(data: CreateProductPayload, userEmail: string, organizationId: number) {
     return await prisma.$transaction(async (tx) => {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
       if (existingTx) throw new Error("ALREADY_APPLIED: Produit déjà créé.");
@@ -17,7 +17,8 @@ export class InventoryService {
           subCategory: data.subCategory,
           unit: data.unit,
           minStock: data.minStock,
-          currentStock: data.currentStock
+          currentStock: data.currentStock,
+          organizationId,
         }
       });
 
@@ -26,7 +27,7 @@ export class InventoryService {
       // Si on initialise avec du stock, on crée un mouvement initial
       if (data.currentStock > 0) {
         await tx.stockMovement.create({
-          data: { productId: product.id, type: "IN", quantity: data.currentStock, note: "Stock initial", operator: userEmail }
+          data: { productId: product.id, organizationId, type: "IN", quantity: data.currentStock, note: "Stock initial", operator: userEmail }
         });
       }
 
@@ -34,12 +35,12 @@ export class InventoryService {
     });
   }
 
-  static async adjustStock(data: StockMovementPayload, userEmail: string) {
+  static async adjustStock(data: StockMovementPayload, userEmail: string, organizationId: number) {
     return await prisma.$transaction(async (tx) => {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
       if (existingTx) throw new Error("ALREADY_APPLIED: Mouvement déjà enregistré.");
 
-      const product = await tx.product.findUnique({ where: { id: data.productId } });
+      const product = await tx.product.findFirst({ where: { id: data.productId, organizationId } });
       if (!product) throw new Error("Produit introuvable.");
 
       let newStock = Number(product.currentStock);
@@ -61,6 +62,7 @@ export class InventoryService {
       const movement = await tx.stockMovement.create({
         data: {
           productId: product.id,
+          organizationId,
           type: data.type,
           quantity: data.quantity,
           note: data.note,

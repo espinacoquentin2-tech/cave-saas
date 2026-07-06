@@ -4,7 +4,7 @@ import { prisma } from '@/server/shared/prisma';
 
 
 export class MaturationService {
-  static async saveRecord(data: SaveMaturationPayload, userEmail: string) {
+  static async saveRecord(data: SaveMaturationPayload, userEmail: string, organizationId: number) {
     return await prisma.$transaction(async (tx) => {
       // 1. IDEMPOTENCE
       const existingTx = await tx.idempotencyRecord.findUnique({
@@ -22,7 +22,7 @@ export class MaturationService {
       }
 
       const existing = data.id
-        ? await tx.maturation.findUnique({ where: { id: data.id } })
+        ? await tx.maturation.findFirst({ where: { id: data.id, organizationId } })
         : null;
 
       if (data.id && !existing) {
@@ -32,8 +32,8 @@ export class MaturationService {
       let linkedParcelle: { id: number; nom: string } | null = null;
 
       if (data.parcelleId) {
-        linkedParcelle = await tx.parcelle.findUnique({
-          where: { id: data.parcelleId },
+        linkedParcelle = await tx.parcelle.findFirst({
+          where: { id: data.parcelleId, organizationId },
           select: { id: true, nom: true }
         });
 
@@ -44,7 +44,7 @@ export class MaturationService {
         linkedParcelle = { id: existing.parcelleId, nom: existing.parcelle };
       } else {
         const matches = await tx.parcelle.findMany({
-          where: { nom: data.parcelle },
+          where: { nom: data.parcelle, organizationId },
           select: { id: true, nom: true },
           take: 2
         });
@@ -55,6 +55,7 @@ export class MaturationService {
       }
 
       const recordData = {
+        organizationId,
         date: new Date(data.date),
         parcelle: linkedParcelle?.nom ?? data.parcelle,
         parcelleId: linkedParcelle?.id ?? null,
@@ -76,10 +77,14 @@ export class MaturationService {
       // 3. UPSERT (Mise à jour ou Création)
       if (data.id) {
         // Mise à jour
-        record = await tx.maturation.update({
-          where: { id: data.id },
+        const updateResult = await tx.maturation.updateMany({
+          where: { id: data.id, organizationId },
           data: recordData
         });
+        if (updateResult.count !== 1) {
+          throw new Error("Le relevé à modifier n'existe plus.");
+        }
+        record = await tx.maturation.findFirstOrThrow({ where: { id: data.id, organizationId } });
       } else {
         // Création
         record = await tx.maturation.create({
@@ -96,7 +101,8 @@ export class MaturationService {
         data: { 
           action: "MATURATION_SAVE", 
           details: `${data.id ? 'Mise à jour' : 'Création'} relevé ${recordData.parcelle} (${data.date})`, 
-          userId: userEmail 
+          userId: userEmail,
+          organizationId,
         }
       });
 

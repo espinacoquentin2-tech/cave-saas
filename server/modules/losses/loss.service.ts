@@ -30,7 +30,7 @@ export class LossModuleService {
       const isDistillerie = input.entityType === 'BULK' && input.note.toUpperCase().includes('DISTILLERIE');
 
       if (input.entityType === 'BULK') {
-        const lot = await LossRepository.findLot(tx, input.entityId);
+        const lot = await LossRepository.findLot(tx, input.entityId, actor.organizationId);
         if (!lot) {
           throw new BusinessLogicError('Lot vrac introuvable.', 404);
         }
@@ -42,7 +42,12 @@ export class LossModuleService {
           );
         }
 
-        const decrementResult = await LossRepository.decrementLot(tx, lot.id, toDecimal(input.amount));
+        const decrementResult = await LossRepository.decrementLot(
+          tx,
+          lot.id,
+          actor.organizationId,
+          toDecimal(input.amount),
+        );
         if (decrementResult.count !== 1) {
           throw new BusinessLogicError(
             'Le volume du lot a changé pendant l\'opération. Rechargez les données puis réessayez.',
@@ -52,9 +57,9 @@ export class LossModuleService {
 
         const remainingQuantity = Number((toNumber(lot.currentVolume) - input.amount).toFixed(3));
         if (remainingQuantity <= 0) {
-          await LossRepository.updateLotStatus(tx, lot.id, 'ARCHIVE');
+          await LossRepository.updateLotStatus(tx, lot.id, actor.organizationId, 'ARCHIVE');
           if (lot.currentContainerId) {
-            await LossRepository.updateContainerStatus(tx, lot.currentContainerId, 'NETTOYAGE');
+            await LossRepository.updateContainerStatus(tx, lot.currentContainerId, actor.organizationId, 'NETTOYAGE');
           }
         }
 
@@ -63,6 +68,7 @@ export class LossModuleService {
           operatorUserId: operator.id,
           eventDatetime,
           comment: input.note,
+          organizationId: actor.organizationId,
         });
 
         await LossRepository.createLotEventLink(tx, {
@@ -77,6 +83,7 @@ export class LossModuleService {
           action: isDistillerie ? 'DISTILLERY_DECLARATION' : 'LOSS_DECLARATION',
           details: `${input.amount} hL déclarés sur le lot ${lot.businessCode} par ${actor.email}.`,
           userId: actor.email,
+          organizationId: actor.organizationId,
         });
 
         return {
@@ -86,7 +93,7 @@ export class LossModuleService {
         };
       }
 
-      const bottleLot = await LossRepository.findBottleLot(tx, input.entityId);
+      const bottleLot = await LossRepository.findBottleLot(tx, input.entityId, actor.organizationId);
       if (!bottleLot) {
         throw new BusinessLogicError('Lot de bouteilles introuvable.', 404);
       }
@@ -98,7 +105,12 @@ export class LossModuleService {
         );
       }
 
-      const decrementResult = await LossRepository.decrementBottleLot(tx, bottleLot.id, input.amount);
+      const decrementResult = await LossRepository.decrementBottleLot(
+        tx,
+        bottleLot.id,
+        actor.organizationId,
+        input.amount,
+      );
       if (decrementResult.count !== 1) {
         throw new BusinessLogicError(
           'Le stock bouteilles a changé pendant l\'opération. Rechargez les données puis réessayez.',
@@ -108,7 +120,7 @@ export class LossModuleService {
 
       const remainingQuantity = bottleLot.currentBottleCount - input.amount;
       if (remainingQuantity <= 0) {
-        await LossRepository.updateBottleLotStatus(tx, bottleLot.id, 'ARCHIVE');
+        await LossRepository.updateBottleLotStatus(tx, bottleLot.id, actor.organizationId, 'ARCHIVE');
       }
 
       const event = await LossRepository.createBottleEvent(tx, {
@@ -116,6 +128,7 @@ export class LossModuleService {
         operatorUserId: operator.id,
         eventDatetime,
         comment: input.note,
+        organizationId: actor.organizationId,
       });
 
       await LossRepository.createBottleEventLink(tx, {
@@ -130,6 +143,7 @@ export class LossModuleService {
         action: 'BOTTLE_LOSS_DECLARATION',
         details: `${input.amount} bouteilles déclarées perdues sur le lot ${bottleLot.businessCode} par ${actor.email}.`,
         userId: actor.email,
+        organizationId: actor.organizationId,
       });
 
       return {

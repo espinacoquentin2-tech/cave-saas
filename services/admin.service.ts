@@ -71,7 +71,7 @@ const isVolumeSource = (source: any): source is WorkOrderVolumeSource =>
 export class AdminService {
   
   // --- GESTION DES ORDRES DE TRAVAIL ---
-  static async createWorkOrder(data: CreateWorkOrderPayload, userEmail: string) {
+  static async createWorkOrder(data: CreateWorkOrderPayload, userEmail: string, organizationId: number) {
     return await prisma.$transaction(async (tx) => {
       // 1. IDEMPOTENCE
       const existingTx = await tx.idempotencyRecord.findUnique({
@@ -92,7 +92,7 @@ export class AdminService {
           continue;
         }
 
-        const lot = await tx.lot.findUnique({ where: { id: source.lotId } });
+        const lot = await tx.lot.findFirst({ where: { id: source.lotId, organizationId } });
         if (!lot) throw new Error(`Lot source ID ${source.lotId} introuvable.`);
         if (Number(lot.currentVolume) < source.volume) {
           throw new Error(`Volume insuffisant dans le lot ${lot.businessCode}. Requis: ${source.volume}, Dispo: ${lot.currentVolume}`);
@@ -126,7 +126,7 @@ export class AdminService {
 
       // Vérifier la cuve de destination si applicable
       if (data.targetContainerId) {
-        const targetContainer = await tx.container.findUnique({ where: { id: data.targetContainerId } });
+        const targetContainer = await tx.container.findFirst({ where: { id: data.targetContainerId, organizationId } });
         if (!targetContainer) throw new Error("Cuve de destination introuvable.");
         
         const totalIncomingVolume = volumeSources.reduce((sum, s) => sum + s.volume, 0);
@@ -134,6 +134,11 @@ export class AdminService {
         if (Number(targetContainer.capacityValue) < totalIncomingVolume) {
            throw new Error(`La cuve de destination est trop petite. Capacité: ${targetContainer.capacityValue}hL, Volume prévu: ${totalIncomingVolume}hL`);
         }
+      }
+
+      if (data.targetLotId) {
+        const targetLot = await tx.lot.findFirst({ where: { id: data.targetLotId, organizationId } });
+        if (!targetLot) throw new Error("Lot cible introuvable.");
       }
 
       // 3. PERSISTANCE (À adapter selon votre modèle Prisma réel pour les WorkOrders)
@@ -150,6 +155,7 @@ export class AdminService {
       const workOrder = await tx.workOrder.create({
         data: {
           publicId: `WO-${randomUUID()}`,
+          organizationId,
           recette: data.recette,
           targetContainerId: data.targetContainerId ?? null,
           targetLotId: data.targetLotId ?? null,
@@ -165,7 +171,8 @@ export class AdminService {
         data: { 
           action: `WO_PLANIFIED_${data.recette}`, 
           details: `Planifié: ${data.recette} - ${workOrder.publicId} - Vol total: ${totalVolume}hL - ${displayAction}`,
-          userId: userEmail 
+          userId: userEmail,
+          organizationId,
         }
       });
 
@@ -177,8 +184,9 @@ export class AdminService {
     });
   }
 
-  static async listWorkOrders() {
+  static async listWorkOrders(organizationId: number) {
     const workOrders = await prisma.workOrder.findMany({
+      where: { organizationId },
       orderBy: { createdAt: 'desc' },
       take: 100,
     });
@@ -186,9 +194,9 @@ export class AdminService {
     return workOrders.map(toWorkOrderDto);
   }
 
-  static async completeWorkOrder(publicId: string, evidence: unknown, userEmail: string) {
+  static async completeWorkOrder(publicId: string, evidence: unknown, userEmail: string, organizationId: number) {
     return await prisma.$transaction(async (tx) => {
-      const workOrder = await tx.workOrder.findUnique({ where: { publicId } });
+      const workOrder = await tx.workOrder.findFirst({ where: { publicId, organizationId } });
       if (!workOrder) {
         throw new Error('Ordre de travail introuvable.');
       }
@@ -201,8 +209,8 @@ export class AdminService {
         throw new Error('WORK_ORDER_CANCELLED: Un ordre de travail annulé ne peut pas être exécuté.');
       }
 
-      const updated = await tx.workOrder.update({
-        where: { publicId },
+      const updateResult = await tx.workOrder.updateMany({
+        where: { id: workOrder.id, organizationId },
         data: {
           status: 'DONE',
           operator: userEmail,
@@ -210,12 +218,17 @@ export class AdminService {
           executedAt: new Date(),
         },
       });
+      if (updateResult.count !== 1) {
+        throw new Error('Ordre de travail introuvable.');
+      }
+      const updated = await tx.workOrder.findFirstOrThrow({ where: { id: workOrder.id, organizationId } });
 
       await tx.auditLog.create({
         data: {
           action: `WO_EXECUTED_${updated.recette}`,
           details: `Exécuté: ${updated.recette} - ${updated.publicId}`,
           userId: userEmail,
+          organizationId,
         },
       });
 
@@ -223,9 +236,9 @@ export class AdminService {
     });
   }
 
-  static async cancelWorkOrder(publicId: string, reason: string, userEmail: string) {
+  static async cancelWorkOrder(publicId: string, reason: string, userEmail: string, organizationId: number) {
     return prisma.$transaction(async (tx) => {
-      const workOrder = await WorkOrderRepository.findByPublicId(tx, publicId);
+      const workOrder = await WorkOrderRepository.findByPublicId(tx, publicId, organizationId);
 
       if (!workOrder) {
         throw new Error('Ordre de travail introuvable.');
@@ -243,7 +256,7 @@ export class AdminService {
         throw new Error(`WORK_ORDER_NOT_PENDING: Un ordre au statut ${workOrder.status} ne peut pas être annulé.`);
       }
 
-      const updated = await WorkOrderRepository.cancel(tx, publicId, {
+      const updated = await WorkOrderRepository.cancel(tx, workOrder.id, {
         cancelledAt: new Date(),
         cancelledBy: userEmail,
         cancelReason: reason,
@@ -253,6 +266,7 @@ export class AdminService {
         action: `WO_CANCELLED_${updated.recette}`,
         details: `Annulé: ${updated.recette} - ${updated.publicId} - Motif: ${reason}`,
         userId: userEmail,
+        organizationId,
       });
 
       return toWorkOrderDto(updated);
@@ -260,7 +274,7 @@ export class AdminService {
   }
 
   // --- GESTION DES UTILISATEURS ---
-  static async upsertUser(data: UpsertUserInput, userEmail: string) {
+  static async upsertUser(data: UpsertUserInput, userEmail: string, organizationId: number) {
     // Vérification sommaire des droits (devrait idéalement être faite dans le contrôleur via la session)
     const currentUser = await prisma.user.findUnique({ where: { email: userEmail } });
     const currentUserRoleKey = currentUser
@@ -291,6 +305,23 @@ export class AdminService {
         data: persistedUser
       });
     }
+    await prisma.organizationMember.upsert({
+      where: {
+        organizationId_userId: {
+          organizationId,
+          userId: user.id,
+        },
+      },
+      create: {
+        organizationId,
+        userId: user.id,
+        roleKey: data.roleKey,
+      },
+      update: {
+        roleKey: data.roleKey,
+      },
+    });
+
     return user;
   }
 }

@@ -140,6 +140,17 @@ export async function GET(request: Request) {
     assertRole(actor, READ_ROLES);
 
     const users = await prisma.user.findMany({
+      where: {
+        memberships: {
+          some: { organizationId: actor.organizationId },
+        },
+      },
+      include: {
+        memberships: {
+          where: { organizationId: actor.organizationId },
+          select: { roleKey: true },
+        },
+      },
       orderBy: { name: 'asc' },
     });
 
@@ -151,7 +162,17 @@ export async function GET(request: Request) {
       details: { count: users.length },
     });
 
-    return NextResponse.json(users, { status: 200, headers: { 'x-request-id': requestId } });
+    return NextResponse.json(
+      users.map((user) => ({
+        ...user,
+        roleKey: user.memberships[0]?.roleKey ?? user.roleKey,
+        organizationId: actor.organizationId,
+        organizationSlug: actor.organizationSlug,
+        organizationName: actor.organizationName,
+        memberships: undefined,
+      })),
+      { status: 200, headers: { 'x-request-id': requestId } },
+    );
   } catch (error) {
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({

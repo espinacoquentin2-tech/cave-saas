@@ -27,7 +27,7 @@ export class StockMovementModuleService {
         throw new BusinessLogicError('Utilisateur opérateur introuvable.', 401);
       }
 
-      const product = await StockMovementRepository.findProduct(tx, input.productId);
+      const product = await StockMovementRepository.findProduct(tx, input.productId, actor.organizationId);
       if (!product) {
         throw new BusinessLogicError('Produit introuvable.', 404);
       }
@@ -36,8 +36,11 @@ export class StockMovementModuleService {
       let newStock: number;
 
       if (input.type === 'IN') {
-        const updatedProduct = await StockMovementRepository.incrementProductStock(tx, product.id, quantity);
-        newStock = Number(updatedProduct.currentStock);
+        const incrementResult = await StockMovementRepository.incrementProductStock(tx, product.id, actor.organizationId, quantity);
+        if (incrementResult.count !== 1) {
+          throw new BusinessLogicError('Produit introuvable.', 404);
+        }
+        newStock = Number(product.currentStock) + input.quantity;
       } else {
         if (Number(product.currentStock) < input.quantity) {
           throw new BusinessLogicError(
@@ -46,7 +49,7 @@ export class StockMovementModuleService {
           );
         }
 
-        const decrementResult = await StockMovementRepository.decrementProductStock(tx, product.id, quantity);
+        const decrementResult = await StockMovementRepository.decrementProductStock(tx, product.id, actor.organizationId, quantity);
         if (decrementResult.count !== 1) {
           throw new BusinessLogicError(
             'Le stock a changé pendant l\'opération. Rechargez les données puis réessayez.',
@@ -59,6 +62,7 @@ export class StockMovementModuleService {
 
       const movement = await StockMovementRepository.createMovement(tx, {
         productId: product.id,
+        organizationId: actor.organizationId,
         type: input.type,
         quantity,
         note: input.note ?? null,
@@ -70,6 +74,7 @@ export class StockMovementModuleService {
         action: 'STOCK_MOVEMENT_EXECUTED',
         details: `Mouvement ${input.type} de ${input.quantity} ${product.unit} sur ${product.name} par ${actor.email}.`,
         userId: actor.email,
+        organizationId: actor.organizationId,
       });
 
       return {
@@ -79,10 +84,10 @@ export class StockMovementModuleService {
     });
   }
 
-  static async list(query: ListStockMovementsQuery) {
+  static async list(query: ListStockMovementsQuery, actor: RequestActor) {
     const [items, total] = await Promise.all([
-      StockMovementRepository.listMovements(query.page, query.limit),
-      StockMovementRepository.countMovements(),
+      StockMovementRepository.listMovements(query.page, query.limit, actor.organizationId),
+      StockMovementRepository.countMovements(actor.organizationId),
     ]);
 
     return {

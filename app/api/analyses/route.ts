@@ -40,7 +40,7 @@ export async function GET(request: Request) {
     const { actor, records } = await withTransientPrismaRetry(async () => {
       const actor = await resolveAuthenticatedActor(request);
       assertRole(actor, READ_ROLES);
-      const records = await AnalysesModuleService.list();
+      const records = await AnalysesModuleService.list(actor);
 
       return { actor, records };
     });

@@ -14,11 +14,13 @@ export class VendangesService {
   // =======================================================
   // 1. CALCULS DES PRÉVISIONS DE VENDANGES (OAD)
   // =======================================================
-  static async calculateProjections(data: ProjectionsRequestPayload) {
+  static async calculateProjections(data: ProjectionsRequestPayload, organizationId?: number) {
     const maturations = await prisma.maturation.findMany({
+      where: organizationId ? { organizationId } : undefined,
       orderBy: { date: 'asc' }
     });
     const parcelles = await prisma.parcelle.findMany({
+      where: organizationId ? { organizationId } : undefined,
       select: {
         id: true,
         nom: true,
@@ -133,7 +135,7 @@ export class VendangesService {
   // =======================================================
   // 2. RÉCEPTION DES RAISINS (QUAI)
   // =======================================================
-  static async createApport(data: z.infer<typeof CreateApportSchema>) {
+  static async createApport(data: z.infer<typeof CreateApportSchema>, organizationId: number) {
     return await prisma.$transaction(async (tx) => {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
       if (existingTx) throw new Error("ALREADY_APPLIED: Cet apport a déjà été enregistré.");
@@ -144,7 +146,8 @@ export class VendangesService {
           cru: data.parcelle, 
           cepage: data.cepage,
           weight: data.poids, 
-          status: data.status
+          status: data.status,
+          organizationId,
         }
       });
 
@@ -156,13 +159,13 @@ export class VendangesService {
   // =======================================================
   // 3. GESTION DES MACHINES (PRESSOIRS)
   // =======================================================
-  static async createPressoir(data: z.infer<typeof CreatePressoirSchema>) {
+  static async createPressoir(data: z.infer<typeof CreatePressoirSchema>, organizationId: number) {
     return await prisma.$transaction(async (tx) => {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
       if (existingTx) throw new Error("ALREADY_APPLIED: Pressoir déjà créé.");
 
       const p = await tx.pressoir.create({ 
-        data: { nom: data.nom, type: data.type, marque: data.marque, capacite: data.capacite } 
+        data: { nom: data.nom, type: data.type, marque: data.marque, capacite: data.capacite, organizationId }
       });
 
       await tx.idempotencyRecord.create({ data: { key: data.idempotencyKey, action: "CREATE_PRESSOIR" } });
@@ -170,13 +173,13 @@ export class VendangesService {
     });
   }
 
-  static async updatePressoir(data: z.infer<typeof UpdatePressoirSchema>) {
+  static async updatePressoir(data: z.infer<typeof UpdatePressoirSchema>, organizationId: number) {
     return await prisma.$transaction(async (tx) => {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
       if (existingTx) throw new Error("ALREADY_APPLIED: Pressoir déjà mis à jour.");
 
-      const p = await tx.pressoir.update({
-        where: { id: data.id },
+      const updateResult = await tx.pressoir.updateMany({
+        where: { id: data.id, organizationId },
         data: { 
           status: data.status, 
           loadKg: data.loadKg, 
@@ -184,6 +187,12 @@ export class VendangesService {
           cepage: data.cepage
         }
       });
+
+      if (updateResult.count !== 1) {
+        throw new Error('Pressoir introuvable.');
+      }
+
+      const p = await tx.pressoir.findFirstOrThrow({ where: { id: data.id, organizationId } });
 
       await tx.idempotencyRecord.create({ data: { key: data.idempotencyKey, action: "UPDATE_PRESSOIR" } });
       return p;

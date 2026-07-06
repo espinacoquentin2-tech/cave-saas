@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
-    const records = await DegustationModuleService.list();
+    const records = await DegustationModuleService.list(actor);
 
     logger.info({
       action: 'degustations.get.success',
@@ -206,4 +206,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

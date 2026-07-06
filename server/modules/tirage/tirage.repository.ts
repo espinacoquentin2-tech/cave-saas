@@ -53,17 +53,18 @@ export class TirageRepository {
     return tx.user.findUnique({ where: { email } });
   }
 
-  static findSourceLot(tx: TirageTransaction, lotId: number) {
-    return tx.lot.findUnique({
-      where: { id: lotId },
+  static findSourceLot(tx: TirageTransaction, lotId: number, organizationId: number) {
+    return tx.lot.findFirst({
+      where: { id: lotId, organizationId },
       include: sourceLotInclude,
     });
   }
 
-  static decrementSourceLot(tx: TirageTransaction, lotId: number, volume: Prisma.Decimal) {
+  static decrementSourceLot(tx: TirageTransaction, lotId: number, organizationId: number, volume: Prisma.Decimal) {
     return tx.lot.updateMany({
       where: {
         id: lotId,
+        organizationId,
         currentVolume: { gte: volume },
       },
       data: {
@@ -72,9 +73,9 @@ export class TirageRepository {
     });
   }
 
-  static updateSourceLotStatus(tx: TirageTransaction, lotId: number, status: string) {
-    return tx.lot.update({
-      where: { id: lotId },
+  static updateSourceLotStatus(tx: TirageTransaction, lotId: number, organizationId: number, status: string) {
+    return tx.lot.updateMany({
+      where: { id: lotId, organizationId },
       data: { status },
     });
   }
@@ -82,20 +83,22 @@ export class TirageRepository {
   static updateSourceLotForTirage(
     tx: TirageTransaction,
     lotId: number,
+    organizationId: number,
     data: {
       status?: string;
       currentContainerId?: number | null;
     },
   ) {
-    return tx.lot.update({
-      where: { id: lotId },
+    return tx.lot.updateMany({
+      where: { id: lotId, organizationId },
       data,
     });
   }
 
-  static countBottleLotsByTypeAndYear(tx: TirageTransaction, type: string, year: number) {
+  static countBottleLotsByTypeAndYear(tx: TirageTransaction, type: string, year: number, organizationId: number) {
     return tx.bottleLot.count({
       where: {
+        organizationId,
         type,
         businessCode: {
           startsWith: `${type}-${year}-`,
@@ -119,6 +122,7 @@ export class TirageRepository {
       comment: string;
       eventDatetime: Date;
       metadata?: Prisma.InputJsonValue;
+      organizationId: number;
     },
   ) {
     return tx.lotEvent.create({ data });
@@ -160,6 +164,7 @@ export class TirageRepository {
       comment: string;
       eventDatetime: Date;
       metadata?: Prisma.InputJsonValue;
+      organizationId: number;
     },
   ) {
     return tx.bottleEvent.create({ data });
@@ -183,15 +188,17 @@ export class TirageRepository {
       action: string;
       details: string;
       userId: string;
+      organizationId: number;
     },
   ) {
     return tx.auditLog.create({ data });
   }
 
-  static countActiveLotsInContainer(tx: TirageTransaction, containerId: number) {
+  static countActiveLotsInContainer(tx: TirageTransaction, containerId: number, organizationId: number) {
     return tx.lot.count({
       where: {
         currentContainerId: containerId,
+        organizationId,
         currentVolume: { gt: 0 },
         status: {
           notIn: ['TIRE', 'ARCHIVE', 'MIS_EN_BOUTEILLE'],
@@ -200,16 +207,17 @@ export class TirageRepository {
     });
   }
 
-  static updateContainerStatus(tx: TirageTransaction, containerId: number, status: string) {
-    return tx.container.update({
-      where: { id: containerId },
+  static updateContainerStatus(tx: TirageTransaction, containerId: number, organizationId: number, status: string) {
+    return tx.container.updateMany({
+      where: { id: containerId, organizationId },
       data: { status },
     });
   }
 
-  static findProductsByIds(tx: TirageTransaction, productIds: number[]) {
+  static findProductsByIds(tx: TirageTransaction, productIds: number[], organizationId: number) {
     return tx.product.findMany({
       where: {
+        organizationId,
         id: {
           in: productIds,
         },
@@ -217,10 +225,11 @@ export class TirageRepository {
     });
   }
 
-  static decrementProductStock(tx: TirageTransaction, productId: number, quantity: Prisma.Decimal) {
+  static decrementProductStock(tx: TirageTransaction, productId: number, organizationId: number, quantity: Prisma.Decimal) {
     return tx.product.updateMany({
       where: {
         id: productId,
+        organizationId,
         currentStock: { gte: quantity },
       },
       data: {
@@ -267,6 +276,7 @@ export class TirageRepository {
       quantity: Prisma.Decimal;
       note: string;
       operator: string;
+      organizationId: number;
     },
   ) {
     return tx.stockMovement.create({ data });

@@ -5,15 +5,16 @@ import { RequestActor } from '@/server/shared/request-context';
 import { prisma } from '@/server/shared/prisma';
 
 export class MaturationModuleService {
-  static async list() {
+  static async list(actor: RequestActor) {
     return prisma.maturation.findMany({
+      where: { organizationId: actor.organizationId },
       orderBy: { date: 'asc' },
     });
   }
 
   static async save(input: SaveMaturationInput, actor: RequestActor) {
     try {
-      return await MaturationService.saveRecord(input, actor.email);
+      return await MaturationService.saveRecord(input, actor.email, actor.organizationId);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erreur serveur';
 

@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
     const payload = LoadPressSchema.parse(await request.json());
-    const result = await PressingService.load(payload);
+    const result = await PressingService.load(payload, actor.organizationId);
 
     logger.info({
       action: 'pressings.load.post.success',

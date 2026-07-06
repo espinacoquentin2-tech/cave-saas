@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
     const payload = confirmDeliverySchema.parse(await request.json());
-    const result = await DeliveryConfirmationService.confirm(payload, actor.email);
+    const result = await DeliveryConfirmationService.confirm(payload, actor.email, actor.organizationId);
 
     logger.info({
       action: 'expeditions.confirm_delivery.success',

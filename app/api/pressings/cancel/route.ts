@@ -20,7 +20,9 @@ export async function POST(request: Request) {
     assertRole(actor, DELETE_ROLES);
     const payload = cancelPressingSchema.parse(await request.json());
 
-    const existing = await prisma.pressing.findUnique({ where: { id: payload.id } });
+    const existing = await prisma.pressing.findFirst({
+      where: { id: payload.id, organizationId: actor.organizationId },
+    });
     if (!existing) {
       return NextResponse.json(
         { error: 'NOT_FOUND', message: 'Apport introuvable.' },
@@ -37,7 +39,7 @@ export async function POST(request: Request) {
 
     const cancelled = await prisma.$transaction(async (tx) => {
       const updated = await tx.pressing.update({
-        where: { id: payload.id },
+        where: { id: existing.id },
         data: { status: 'ANNULE' },
       });
 
@@ -46,6 +48,7 @@ export async function POST(request: Request) {
           action: 'PRESSING_CANCELLED',
           details: `Apport #${payload.id} annulé par ${actor.email}. Raison: ${payload.reason}.`,
           userId: actor.email,
+          organizationId: actor.organizationId,
         },
       });
 

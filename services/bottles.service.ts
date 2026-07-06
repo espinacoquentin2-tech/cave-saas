@@ -64,11 +64,18 @@ const isConcurrentBottleConflict = (error: unknown) => {
   );
 };
 
-const makeLotCode = async (tx: Tx, prefix: 'DEG' | 'HAB', operationDate: Date, idempotencyKey: string) => {
+const makeLotCode = async (
+  tx: Tx,
+  prefix: 'DEG' | 'HAB',
+  operationDate: Date,
+  idempotencyKey: string,
+  organizationId: number,
+) => {
   const year = operationDate.getUTCFullYear();
   const startsWith = `${prefix}-${year}-`;
   const existingCount = await tx.bottleLot.count({
     where: {
+      organizationId,
       technicalCode: {
         startsWith,
       },
@@ -128,12 +135,14 @@ const consumeProduct = async (
   tx: Tx,
   {
     actorEmail,
+    organizationId,
     productId,
     quantity,
     note,
     validate,
   }: {
     actorEmail: string;
+    organizationId: number;
     productId?: number | null;
     quantity: number;
     note: string;
@@ -144,7 +153,7 @@ const consumeProduct = async (
     return null;
   }
 
-  const product = await tx.product.findUnique({ where: { id: productId } });
+  const product = await tx.product.findFirst({ where: { id: productId, organizationId } });
   if (!product) {
     throw new BusinessLogicError(`Produit introuvable (#${productId}).`, 404);
   }
@@ -159,6 +168,7 @@ const consumeProduct = async (
   const decrementResult = await tx.product.updateMany({
     where: {
       id: product.id,
+      organizationId,
       currentStock: {
         gte: new Prisma.Decimal(quantity.toFixed(3)),
       },
@@ -180,6 +190,7 @@ const consumeProduct = async (
   const movement = await tx.stockMovement.create({
     data: {
       productId: product.id,
+      organizationId,
       type: 'OUT',
       quantity: new Prisma.Decimal(quantity.toFixed(3)),
       note,
@@ -210,11 +221,13 @@ const addProductStock = async (
   tx: Tx,
   {
     actorEmail,
+    organizationId,
     productId,
     quantity,
     note,
   }: {
     actorEmail: string;
+    organizationId: number;
     productId: number;
     quantity: number;
     note: string;
@@ -224,13 +237,13 @@ const addProductStock = async (
     return null;
   }
 
-  const product = await tx.product.findUnique({ where: { id: productId } });
+  const product = await tx.product.findFirst({ where: { id: productId, organizationId } });
   if (!product) {
     return null;
   }
 
-  await tx.product.update({
-    where: { id: product.id },
+  await tx.product.updateMany({
+    where: { id: product.id, organizationId },
     data: {
       currentStock: {
         increment: new Prisma.Decimal(quantity.toFixed(3)),
@@ -241,6 +254,7 @@ const addProductStock = async (
   const movement = await tx.stockMovement.create({
     data: {
       productId: product.id,
+      organizationId,
       type: 'IN',
       quantity: new Prisma.Decimal(quantity.toFixed(3)),
       note,
@@ -267,7 +281,7 @@ export class BottlesService {
     return user.id;
   }
 
-  static async updateStatus(data: UpdateBottleStatusInput, userEmail: string) {
+  static async updateStatus(data: UpdateBottleStatusInput, userEmail: string, organizationId: number) {
     return prisma.$transaction(
       async (tx) => {
         const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
@@ -275,7 +289,7 @@ export class BottlesService {
           throw new BusinessLogicError('Cette opération a déjà été traitée.', 409);
         }
 
-        const bottleLot = await tx.bottleLot.findUnique({ where: { id: data.blId } });
+        const bottleLot = await tx.bottleLot.findFirst({ where: { id: data.blId, organizationId } });
         if (!bottleLot) {
           throw new BusinessLogicError('Lot introuvable.', 404);
         }
@@ -289,16 +303,21 @@ export class BottlesService {
         }
 
         const operatorId = await this.getUserId(tx, userEmail);
-        const updated = await tx.bottleLot.update({
-          where: { id: data.blId },
+        const updateResult = await tx.bottleLot.updateMany({
+          where: { id: data.blId, organizationId },
           data: {
             status: data.status,
             locationZone: data.location || bottleLot.locationZone,
           },
         });
+        if (updateResult.count !== 1) {
+          throw new BusinessLogicError('Lot introuvable.', 404);
+        }
+        const updated = await tx.bottleLot.findFirstOrThrow({ where: { id: data.blId, organizationId } });
 
         const event = await tx.bottleEvent.create({
           data: {
+            organizationId,
             eventType: data.status,
             operatorUserId: operatorId,
             comment: data.note,
@@ -326,6 +345,7 @@ export class BottlesService {
             action: 'BOTTLE_STATUS_UPDATED',
             details: `Lot ${bottleLot.businessCode} passé en ${data.status} par ${userEmail}.`,
             userId: userEmail,
+            organizationId,
           },
         });
 
@@ -335,7 +355,7 @@ export class BottlesService {
     );
   }
 
-  static async degorger(data: DegorgerInput, userEmail: string) {
+  static async degorger(data: DegorgerInput, userEmail: string, organizationId: number) {
     try {
       return await prisma.$transaction(
         async (tx) => {
@@ -344,7 +364,7 @@ export class BottlesService {
             throw new BusinessLogicError('Ce dégorgement a déjà été traité.', 409);
           }
 
-          const sourceLot = await tx.bottleLot.findUnique({ where: { id: data.blId } });
+          const sourceLot = await tx.bottleLot.findFirst({ where: { id: data.blId, organizationId } });
           if (!sourceLot) {
             throw new BusinessLogicError('Lot bouteille source introuvable.', 404);
           }
@@ -370,6 +390,7 @@ export class BottlesService {
           const decrementResult = await tx.bottleLot.updateMany({
             where: {
               id: sourceLot.id,
+              organizationId,
               currentBottleCount: {
                 gte: totalSourceDecrease,
               },
@@ -388,16 +409,17 @@ export class BottlesService {
           }
 
           const remainingSourceCount = sourceLot.currentBottleCount - totalSourceDecrease;
-          await tx.bottleLot.update({
-            where: { id: sourceLot.id },
+          await tx.bottleLot.updateMany({
+            where: { id: sourceLot.id, organizationId },
             data: {
               status: remainingSourceCount <= 0 ? 'ARCHIVE' : 'SUR_LATTES',
             },
           });
 
-          const code = await makeLotCode(tx, 'DEG', degorgementDate, data.idempotencyKey);
+          const code = await makeLotCode(tx, 'DEG', degorgementDate, data.idempotencyKey, organizationId);
           const destinationLot = await tx.bottleLot.create({
             data: {
+              organizationId,
               technicalCode: code.technicalCode,
               businessCode: code.businessCode,
               type: 'DEGORGE',
@@ -450,6 +472,7 @@ export class BottlesService {
           ]) {
             const movement = await consumeProduct(tx, {
               actorEmail: userEmail,
+              organizationId,
               productId: stockItem.productId,
               quantity: stockItem.quantity,
               note: stockItem.note,
@@ -462,6 +485,7 @@ export class BottlesService {
 
           const bottleEvent = await tx.bottleEvent.create({
             data: {
+              organizationId,
               eventType: 'DEGORGEMENT',
               operatorUserId: operatorId,
               eventDatetime: degorgementDate,
@@ -520,6 +544,7 @@ export class BottlesService {
               action: 'BOTTLE_DEGORGEMENT_EXECUTED',
               details: `Dégorgement ${destinationLot.businessCode} créé depuis ${sourceLot.businessCode}: ${data.count} btl bonnes, ${data.lossCount} pertes, reste source ${remainingSourceCount} btl.`,
               userId: userEmail,
+              organizationId,
             },
           });
 
@@ -552,7 +577,7 @@ export class BottlesService {
     }
   }
 
-  static async habiller(data: HabillerInput, userEmail: string) {
+  static async habiller(data: HabillerInput, userEmail: string, organizationId: number) {
     try {
       return await prisma.$transaction(
         async (tx) => {
@@ -561,7 +586,7 @@ export class BottlesService {
             throw new BusinessLogicError("Cet habillage a déjà été traité.", 409);
           }
 
-          const sourceLot = await tx.bottleLot.findUnique({ where: { id: data.blId } });
+          const sourceLot = await tx.bottleLot.findFirst({ where: { id: data.blId, organizationId } });
           if (!sourceLot) {
             throw new BusinessLogicError('Lot dégorgé introuvable.', 404);
           }
@@ -586,6 +611,7 @@ export class BottlesService {
           const decrementResult = await tx.bottleLot.updateMany({
             where: {
               id: sourceLot.id,
+              organizationId,
               currentBottleCount: {
                 gte: data.count,
               },
@@ -604,16 +630,17 @@ export class BottlesService {
           }
 
           const remainingSourceCount = sourceLot.currentBottleCount - data.count;
-          await tx.bottleLot.update({
-            where: { id: sourceLot.id },
+          await tx.bottleLot.updateMany({
+            where: { id: sourceLot.id, organizationId },
             data: {
               status: remainingSourceCount <= 0 ? 'ARCHIVE' : 'DEGORGE',
             },
           });
 
-          const code = await makeLotCode(tx, 'HAB', habillageDate, data.idempotencyKey);
+          const code = await makeLotCode(tx, 'HAB', habillageDate, data.idempotencyKey, organizationId);
           const destinationLot = await tx.bottleLot.create({
             data: {
+              organizationId,
               technicalCode: code.technicalCode,
               businessCode: code.businessCode,
               type: 'HABILLE',
@@ -670,6 +697,7 @@ export class BottlesService {
           ]) {
             const movement = await consumeProduct(tx, {
               actorEmail: userEmail,
+              organizationId,
               productId: stockItem.productId,
               quantity: stockItem.quantity,
               note: stockItem.note,
@@ -682,6 +710,7 @@ export class BottlesService {
 
           const bottleEvent = await tx.bottleEvent.create({
             data: {
+              organizationId,
               eventType: 'HABILLAGE',
               operatorUserId: operatorId,
               eventDatetime: habillageDate,
@@ -734,6 +763,7 @@ export class BottlesService {
               action: 'BOTTLE_HABILLAGE_EXECUTED',
               details: `Habillage ${destinationLot.businessCode} créé depuis ${sourceLot.businessCode}: ${data.count} btl, reste source ${remainingSourceCount} btl.`,
               userId: userEmail,
+              organizationId,
             },
           });
 
@@ -764,7 +794,7 @@ export class BottlesService {
     }
   }
 
-  static async expedier(data: ExpedierInput, userEmail: string) {
+  static async expedier(data: ExpedierInput, userEmail: string, organizationId: number) {
     try {
       return await prisma.$transaction(
         async (tx) => {
@@ -773,7 +803,7 @@ export class BottlesService {
             throw new BusinessLogicError('Cette expédition a déjà été traitée.', 409);
           }
 
-          const sourceLot = await tx.bottleLot.findUnique({ where: { id: data.blId } });
+          const sourceLot = await tx.bottleLot.findFirst({ where: { id: data.blId, organizationId } });
           if (!sourceLot) {
             throw new BusinessLogicError("Lot prêt à l'expédition introuvable.", 404);
           }
@@ -800,6 +830,7 @@ export class BottlesService {
           const decrementResult = await tx.bottleLot.updateMany({
             where: {
               id: sourceLot.id,
+              organizationId,
               currentBottleCount: {
                 gte: data.count,
               },
@@ -818,8 +849,8 @@ export class BottlesService {
           }
 
           const remainingSourceCount = sourceLot.currentBottleCount - data.count;
-          await tx.bottleLot.update({
-            where: { id: sourceLot.id },
+          await tx.bottleLot.updateMany({
+            where: { id: sourceLot.id, organizationId },
             data: {
               status: remainingSourceCount <= 0 ? 'EXPEDIE' : 'PRET_EXPEDITION',
             },
@@ -827,6 +858,7 @@ export class BottlesService {
 
           const shipment = await tx.shipment.create({
             data: {
+              organizationId,
               shipmentDate: expeditionDate,
               customerName: data.clientName,
               comment: buildComment(
@@ -845,6 +877,7 @@ export class BottlesService {
 
           const bottleEvent = await tx.bottleEvent.create({
             data: {
+              organizationId,
               eventType: 'EXPEDITION',
               operatorUserId: operatorId,
               eventDatetime: expeditionDate,
@@ -886,6 +919,7 @@ export class BottlesService {
               action: 'BOTTLE_EXPEDITION_EXECUTED',
               details: `Expédition du lot ${sourceLot.businessCode} vers ${data.clientName}: ${data.count} btl, reste ${remainingSourceCount} btl.`,
               userId: userEmail,
+              organizationId,
             },
           });
 
@@ -914,11 +948,11 @@ export class BottlesService {
     }
   }
 
-  static async archive(data: ArchiveBottleLotInput, userEmail: string) {
+  static async archive(data: ArchiveBottleLotInput, userEmail: string, organizationId: number) {
     return prisma.$transaction(
       async (tx) => {
-        const bottleLot = await tx.bottleLot.findUnique({
-          where: { id: data.bottleLotId },
+        const bottleLot = await tx.bottleLot.findFirst({
+          where: { id: data.bottleLotId, organizationId },
           include: {
             shipmentLines: true,
           },
@@ -932,11 +966,12 @@ export class BottlesService {
         }
 
         const [childrenCount, activeExpeditionCount] = await Promise.all([
-          tx.bottleLot.count({ where: { sourceBottleLotId: bottleLot.id } }),
+          tx.bottleLot.count({ where: { sourceBottleLotId: bottleLot.id, organizationId } }),
           tx.bottleEventLink.count({
             where: {
               bottleLotId: bottleLot.id,
               event: {
+                organizationId,
                 eventType: 'EXPEDITION',
                 cancelledAt: null,
               },
@@ -954,8 +989,8 @@ export class BottlesService {
 
         const operatorId = await this.getUserId(tx, userEmail);
         const archivedAt = new Date();
-        const updated = await tx.bottleLot.update({
-          where: { id: bottleLot.id },
+        await tx.bottleLot.updateMany({
+          where: { id: bottleLot.id, organizationId },
           data: {
             status: 'ARCHIVE',
             archivedAt,
@@ -963,9 +998,11 @@ export class BottlesService {
             archiveReason: data.reason,
           },
         });
+        const updated = await tx.bottleLot.findFirstOrThrow({ where: { id: bottleLot.id, organizationId } });
 
         const event = await tx.bottleEvent.create({
           data: {
+            organizationId,
             eventType: 'ARCHIVAGE',
             operatorUserId: operatorId,
             eventDatetime: archivedAt,
@@ -995,6 +1032,7 @@ export class BottlesService {
             action: 'BOTTLE_LOT_ARCHIVED',
             details: `Lot bouteille ${bottleLot.businessCode} archivé par ${userEmail}. Raison: ${data.reason}.`,
             userId: userEmail,
+            organizationId,
           },
         });
 
@@ -1011,12 +1049,12 @@ export class BottlesService {
     );
   }
 
-  static async cancelEvent(data: CancelBottleEventInput, userEmail: string) {
+  static async cancelEvent(data: CancelBottleEventInput, userEmail: string, organizationId: number) {
     try {
       return await prisma.$transaction(
         async (tx) => {
-          const event = await tx.bottleEvent.findUnique({
-            where: { id: data.eventId },
+          const event = await tx.bottleEvent.findFirst({
+            where: { id: data.eventId, organizationId },
             include: {
               links: {
                 include: {
@@ -1065,7 +1103,7 @@ export class BottlesService {
             );
           }
 
-          const sourceLot = await tx.bottleLot.findUnique({ where: { id: sourceBottleLotId } });
+          const sourceLot = await tx.bottleLot.findFirst({ where: { id: sourceBottleLotId, organizationId } });
           if (!sourceLot) {
             throw new BusinessLogicError('Lot bouteille source introuvable pour cette expédition.', 404);
           }
@@ -1077,7 +1115,16 @@ export class BottlesService {
           }
 
           if (shipmentLineId) {
-            const shipmentLine = await tx.shipmentLine.findUnique({ where: { id: shipmentLineId } });
+            const shipmentLine = await tx.shipmentLine.findFirst({
+              where: {
+                id: shipmentLineId,
+                bottleLotId: sourceLot.id,
+                shipment: { organizationId },
+              },
+            });
+            if (!shipmentLine) {
+              throw new BusinessLogicError('Ligne d’expédition introuvable pour cette organisation.', 404);
+            }
             if (shipmentLine?.cancelledAt) {
               throw new BusinessLogicError('Cette ligne d’expédition est déjà marquée comme annulée.', 409);
             }
@@ -1088,8 +1135,8 @@ export class BottlesService {
           const restoredCount = sourceLot.currentBottleCount + quantity;
           const nextStatus = sourceLot.status === 'EXPEDIE' && restoredCount > 0 ? 'PRET_EXPEDITION' : sourceLot.status;
 
-          const updatedLot = await tx.bottleLot.update({
-            where: { id: sourceLot.id },
+          await tx.bottleLot.updateMany({
+            where: { id: sourceLot.id, organizationId },
             data: {
               currentBottleCount: {
                 increment: quantity,
@@ -1097,19 +1144,28 @@ export class BottlesService {
               status: nextStatus,
             },
           });
+          const updatedLot = await tx.bottleLot.findFirstOrThrow({ where: { id: sourceLot.id, organizationId } });
 
           if (shipmentLineId) {
-            await tx.shipmentLine.update({
-              where: { id: shipmentLineId },
+            const shipmentLineUpdate = await tx.shipmentLine.updateMany({
+              where: {
+                id: shipmentLineId,
+                bottleLotId: sourceLot.id,
+                shipment: { organizationId },
+              },
               data: {
                 cancelledAt,
                 cancelReason: data.reason,
               },
             });
+            if (shipmentLineUpdate.count !== 1) {
+              throw new BusinessLogicError('Ligne d’expédition introuvable pour cette organisation.', 404);
+            }
           }
 
           const cancelEvent = await tx.bottleEvent.create({
             data: {
+              organizationId,
               eventType: 'ANNULATION_EXPEDITION',
               operatorUserId: operatorId,
               eventDatetime: cancelledAt,
@@ -1135,8 +1191,8 @@ export class BottlesService {
             },
           });
 
-          await tx.bottleEvent.update({
-            where: { id: event.id },
+          await tx.bottleEvent.updateMany({
+            where: { id: event.id, organizationId },
             data: {
               cancelledAt,
               cancelledBy: userEmail,
@@ -1159,6 +1215,7 @@ export class BottlesService {
               action: 'BOTTLE_EXPEDITION_CANCELLED',
               details: `Expédition #${event.id} annulée par ${userEmail}: ${quantity} btl restaurées sur ${sourceLot.businessCode}. Raison: ${data.reason}.`,
               userId: userEmail,
+              organizationId,
             },
           });
 

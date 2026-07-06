@@ -13,7 +13,10 @@ export async function GET(request: Request) {
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
-    const pressoirs = await prisma.pressoir.findMany({ orderBy: { nom: 'asc' } });
+    const pressoirs = await prisma.pressoir.findMany({
+      where: { organizationId: actor.organizationId },
+      orderBy: { nom: 'asc' },
+    });
 
     logger.info({
       action: 'pressoirs.get.success',
@@ -65,10 +68,10 @@ const handleMutation = async (request: Request, method: 'POST' | 'PUT') => {
     let result;
     if (method === 'POST') {
       const payload = CreatePressoirSchema.parse(body);
-      result = await VendangesService.createPressoir(payload);
+      result = await VendangesService.createPressoir(payload, actor.organizationId);
     } else {
       const payload = UpdatePressoirSchema.parse(body);
-      result = await VendangesService.updatePressoir(payload);
+      result = await VendangesService.updatePressoir(payload, actor.organizationId);
     }
 
     logger.info({

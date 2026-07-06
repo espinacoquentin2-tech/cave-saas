@@ -46,9 +46,9 @@ const mapBottleError = (error: unknown): never => {
 };
 
 export class BottleModuleService {
-  static async list(input: ListBottleLotsQueryInput) {
+  static async list(input: ListBottleLotsQueryInput, actor: RequestActor) {
     return prisma.bottleLot.findMany({
-      where: input.id ? { id: input.id } : undefined,
+      where: input.id ? { id: input.id, organizationId: actor.organizationId } : { organizationId: actor.organizationId },
       orderBy: { id: 'desc' },
       include: {
         bottleEventLinks: {
@@ -95,7 +95,7 @@ export class BottleModuleService {
 
   static async updateStatus(input: UpdateBottleStatusInput, actor: RequestActor) {
     try {
-      return await BottlesService.updateStatus(input, actor.email);
+      return await BottlesService.updateStatus(input, actor.email, actor.organizationId);
     } catch (error) {
       mapBottleError(error);
     }
@@ -103,7 +103,7 @@ export class BottleModuleService {
 
   static async degorger(input: DegorgerInput, actor: RequestActor) {
     try {
-      return await BottlesService.degorger(input, actor.email);
+      return await BottlesService.degorger(input, actor.email, actor.organizationId);
     } catch (error) {
       mapBottleError(error);
     }
@@ -111,7 +111,7 @@ export class BottleModuleService {
 
   static async habiller(input: HabillerInput, actor: RequestActor) {
     try {
-      return await BottlesService.habiller(input, actor.email);
+      return await BottlesService.habiller(input, actor.email, actor.organizationId);
     } catch (error) {
       mapBottleError(error);
     }
@@ -119,7 +119,7 @@ export class BottleModuleService {
 
   static async expedier(input: ExpedierInput, actor: RequestActor) {
     try {
-      return await BottlesService.expedier(input, actor.email);
+      return await BottlesService.expedier(input, actor.email, actor.organizationId);
     } catch (error) {
       mapBottleError(error);
     }
@@ -127,7 +127,7 @@ export class BottleModuleService {
 
   static async archive(input: ArchiveBottleLotInput, actor: RequestActor) {
     try {
-      return await BottlesService.archive(input, actor.email);
+      return await BottlesService.archive(input, actor.email, actor.organizationId);
     } catch (error) {
       mapBottleError(error);
     }
@@ -135,7 +135,7 @@ export class BottleModuleService {
 
   static async cancelEvent(input: CancelBottleEventInput, actor: RequestActor) {
     try {
-      return await BottlesService.cancelEvent(input, actor.email);
+      return await BottlesService.cancelEvent(input, actor.email, actor.organizationId);
     } catch (error) {
       mapBottleError(error);
     }

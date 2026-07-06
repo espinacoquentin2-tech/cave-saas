@@ -4,15 +4,15 @@ import { CancelWorkOrderInput, CreateWorkOrderInput } from '@/server/modules/wor
 import { RequestActor } from '@/server/shared/request-context';
 
 export class WorkOrderModuleService {
-  static async list() {
+  static async list(actor: RequestActor) {
     return {
-      workOrders: await AdminService.listWorkOrders(),
+      workOrders: await AdminService.listWorkOrders(actor.organizationId),
     };
   }
 
   static async create(input: CreateWorkOrderInput, actor: RequestActor) {
     try {
-      return await AdminService.createWorkOrder(input, actor.email);
+      return await AdminService.createWorkOrder(input, actor.email, actor.organizationId);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erreur serveur';
 
@@ -35,7 +35,7 @@ export class WorkOrderModuleService {
   static async complete(publicId: string, evidence: unknown, actor: RequestActor) {
     try {
       return {
-        workOrder: await AdminService.completeWorkOrder(publicId, evidence, actor.email),
+        workOrder: await AdminService.completeWorkOrder(publicId, evidence, actor.email, actor.organizationId),
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erreur serveur';
@@ -55,7 +55,7 @@ export class WorkOrderModuleService {
   static async cancel(publicId: string, input: CancelWorkOrderInput, actor: RequestActor) {
     try {
       return {
-        workOrder: await AdminService.cancelWorkOrder(publicId, input.reason, actor.email),
+        workOrder: await AdminService.cancelWorkOrder(publicId, input.reason, actor.email, actor.organizationId),
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erreur serveur';

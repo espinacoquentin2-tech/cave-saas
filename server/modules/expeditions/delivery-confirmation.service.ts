@@ -7,7 +7,7 @@ const asObject = (value: unknown): Record<string, unknown> =>
   value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 
 export class DeliveryConfirmationService {
-  static async confirm(input: ConfirmDeliveryInput, userEmail: string) {
+  static async confirm(input: ConfirmDeliveryInput, userEmail: string, organizationId: number) {
     if (input.type === 'DISTILLERIE') {
       throw new BusinessLogicError(
         "La confirmation de livraison n'est pas supportée pour les envois distillerie dans le modèle actuel.",
@@ -17,8 +17,8 @@ export class DeliveryConfirmationService {
 
     if (input.type === 'BOTTLE') {
       return prisma.$transaction(async (tx) => {
-        const event = await tx.bottleEvent.findUnique({
-          where: { id: input.id },
+        const event = await tx.bottleEvent.findFirst({
+          where: { id: input.id, organizationId },
           include: { links: true },
         });
 
@@ -49,6 +49,7 @@ export class DeliveryConfirmationService {
             action: 'BOTTLE_SHIPMENT_DELIVERED',
             details: `Livraison bouteilles #${event.id} confirmée par ${userEmail}.`,
             userId: userEmail,
+            organizationId,
           },
         });
 
@@ -64,8 +65,8 @@ export class DeliveryConfirmationService {
     }
 
     return prisma.$transaction(async (tx) => {
-      const event = await tx.lotEvent.findUnique({
-        where: { id: input.id },
+      const event = await tx.lotEvent.findFirst({
+        where: { id: input.id, organizationId },
       });
 
       if (!event || event.eventType !== 'EXPEDITION_VRAC') {
@@ -96,6 +97,7 @@ export class DeliveryConfirmationService {
           action: 'BULK_SHIPMENT_DELIVERED',
           details: `Livraison vrac #${event.id} confirmée par ${userEmail}.`,
           userId: userEmail,
+          organizationId,
         },
       });
 

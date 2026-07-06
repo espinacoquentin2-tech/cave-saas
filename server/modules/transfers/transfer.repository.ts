@@ -78,24 +78,25 @@ export class TransferRepository {
     return tx.user.findUnique({ where: { email } });
   }
 
-  static findSourceLot(tx: TransferTransaction, lotId: number) {
-    return tx.lot.findUnique({
-      where: { id: lotId },
+  static findSourceLot(tx: TransferTransaction, lotId: number, organizationId: number) {
+    return tx.lot.findFirst({
+      where: { id: lotId, organizationId },
       include: baseSourceInclude,
     }) as Promise<TransferSourceSnapshot | null>;
   }
 
-  static findTargetContainers(tx: TransferTransaction, containerIds: number[]) {
+  static findTargetContainers(tx: TransferTransaction, containerIds: number[], organizationId: number) {
     return tx.container.findMany({
-      where: { id: { in: containerIds } },
+      where: { id: { in: containerIds }, organizationId },
       include: targetInclude,
     });
   }
 
-  static decrementSourceLot(tx: TransferTransaction, lotId: number, volume: Prisma.Decimal) {
+  static decrementSourceLot(tx: TransferTransaction, lotId: number, organizationId: number, volume: Prisma.Decimal) {
     return tx.lot.updateMany({
       where: {
         id: lotId,
+        organizationId,
         currentVolume: { gte: volume },
       },
       data: {
@@ -104,9 +105,9 @@ export class TransferRepository {
     });
   }
 
-  static updateSourceLotStatus(tx: TransferTransaction, lotId: number, status: string, currentContainerId: number | null) {
-    return tx.lot.update({
-      where: { id: lotId },
+  static updateSourceLotStatus(tx: TransferTransaction, lotId: number, organizationId: number, status: string, currentContainerId: number | null) {
+    return tx.lot.updateMany({
+      where: { id: lotId, organizationId },
       data: {
         status,
         currentContainerId,
@@ -127,14 +128,15 @@ export class TransferRepository {
       status: string;
       qualiteLot?: string | null;
       notes: string;
+      organizationId: number;
     },
   ) {
     return tx.lot.create({ data });
   }
 
-  static updateContainerStatus(tx: TransferTransaction, containerId: number, status: string) {
-    return tx.container.update({
-      where: { id: containerId },
+  static updateContainerStatus(tx: TransferTransaction, containerId: number, organizationId: number, status: string) {
+    return tx.container.updateMany({
+      where: { id: containerId, organizationId },
       data: { status },
     });
   }
@@ -146,6 +148,7 @@ export class TransferRepository {
       eventDatetime: Date;
       comment: string;
       metadata?: Prisma.InputJsonValue;
+      organizationId: number;
     },
   ) {
     return tx.lotEvent.create({
@@ -202,6 +205,7 @@ export class TransferRepository {
       action: string;
       details: string;
       userId: string;
+      organizationId: number;
     },
   ) {
     return tx.auditLog.create({ data });

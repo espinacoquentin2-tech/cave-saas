@@ -17,8 +17,8 @@ const parseYear = (value: CreateLotInput['millesime']) => {
 };
 
 export class LotModuleService {
-  static async list() {
-    return LotRepository.listLots();
+  static async list(actor: RequestActor) {
+    return LotRepository.listLots(actor.organizationId);
   }
 
   static async create(input: CreateLotInput, actor: RequestActor) {
@@ -33,7 +33,7 @@ export class LotModuleService {
         throw new BusinessLogicError('Utilisateur opérateur introuvable.', 401);
       }
 
-      const container = await LotRepository.findContainerWithLots(tx, input.containerId);
+      const container = await LotRepository.findContainerWithLots(tx, input.containerId, actor.organizationId);
       if (!container) {
         throw new BusinessLogicError('Cuve introuvable.', 404);
       }
@@ -68,14 +68,16 @@ export class LotModuleService {
         status: input.status,
         qualiteLot: input.qualiteLot?.trim() || null,
         notes: input.notes?.trim() || null,
+        organizationId: actor.organizationId,
       });
 
-      await LotRepository.updateContainerStatus(tx, input.containerId, 'PLEIN');
+      await LotRepository.updateContainerStatus(tx, input.containerId, actor.organizationId, 'PLEIN');
 
       const event = await LotRepository.createLotEvent(tx, {
         eventType: 'CREATION',
         operatorUserId: operator.id,
         comment: input.notes?.trim() || 'Création initiale du lot',
+        organizationId: actor.organizationId,
         metadata: {
           operation: 'CREATION',
           lotId: lot.id,
@@ -107,6 +109,7 @@ export class LotModuleService {
         action: 'LOT_CREATED',
         details: `Lot ${lot.businessCode} créé dans ${container.displayName} avec ${input.volume} hL par ${actor.email}.`,
         userId: actor.email,
+        organizationId: actor.organizationId,
       });
 
       return {
@@ -128,7 +131,7 @@ export class LotModuleService {
         throw new BusinessLogicError('Utilisateur opérateur introuvable.', 401);
       }
 
-      const lot = await LotRepository.findLotById(tx, input.lotId);
+      const lot = await LotRepository.findLotById(tx, input.lotId, actor.organizationId);
       if (!lot) {
         throw new BusinessLogicError('Lot introuvable.', 404);
       }
@@ -138,13 +141,17 @@ export class LotModuleService {
         throw new BusinessLogicError('Aucune correction de volume à enregistrer.', 400);
       }
 
-      const updatedLot = await LotRepository.updateLotVolume(tx, lot.id, toDecimal(input.newVolume));
+      const updatedLot = await LotRepository.updateLotVolume(tx, lot.id, actor.organizationId, toDecimal(input.newVolume));
+      if (!updatedLot) {
+        throw new BusinessLogicError('Lot introuvable.', 404);
+      }
       const eventType = diff > 0 ? 'CORRECTION_HAUSSE' : 'CORRECTION_BAISSE';
       const previousVolume = toNumber(lot.currentVolume);
       const note = input.note?.trim() || null;
       const event = await LotRepository.createLotEvent(tx, {
         eventType,
         operatorUserId: operator.id,
+        organizationId: actor.organizationId,
         comment: [
           `Ancien volume: ${previousVolume} hL.`,
           `Nouveau volume: ${input.newVolume} hL.`,
@@ -187,6 +194,7 @@ export class LotModuleService {
         action: 'LOT_VOLUME_CORRECTED',
         details: `Lot ${lot.businessCode} corrigé de ${diff} hL par ${actor.email}.`,
         userId: actor.email,
+        organizationId: actor.organizationId,
       });
 
       return {

@@ -27,6 +27,7 @@ export async function GET(request: Request) {
     assertRole(actor, READ_ROLES);
 
     const parcelles = await prisma.parcelle.findMany({
+      where: { organizationId: actor.organizationId },
       orderBy: { nom: 'asc' },
     });
 
@@ -91,12 +92,14 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const requestId = getRequestId(request);
   let payload: z.infer<typeof createParcelleSchema> | null = null;
+  let organizationId: number | null = null;
 
   try {
     const actor = await resolveAuthenticatedActor(request);
+    organizationId = actor.organizationId;
     assertRole(actor, WRITE_ROLES);
     payload = createParcelleSchema.parse(await request.json());
-    const parcelle = await prisma.parcelle.create({ data: payload });
+    const parcelle = await prisma.parcelle.create({ data: { ...payload, organizationId: actor.organizationId } });
 
     logger.info({
       action: 'parcelles.post.success',
@@ -147,6 +150,7 @@ export async function POST(request: Request) {
       const existingSameTerroir = payload
         ? await prisma.parcelle.findFirst({
             where: {
+              ...(organizationId ? { organizationId } : {}),
               nom: payload.nom,
               departement: payload.departement ?? null,
               region: payload.region ?? null,

@@ -262,8 +262,8 @@ export class AssemblageModuleService {
           .map((source) => source.bottleLotId);
 
         const [destinationContainer, sourceLots, sourceBottleLots, products] = await Promise.all([
-          tx.container.findUnique({
-            where: { id: normalized.destinationContainerId },
+          tx.container.findFirst({
+            where: { id: normalized.destinationContainerId, organizationId: actor.organizationId },
             include: {
               currentLots: {
                 where: {
@@ -278,7 +278,7 @@ export class AssemblageModuleService {
           }),
           lotSourceIds.length > 0
             ? tx.lot.findMany({
-                where: { id: { in: lotSourceIds } },
+                where: { id: { in: lotSourceIds }, organizationId: actor.organizationId },
                 include: {
                   components: true,
                   currentContainer: {
@@ -289,7 +289,7 @@ export class AssemblageModuleService {
             : Promise.resolve([]),
           bottleSourceIds.length > 0
             ? tx.bottleLot.findMany({
-                where: { id: { in: bottleSourceIds } },
+                where: { id: { in: bottleSourceIds }, organizationId: actor.organizationId },
                 include: {
                   sourceLot: {
                     include: {
@@ -304,7 +304,10 @@ export class AssemblageModuleService {
             : Promise.resolve([]),
           normalized.adjuvants.length > 0
             ? tx.product.findMany({
-                where: { id: { in: normalized.adjuvants.map((adjuvant) => adjuvant.productId) } },
+                where: {
+                  id: { in: normalized.adjuvants.map((adjuvant) => adjuvant.productId) },
+                  organizationId: actor.organizationId,
+                },
               })
             : Promise.resolve([]),
         ]);
@@ -565,6 +568,7 @@ export class AssemblageModuleService {
         const event = await tx.lotEvent.create({
           data: {
             eventType: 'ASSEMBLAGE',
+            organizationId: actor.organizationId,
             operatorUserId: operator.id,
             comment: [
               `Création de l'assemblage ${normalized.code}.`,
@@ -585,8 +589,8 @@ export class AssemblageModuleService {
             }
 
             const nextVolume = round(toNumber(lot.currentVolume) - source.volumeHl, 4);
-            await tx.lot.update({
-              where: { id: lot.id },
+            await tx.lot.updateMany({
+              where: { id: lot.id, organizationId: actor.organizationId },
               data: {
                 currentVolume: toDecimal(Math.max(nextVolume, 0)),
                 status: nextVolume <= 0.0001 ? 'ARCHIVE' : lot.status,
@@ -609,8 +613,8 @@ export class AssemblageModuleService {
             }
 
             const nextBottleCount = bottleLot.currentBottleCount - source.originQuantity;
-            await tx.bottleLot.update({
-              where: { id: bottleLot.id },
+            await tx.bottleLot.updateMany({
+              where: { id: bottleLot.id, organizationId: actor.organizationId },
               data: {
                 currentBottleCount: nextBottleCount,
                 status: nextBottleCount <= 0 ? 'ARCHIVE' : bottleLot.status,
@@ -633,6 +637,7 @@ export class AssemblageModuleService {
         const lot = await tx.lot.create({
           data: {
             technicalCode: `${normalized.code}-${Date.now().toString().slice(-6)}`,
+            organizationId: actor.organizationId,
             businessCode: normalized.code,
             year: finalYear,
             mainGrapeCode: normalizeGrapeCode(dominantGrape),
@@ -724,8 +729,8 @@ export class AssemblageModuleService {
           },
         });
 
-        await tx.container.update({
-          where: { id: destinationContainer.id },
+        await tx.container.updateMany({
+          where: { id: destinationContainer.id, organizationId: actor.organizationId },
           data: {
             status: totalVolumeHl >= capacity - 0.0001 ? 'PLEIN' : 'EN_SERVICE',
           },
@@ -735,13 +740,14 @@ export class AssemblageModuleService {
           const remainingLots = await tx.lot.count({
             where: {
               currentContainerId: containerId,
+              organizationId: actor.organizationId,
               currentVolume: { gt: 0 },
               status: { notIn: Array.from(EMPTY_LOT_STATUSES) },
             },
           });
           if (remainingLots === 0) {
-            await tx.container.update({
-              where: { id: containerId },
+            await tx.container.updateMany({
+              where: { id: containerId, organizationId: actor.organizationId },
               data: { status: 'VIDE' },
             });
           }
@@ -756,6 +762,7 @@ export class AssemblageModuleService {
           const decrementResult = await tx.product.updateMany({
             where: {
               id: product.id,
+              organizationId: actor.organizationId,
               currentStock: { gte: toDecimal(adjuvant.quantityTotal) },
             },
             data: {
@@ -792,6 +799,7 @@ export class AssemblageModuleService {
           await tx.stockMovement.create({
             data: {
               productId: product.id,
+              organizationId: actor.organizationId,
               type: 'OUT',
               quantity: toDecimal(adjuvant.quantityTotal),
               note: `Assemblage ${normalized.code} · ${adjuvant.dose} ${adjuvant.doseUnit} sur ${adjuvant.treatedVolumeHl} hL`,
@@ -812,6 +820,7 @@ export class AssemblageModuleService {
             action: 'ASSEMBLAGE_CREATED',
             details: `Assemblage ${normalized.code} (${decision.suggestedType}) créé avec ${totalVolumeHl.toFixed(2)} hL par ${actor.email}.`,
             userId: actor.email,
+            organizationId: actor.organizationId,
           },
         });
 

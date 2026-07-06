@@ -6,7 +6,7 @@ import { RequestActor } from '@/server/shared/request-context';
 export class UserModuleService {
   static async upsert(input: UpsertUserInput, actor: RequestActor) {
     try {
-      return await AdminService.upsertUser(input, actor.email);
+      return await AdminService.upsertUser(input, actor.email, actor.organizationId);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erreur serveur';
 

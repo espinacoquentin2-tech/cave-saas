@@ -33,7 +33,7 @@ export async function GET(request: Request) {
     actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
     const containers = await prisma.container.findMany({
-      where: { status: { not: 'ARCHIVÉE' } },
+      where: { organizationId: actor.organizationId, status: { not: 'ARCHIVÉE' } },
       include: { currentLots: true },
     });
 
@@ -95,6 +95,7 @@ export async function POST(request: Request) {
     const container = await prisma.container.create({
       data: {
         code: normalizedCode,
+        organizationId: actor.organizationId,
         displayName: normalizedName,
         type: payload.type ?? 'Cuve',
         capacityValue: payload.capacityValue ?? payload.capacity ?? 0,
@@ -164,13 +165,20 @@ export async function PUT(request: Request) {
     assertRole(actor, WRITE_ROLES);
     const payload = updateContainerSchema.parse(await request.json());
 
-    const updatedContainer = await prisma.container.update({
-      where: { id: payload.id },
+    const updatedContainer = await prisma.container.updateMany({
+      where: { id: payload.id, organizationId: actor.organizationId },
       data: {
         ...(payload.status ? { status: payload.status } : {}),
         ...(payload.name ? { displayName: payload.name } : {}),
       },
     });
+
+    if (updatedContainer.count !== 1) {
+      return NextResponse.json(
+        { error: 'NOT_FOUND', message: 'Contenant introuvable.' },
+        { status: 404, headers: { 'x-request-id': requestId } },
+      );
+    }
 
     logger.info({
       action: 'containers.put.success',
@@ -180,7 +188,7 @@ export async function PUT(request: Request) {
       details: { containerId: payload.id },
     });
 
-    return NextResponse.json({ success: true, container: updatedContainer }, { status: 200, headers: { 'x-request-id': requestId } });
+    return NextResponse.json({ success: true }, { status: 200, headers: { 'x-request-id': requestId } });
   } catch (error) {
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({

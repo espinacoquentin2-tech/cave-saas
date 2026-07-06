@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
     const payload = TraceabilityRequestSchema.parse(await request.json());
-    const lineage = await TracabiliteService.getLineage(payload);
+    const lineage = await TracabiliteService.getLineage(payload, actor.organizationId);
 
     logger.info({
       action: 'tracabilite.post.success',
@@ -69,4 +69,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

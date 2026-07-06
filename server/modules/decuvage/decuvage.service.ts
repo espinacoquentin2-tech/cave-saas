@@ -20,7 +20,7 @@ export class DecuvageService {
         throw new BusinessLogicError('Utilisateur opérateur introuvable.', 401);
       }
 
-      const sourceLot = await DecuvageRepository.findSourceLot(tx, input.sourceLotId);
+      const sourceLot = await DecuvageRepository.findSourceLot(tx, input.sourceLotId, actor.organizationId);
       if (!sourceLot || !sourceLot.currentContainer) {
         throw new BusinessLogicError('Lot source ou cuve source introuvable.', 404);
       }
@@ -41,7 +41,7 @@ export class DecuvageService {
       const targetContainerIds = [input.cuveGoutteId, input.cuvePresseId].filter(
         (value): value is number => Boolean(value),
       );
-      const targetContainers = await DecuvageRepository.findContainers(tx, [...new Set(targetContainerIds)]);
+      const targetContainers = await DecuvageRepository.findContainers(tx, [...new Set(targetContainerIds)], actor.organizationId);
       const targetContainersById = new Map(targetContainers.map((container) => [container.id, container]));
 
       if (targetContainers.length !== new Set(targetContainerIds).size) {
@@ -74,6 +74,7 @@ export class DecuvageService {
 
       const event = await DecuvageRepository.createLotEvent(tx, {
         operatorUserId: operator.id,
+        organizationId: actor.organizationId,
         comment: [
           `Décuvage de ${sourceLot.businessCode}.`,
           `Goutte: ${input.volGoutte} hL.`,
@@ -84,8 +85,8 @@ export class DecuvageService {
           .join(' '),
       });
 
-      await DecuvageRepository.archiveSourceLot(tx, sourceLot.id);
-      await DecuvageRepository.updateContainerStatus(tx, input.sourceContainerId, 'NETTOYAGE');
+      await DecuvageRepository.archiveSourceLot(tx, sourceLot.id, actor.organizationId);
+      await DecuvageRepository.updateContainerStatus(tx, input.sourceContainerId, actor.organizationId, 'NETTOYAGE');
       await DecuvageRepository.createLotEventLink(tx, {
         eventId: event.id,
         lotId: sourceLot.id,
@@ -116,6 +117,7 @@ export class DecuvageService {
           currentVolume: toDecimal(volume),
           currentContainerId: containerId ?? null,
           status: input.finalStatus,
+          organizationId: actor.organizationId,
           notes: `${label} issu du décuvage #${event.id}.${input.notes?.trim() ? ` ${input.notes.trim()}` : ''}`,
         });
 
@@ -129,7 +131,7 @@ export class DecuvageService {
         });
 
         if (containerId) {
-          await DecuvageRepository.updateContainerStatus(tx, containerId, 'PLEIN');
+          await DecuvageRepository.updateContainerStatus(tx, containerId, actor.organizationId, 'PLEIN');
           await DecuvageRepository.createContainerEventLink(tx, {
             eventId: event.id,
             containerId,
@@ -143,6 +145,7 @@ export class DecuvageService {
         action: 'DECUVAGE_EXECUTED',
         details: `Décuvage du lot ${sourceLot.businessCode} (${totalDecuvage} hL) par ${actor.email}.`,
         userId: actor.email,
+        organizationId: actor.organizationId,
       });
 
       return {

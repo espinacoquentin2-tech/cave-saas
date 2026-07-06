@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, [...VRAC_SHIPMENT_ROLES]);
     const payload = createVracShipmentSchema.parse(await request.json());
-    const result = await VracExpeditionService.create(payload, actor.email);
+    const result = await VracExpeditionService.create(payload, actor.email, actor.organizationId);
 
     logger.info({
       action: 'expeditions.vrac.post.success',

@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   try {
     actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
-    const records = await MaturationModuleService.list();
+    const records = await MaturationModuleService.list(actor);
 
     logger.info({
       action: 'maturation.get.success',

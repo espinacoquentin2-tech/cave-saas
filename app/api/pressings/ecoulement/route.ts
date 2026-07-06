@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
     const payload = EcoulementSchema.parse(await request.json());
-    const result = await PressingService.ecoulement(payload);
+    const result = await PressingService.ecoulement(payload, actor.organizationId);
 
     logger.info({
       action: 'pressings.ecoulement.post.success',
@@ -72,4 +72,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

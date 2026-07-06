@@ -88,12 +88,12 @@ export class LotsService {
   // =========================================================================
   // 1. AJOUT INTRANT / OPÉRATION + VERROU AOC
   // =========================================================================
-  static async addIntrant(data: z.infer<typeof AddIntrantSchema>, userEmail: string) {
+  static async addIntrant(data: z.infer<typeof AddIntrantSchema>, userEmail: string, organizationId: number) {
     return await prisma.$transaction(async (tx) => {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
       if (existingTx) throw new Error("ALREADY_APPLIED: Opération déjà enregistrée.");
 
-      const lot = await tx.lot.findUnique({ where: { id: data.lotId } });
+      const lot = await tx.lot.findFirst({ where: { id: data.lotId, organizationId } });
       if (!lot) throw new Error("Lot introuvable.");
 
       const isSucre = data.intrant === "Chaptalisation (Sucre)";
@@ -103,6 +103,7 @@ export class LotsService {
         const pastEvents = await tx.lotEvent.findMany({
           where: { 
             lots: { some: { lotId: lot.id } },
+            organizationId,
             eventType: "INTRANT"
           }
         });
@@ -123,7 +124,7 @@ export class LotsService {
       let stockMovementId: number | null = null;
 
       if (data.productId) {
-        product = await tx.product.findUnique({ where: { id: data.productId } });
+        product = await tx.product.findFirst({ where: { id: data.productId, organizationId } });
         if (!product) throw new Error("Produit intrant introuvable.");
         stockBefore = Number(product.currentStock);
 
@@ -154,6 +155,7 @@ export class LotsService {
       const event = await tx.lotEvent.create({
         data: {
           eventType: "INTRANT",
+          organizationId,
           operatorUserId: userId,
           comment: `${intrantLabel} : ${data.quantity} ${data.unit}`,
           metadata: {
@@ -189,6 +191,7 @@ export class LotsService {
         const decrementResult = await tx.product.updateMany({
           where: {
             id: product.id,
+            organizationId,
             currentStock: { gte: quantity },
           },
           data: {
@@ -204,6 +207,7 @@ export class LotsService {
         const movement = await tx.stockMovement.create({
           data: {
             productId: product.id,
+            organizationId,
             type: "OUT",
             quantity,
             note: data.note || `Intrant lot ${lot.businessCode}: ${intrantLabel}`,
@@ -252,7 +256,7 @@ export class LotsService {
   // =========================================================================
   // 2. SAUVEGARDE TOUR FA (AVEC RÈGLE MÉTIER DE FERMETURE)
   // =========================================================================
-  static async saveFaTour(data: z.infer<typeof SaveFaTourSchema>, userEmail: string) {
+  static async saveFaTour(data: z.infer<typeof SaveFaTourSchema>, userEmail: string, organizationId: number) {
     validateFaTourBusinessRules(data);
 
     return await prisma.$transaction(async (tx) => {
@@ -262,9 +266,17 @@ export class LotsService {
       const validReadings = data.readings.filter(r => r.density || r.temperature);
       if (validReadings.length === 0) throw new Error("Aucune donnée valide à enregistrer.");
 
+      const lotIds = [...new Set(validReadings.map((reading) => reading.lotId))];
+      const lots = await tx.lot.findMany({
+        where: { id: { in: lotIds }, organizationId },
+        select: { id: true },
+      });
+      if (lots.length !== lotIds.length) throw new Error("Lot introuvable.");
+
       for (const r of validReadings) {
         await tx.faReading.create({ 
           data: {
+            organizationId,
             lotId: r.lotId,
             // CORRECTION 1 : Prisma attend un String (YYYY-MM-DD), pas un objet Date
             date: r.date, 
@@ -278,8 +290,8 @@ export class LotsService {
 
         // RÈGLE MÉTIER : Fin de FA => lot inactif mais consultable (VIN_DE_BASE)
         if (r.density && parseFloat(r.density.toString()) <= 995) {
-            await tx.lot.update({
-                where: { id: r.lotId },
+            await tx.lot.updateMany({
+                where: { id: r.lotId, organizationId },
                 data: { status: 'VIN_DE_BASE' }
             });
         }
@@ -294,12 +306,12 @@ export class LotsService {
   // =========================================================================
   // 3. CRÉATION D'UN LOT INITIAL
   // =========================================================================
-  static async createLot(data: z.infer<typeof CreateLotSchema>, userEmail: string) {
+  static async createLot(data: z.infer<typeof CreateLotSchema>, userEmail: string, organizationId: number) {
     return await prisma.$transaction(async (tx) => {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
       if (existingTx) throw new Error("ALREADY_APPLIED: Lot déjà créé.");
 
-      const container = await tx.container.findUnique({ where: { id: data.containerId }, include: { currentLots: true } });
+      const container = await tx.container.findFirst({ where: { id: data.containerId, organizationId }, include: { currentLots: true } });
       if (!container) throw new Error("Cuve introuvable.");
 
       const currentVol = container.currentLots?.reduce((sum, l) => sum + Number(l.currentVolume), 0) || 0;
@@ -311,6 +323,7 @@ export class LotsService {
       const newLot = await tx.lot.create({
         data: {
           technicalCode: `${data.code}-${Date.now().toString().slice(-4)}`,
+          organizationId,
           businessCode: data.code,
           year: typeof data.millesime === 'number' ? data.millesime : parseInt(data.millesime.toString()),
           mainGrapeCode: data.cepage,
@@ -322,12 +335,13 @@ export class LotsService {
         }
       });
 
-      await tx.container.update({ where: { id: data.containerId }, data: { status: 'PLEIN' } });
+      await tx.container.updateMany({ where: { id: data.containerId, organizationId }, data: { status: 'PLEIN' } });
 
       const user = await tx.user.findUnique({ where: { email: userEmail } });
       const event = await tx.lotEvent.create({
         data: {
           eventType: 'CREATION',
+          organizationId,
           operatorUserId: user?.id || 1, 
           comment: data.notes || 'Création initiale du lot',
         }
@@ -342,12 +356,12 @@ export class LotsService {
   }
 
   // 2. CHANGEMENT DE STATUT
-  static async updateStatus(data: z.infer<typeof UpdateLotStatusSchema>, userEmail: string) {
+  static async updateStatus(data: z.infer<typeof UpdateLotStatusSchema>, userEmail: string, organizationId: number) {
     return await prisma.$transaction(async (tx) => {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
       if (existingTx) throw new BusinessLogicError("ALREADY_APPLIED: Statut déjà modifié.", 409);
 
-      const lot = await tx.lot.findUnique({ where: { id: data.lotId } });
+      const lot = await tx.lot.findFirst({ where: { id: data.lotId, organizationId } });
       if (!lot) throw new BusinessLogicError("Lot introuvable.", 404);
 
       if (!isManualLotStatusTransitionAllowed(lot.status, data.newStatus)) {
@@ -357,12 +371,13 @@ export class LotsService {
         );
       }
 
-      await tx.lot.update({ where: { id: data.lotId }, data: { status: data.newStatus } });
+      await tx.lot.updateMany({ where: { id: data.lotId, organizationId }, data: { status: data.newStatus } });
 
       const user = await tx.user.findUnique({ where: { email: userEmail } });
       const event = await tx.lotEvent.create({
         data: {
           eventType: 'CHANGEMENT_STATUT',
+          organizationId,
           operatorUserId: user?.id || 1,
           comment: `Nouveau statut : ${data.newStatus.replace(/_/g, " ")}${data.note ? ' - ' + data.note : ''}`,
           metadata: {
@@ -386,23 +401,25 @@ export class LotsService {
   }
 
   // 3. CORRECTION DU VOLUME
-  static async updateVolume(data: z.infer<typeof UpdateLotVolumeSchema>, userEmail: string) {
+  static async updateVolume(data: z.infer<typeof UpdateLotVolumeSchema>, userEmail: string, organizationId: number) {
     return await prisma.$transaction(async (tx) => {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
       if (existingTx) throw new Error("ALREADY_APPLIED: Volume déjà corrigé.");
 
-      const lot = await tx.lot.findUnique({ where: { id: data.lotId } });
+      const lot = await tx.lot.findFirst({ where: { id: data.lotId, organizationId } });
       if (!lot) throw new Error("Lot introuvable.");
 
       const diff = data.newVolume - Number(lot.currentVolume);
       const eventType = diff > 0 ? 'CORRECTION_HAUSSE' : 'CORRECTION_BAISSE';
 
-      const updatedLot = await tx.lot.update({ where: { id: data.lotId }, data: { currentVolume: data.newVolume } });
+      await tx.lot.updateMany({ where: { id: data.lotId, organizationId }, data: { currentVolume: data.newVolume } });
+      const updatedLot = await tx.lot.findFirstOrThrow({ where: { id: data.lotId, organizationId } });
 
       const user = await tx.user.findUnique({ where: { email: userEmail } });
       const event = await tx.lotEvent.create({
         data: {
           eventType: eventType,
+          organizationId,
           operatorUserId: user?.id || 1,
           comment: `Ancien vol: ${lot.currentVolume} hL -> Nouveau vol: ${data.newVolume} hL. ${data.note ? '(' + data.note + ')' : ''}`
         }

@@ -5,8 +5,9 @@ import { RequestActor } from '@/server/shared/request-context';
 import { prisma } from '@/server/shared/prisma';
 
 export class AnalysesModuleService {
-  static async list() {
+  static async list(actor: RequestActor) {
     const records = await prisma.analysis.findMany({
+      where: { organizationId: actor.organizationId },
       select: {
         id: true,
         lotId: true,
@@ -40,7 +41,7 @@ export class AnalysesModuleService {
 
   static async save(input: SaveAnalysesInput, actor: RequestActor) {
     try {
-      return await AnalysesService.saveRecords(input, actor.email);
+      return await AnalysesService.saveRecords(input, actor.email, actor.organizationId);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erreur serveur';
 

@@ -30,23 +30,24 @@ export class StockMovementRepository {
     return tx.user.findUnique({ where: { email } });
   }
 
-  static findProduct(tx: StockMovementTransaction, productId: number) {
-    return tx.product.findUnique({ where: { id: productId } });
+  static findProduct(tx: StockMovementTransaction, productId: number, organizationId: number) {
+    return tx.product.findFirst({ where: { id: productId, organizationId } });
   }
 
-  static incrementProductStock(tx: StockMovementTransaction, productId: number, quantity: Prisma.Decimal) {
-    return tx.product.update({
-      where: { id: productId },
+  static incrementProductStock(tx: StockMovementTransaction, productId: number, organizationId: number, quantity: Prisma.Decimal) {
+    return tx.product.updateMany({
+      where: { id: productId, organizationId },
       data: {
         currentStock: { increment: quantity },
       },
     });
   }
 
-  static decrementProductStock(tx: StockMovementTransaction, productId: number, quantity: Prisma.Decimal) {
+  static decrementProductStock(tx: StockMovementTransaction, productId: number, organizationId: number, quantity: Prisma.Decimal) {
     return tx.product.updateMany({
       where: {
         id: productId,
+        organizationId,
         currentStock: { gte: quantity },
       },
       data: {
@@ -63,6 +64,7 @@ export class StockMovementRepository {
       quantity: Prisma.Decimal;
       note: string | null;
       operator: string;
+      organizationId: number;
     },
   ) {
     return tx.stockMovement.create({ data });
@@ -74,13 +76,15 @@ export class StockMovementRepository {
       action: string;
       details: string;
       userId: string;
+      organizationId: number;
     },
   ) {
     return tx.auditLog.create({ data });
   }
 
-  static listMovements(page: number, limit: number) {
+  static listMovements(page: number, limit: number, organizationId: number) {
     return this.client.stockMovement.findMany({
+      where: { organizationId },
       orderBy: { createdAt: 'desc' },
       skip: (page - 1) * limit,
       take: limit,
@@ -96,7 +100,7 @@ export class StockMovementRepository {
     });
   }
 
-  static countMovements() {
-    return this.client.stockMovement.count();
+  static countMovements(organizationId: number) {
+    return this.client.stockMovement.count({ where: { organizationId } });
   }
 }

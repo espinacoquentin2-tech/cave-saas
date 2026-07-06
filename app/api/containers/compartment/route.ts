@@ -19,8 +19,8 @@ export async function POST(request: Request) {
     const payload = createCompartmentSchema.parse(await request.json());
 
     const result = await prisma.$transaction(async (tx) => {
-      const parentContainer = await tx.container.findUnique({
-        where: { id: payload.originalContainerId },
+      const parentContainer = await tx.container.findFirst({
+        where: { id: payload.originalContainerId, organizationId: actor.organizationId },
         include: { children: true },
       });
 
@@ -34,6 +34,7 @@ export async function POST(request: Request) {
       return tx.container.create({
         data: {
           code: `COMP-${Date.now()}-${Math.floor(Math.random() * 100)}`,
+          organizationId: actor.organizationId,
           displayName: `${baseName} - Comp ${newCompNumber}`,
           type: 'COMPARTIMENT',
           capacityValue: payload.newCapacity,

@@ -54,28 +54,28 @@ export class DecuvageRepository {
     return tx.user.findUnique({ where: { email } });
   }
 
-  static findSourceLot(tx: DecuvageTransaction, lotId: number) {
-    return tx.lot.findUnique({ where: { id: lotId }, include: sourceInclude });
+  static findSourceLot(tx: DecuvageTransaction, lotId: number, organizationId: number) {
+    return tx.lot.findFirst({ where: { id: lotId, organizationId }, include: sourceInclude });
   }
 
-  static findContainers(tx: DecuvageTransaction, containerIds: number[]) {
-    return tx.container.findMany({ where: { id: { in: containerIds } }, include: targetInclude });
+  static findContainers(tx: DecuvageTransaction, containerIds: number[], organizationId: number) {
+    return tx.container.findMany({ where: { id: { in: containerIds }, organizationId }, include: targetInclude });
   }
 
-  static archiveSourceLot(tx: DecuvageTransaction, lotId: number) {
-    return tx.lot.update({
-      where: { id: lotId },
+  static archiveSourceLot(tx: DecuvageTransaction, lotId: number, organizationId: number) {
+    return tx.lot.updateMany({
+      where: { id: lotId, organizationId },
       data: { currentVolume: new Prisma.Decimal(0), status: 'ARCHIVE', currentContainerId: null },
     });
   }
 
-  static updateContainerStatus(tx: DecuvageTransaction, containerId: number, status: string) {
-    return tx.container.update({ where: { id: containerId }, data: { status } });
+  static updateContainerStatus(tx: DecuvageTransaction, containerId: number, organizationId: number, status: string) {
+    return tx.container.updateMany({ where: { id: containerId, organizationId }, data: { status } });
   }
 
   static createLotEvent(
     tx: DecuvageTransaction,
-    data: { operatorUserId: number; comment: string; eventDatetime?: Date },
+    data: { operatorUserId: number; comment: string; eventDatetime?: Date; organizationId: number },
   ) {
     return tx.lotEvent.create({ data: { eventType: 'DECUVAGE', ...data } });
   }
@@ -106,12 +106,13 @@ export class DecuvageRepository {
       currentContainerId?: number | null;
       status: string;
       notes?: string | null;
+      organizationId: number;
     },
   ) {
     return tx.lot.create({ data });
   }
 
-  static createAuditLog(tx: DecuvageTransaction, data: { action: string; details: string; userId: string }) {
+  static createAuditLog(tx: DecuvageTransaction, data: { action: string; details: string; userId: string; organizationId: number }) {
     return tx.auditLog.create({ data });
   }
 }

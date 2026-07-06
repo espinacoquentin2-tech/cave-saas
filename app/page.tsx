@@ -5074,6 +5074,9 @@ export default function App() {
             roleLabel: matchedUser.roleLabel,
             roleKey: matchedUser.roleKey,
             initials: matchedUser.initials,
+            organizationId: matchedUser.organizationId,
+            organizationSlug: matchedUser.organizationSlug,
+            organizationName: matchedUser.organizationName,
           };
         });
       });
@@ -5322,6 +5325,9 @@ export default function App() {
                   <div style={{ flex:1, minWidth:0 }}>
                     <div style={{ fontSize:13, color:T.textStrong, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:"bold" }}>{user.name}</div>
                     <div style={{ fontSize:11, color:T.accent, marginTop:2 }}>{user.role}</div>
+                    {user.organizationName && (
+                      <div style={{ fontSize:10, color:T.textDim, marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.organizationName}</div>
+                    )}
                   </div>
                   <button onClick={logout} style={{ background:"none", border:`1px solid ${T.border}`, color:T.textDim, cursor:"pointer", fontSize:12, padding:"6px 10px", borderRadius:4, fontFamily:"monospace" }}>Q</button>
                 </div>
@@ -5331,6 +5337,11 @@ export default function App() {
               <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0, overflow:"hidden" }}>
                 <div style={{ background:T.surface, borderBottom:`1px solid ${T.border}`, padding:"12px 32px", display:"flex", alignItems:"center", gap:16, flexShrink:0 }}>
                   <GlobalSearch onNavigate={goNav} onSelectContainer={(c: any) => { setSelCont(c); goNav("cuverie"); }} onSelectLot={(l: any) => { setSelLot(l); goNav("lots"); }} />
+                  {user.organizationName && (
+                    <div style={{ marginLeft:"auto", fontSize:11, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
+                      Organisation active: <span style={{ color:T.accentLight }}>{user.organizationName}</span>
+                    </div>
+                  )}
                 </div>
                 
                 <div style={{ flex:1, overflowY:"auto", padding:"40px 48px" }}>

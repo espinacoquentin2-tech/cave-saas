@@ -125,7 +125,7 @@ export class TirageModuleService {
           throw new BusinessLogicError('Utilisateur opérateur introuvable.', 401);
         }
 
-        const sourceLot = await TirageRepository.findSourceLot(tx, input.lotId);
+        const sourceLot = await TirageRepository.findSourceLot(tx, input.lotId, actor.organizationId);
         if (!sourceLot) {
           throw new BusinessLogicError('Lot source introuvable.', 404);
         }
@@ -191,6 +191,7 @@ export class TirageModuleService {
         const products = await TirageRepository.findProductsByIds(
           tx,
           input.stockItems.map((item) => item.productId),
+          actor.organizationId,
         );
         const productMap = new Map(products.map((product) => [product.id, product] as const));
         const normalizedBouchage = normalizeTirageBouchage(input.bouchage);
@@ -434,6 +435,7 @@ export class TirageModuleService {
         const decrementResult = await TirageRepository.decrementSourceLot(
           tx,
           sourceLot.id,
+          actor.organizationId,
           toDecimal(consumedVolume),
         );
         if (decrementResult.count !== 1) {
@@ -448,7 +450,7 @@ export class TirageModuleService {
         );
         const depletedSourceLot = remainingVolume <= 0.0001;
         if (depletedSourceLot) {
-          await TirageRepository.updateSourceLotForTirage(tx, sourceLot.id, {
+          await TirageRepository.updateSourceLotForTirage(tx, sourceLot.id, actor.organizationId, {
             status: 'TIRE',
             currentContainerId: null,
           });
@@ -458,11 +460,12 @@ export class TirageModuleService {
         const tirageYear = tirageDate.getUTCFullYear();
         const typeCode = input.isTranquille ? 'MISE' : 'TIRAGE';
         const targetStatus = input.isTranquille ? 'EN_CAVE' : 'SUR_LATTES';
-        const nextSequence = await TirageRepository.countBottleLotsByTypeAndYear(tx, typeCode, tirageYear);
+        const nextSequence = await TirageRepository.countBottleLotsByTypeAndYear(tx, typeCode, tirageYear, actor.organizationId);
         const code = `${typeCode}-${tirageYear}-${String(nextSequence + 1).padStart(4, '0')}`;
 
         const bottleLot = await TirageRepository.createBottleLot(tx, {
           technicalCode: `${code}-${input.idempotencyKey.slice(0, 8)}`,
+          organizationId: actor.organizationId,
           businessCode: code,
           type: typeCode,
           sourceLotId: sourceLot.id,
@@ -503,6 +506,7 @@ export class TirageModuleService {
 
         const lotEvent = await TirageRepository.createLotEvent(tx, {
           operatorUserId: operator.id,
+          organizationId: actor.organizationId,
           eventType: typeCode,
           eventDatetime: tirageDate,
           comment: [
@@ -542,6 +546,7 @@ export class TirageModuleService {
 
         const bottleEvent = await TirageRepository.createBottleEvent(tx, {
           operatorUserId: operator.id,
+          organizationId: actor.organizationId,
           eventType: input.isTranquille ? 'CREATION_MISE' : 'CREATION_TIRAGE',
           eventDatetime: tirageDate,
           comment: input.note ?? (input.isTranquille ? 'Mise en bouteille vin tranquille' : 'Tirage initial'),
@@ -580,6 +585,7 @@ export class TirageModuleService {
           const stockDecrement = await TirageRepository.decrementProductStock(
             tx,
             product.id,
+            actor.organizationId,
             toDecimal(stockItem.quantity),
           );
           if (stockDecrement.count !== 1) {
@@ -607,6 +613,7 @@ export class TirageModuleService {
           });
           await TirageRepository.createStockMovement(tx, {
             productId: product.id,
+            organizationId: actor.organizationId,
             type: 'OUT',
             quantity: toDecimal(stockItem.quantity),
             note: `Tirage ${code} · ${stockItem.label}${stockItem.dose != null && stockItem.doseUnit ? ` · ${stockItem.dose} ${stockItem.doseUnit}` : ''}`,
@@ -637,9 +644,10 @@ export class TirageModuleService {
           const remainingLotsInContainer = await TirageRepository.countActiveLotsInContainer(
             tx,
             sourceLot.currentContainer.id,
+            actor.organizationId,
           );
           if (remainingLotsInContainer === 0) {
-            await TirageRepository.updateContainerStatus(tx, sourceLot.currentContainer.id, 'VIDE');
+            await TirageRepository.updateContainerStatus(tx, sourceLot.currentContainer.id, actor.organizationId, 'VIDE');
           }
         }
 
@@ -648,6 +656,7 @@ export class TirageModuleService {
           action: 'TIRAGE_EXECUTED',
           details: `Tirage ${bottleLot.businessCode} créé à partir du lot ${sourceLot.businessCode} (${consumedVolume.toFixed(3)} hL consommés) par ${actor.email}.`,
           userId: actor.email,
+          organizationId: actor.organizationId,
         });
 
         return {

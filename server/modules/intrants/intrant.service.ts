@@ -6,7 +6,7 @@ import { RequestActor } from '@/server/shared/request-context';
 export class IntrantModuleService {
   static async add(input: AddIntrantInput, actor: RequestActor) {
     try {
-      return await LotsService.addIntrant(input, actor.email);
+      return await LotsService.addIntrant(input, actor.email, actor.organizationId);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Erreur serveur';
 

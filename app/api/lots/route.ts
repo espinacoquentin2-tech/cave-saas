@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   try {
     actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
-    const lots = await LotModuleService.list();
+    const lots = await LotModuleService.list(actor);
 
     logger.info({
       action: 'lots.get.success',

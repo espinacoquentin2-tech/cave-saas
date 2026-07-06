@@ -32,12 +32,13 @@ export async function GET(request: Request) {
     const skip = (payload.page - 1) * payload.limit;
     const whereClause = payload.year
       ? {
+          organizationId: actor.organizationId,
           eventDatetime: {
             gte: new Date(`${payload.year}-01-01T00:00:00.000Z`),
             lte: new Date(`${payload.year}-12-31T23:59:59.999Z`),
           },
         }
-      : {};
+      : { organizationId: actor.organizationId };
 
     const events = await prisma.lotEvent.findMany({
       where: whereClause,

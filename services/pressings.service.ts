@@ -8,13 +8,13 @@ import { prisma } from '@/server/shared/prisma';
 export class PressingService {
   
   // 1. CHARGEMENT DU PRESSOIR
-  static async load(data: z.infer<typeof LoadPressSchema>) {
+  static async load(data: z.infer<typeof LoadPressSchema>, organizationId: number) {
     return await prisma.$transaction(async (tx) => {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
       if (existingTx) throw new Error("ALREADY_APPLIED: Chargement déjà enregistré.");
 
-      const press = await tx.pressoir.findUnique({ where: { id: data.pressId } });
-      const apport = await tx.pressing.findUnique({ where: { id: data.apportId } }); 
+      const press = await tx.pressoir.findFirst({ where: { id: data.pressId, organizationId } });
+      const apport = await tx.pressing.findFirst({ where: { id: data.apportId, organizationId } });
 
       if (!press || !apport) throw new Error("Pressoir ou Apport introuvable.");
       if (apport.status !== "EN_ATTENTE") throw new Error("Seul un apport en attente peut être chargé au pressoir.");
@@ -42,14 +42,14 @@ export class PressingService {
 
       // Mise à jour du quai (Apport)
       const remainingWeight = Number(apport.weight) - data.weightToLoad;
-      await tx.pressing.update({
-        where: { id: apport.id },
+      await tx.pressing.updateMany({
+        where: { id: apport.id, organizationId },
         data: { weight: remainingWeight, status: remainingWeight <= 0 ? "PRESSÉ" : "EN_ATTENTE" }
       });
 
       // Mise à jour du Pressoir
-      const updatedPress = await tx.pressoir.update({
-        where: { id: press.id },
+      const pressUpdate = await tx.pressoir.updateMany({
+        where: { id: press.id, organizationId },
         data: {
           status: "EN_COURS",
           loadKg: totalLoad,
@@ -57,6 +57,10 @@ export class PressingService {
           cepage: newCepage,
         }
       });
+      if (pressUpdate.count !== 1) {
+        throw new Error("Pressoir introuvable.");
+      }
+      const updatedPress = await tx.pressoir.findFirstOrThrow({ where: { id: press.id, organizationId } });
 
       await tx.idempotencyRecord.create({ data: { key: data.idempotencyKey, action: "LOAD_PRESS", userId: "System" } });
       return { status: "SUCCESS", press: updatedPress };
@@ -64,12 +68,12 @@ export class PressingService {
   }
 
   // 2. ÉCOULEMENT (Fractionnement)
-  static async ecoulement(data: z.infer<typeof EcoulementSchema>) {
+  static async ecoulement(data: z.infer<typeof EcoulementSchema>, organizationId: number) {
     return await prisma.$transaction(async (tx) => {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
       if (existingTx) throw new Error("ALREADY_APPLIED: Écoulement déjà effectué.");
 
-      const press = await tx.pressoir.findUnique({ where: { id: data.pressId } });
+      const press = await tx.pressoir.findFirst({ where: { id: data.pressId, organizationId } });
       if (!press || press.status === "VIDE") throw new Error("Pressoir vide ou introuvable.");
 
       const millesime = new Date().getFullYear();
@@ -115,6 +119,7 @@ export class PressingService {
           const lot = await tx.lot.create({
             data: {
               technicalCode: code,
+              organizationId,
               businessCode: code,
               year: millesime,
               mainGrapeCode: press.cepage || "MULTI",
@@ -127,9 +132,15 @@ export class PressingService {
             }
           });
 
-          const destinationContainer = await tx.container.update({
-            where: { id: dest.cuveId },
+          const containerUpdate = await tx.container.updateMany({
+            where: { id: dest.cuveId, organizationId },
             data: { status: "PLEIN" },
+          });
+          if (containerUpdate.count !== 1) {
+            throw new Error("Cuve destination introuvable.");
+          }
+          const destinationContainer = await tx.container.findFirstOrThrow({
+            where: { id: dest.cuveId, organizationId },
             select: { id: true, code: true, displayName: true },
           });
           
@@ -138,6 +149,7 @@ export class PressingService {
           const event = await tx.lotEvent.create({
             data: {
               eventType: 'PRESSURAGE',
+              organizationId,
               operatorUserId: user?.id || 1,
               comment: `Jus écoulé du pressoir ${press.nom}`,
               metadata: buildPressurageMetadata(lot.id, destinationContainer, dest.vol, desc),
@@ -163,8 +175,8 @@ export class PressingService {
       await createLot(data.rebechesDests, "R", "Jus de Rebêches (Distillerie)", "REBECHES");
 
       // Libérer la machine
-      await tx.pressoir.update({
-        where: { id: press.id },
+      await tx.pressoir.updateMany({
+        where: { id: press.id, organizationId },
         data: { status: "VIDE", loadKg: null, parcelle: null, cepage: null }
       });
 

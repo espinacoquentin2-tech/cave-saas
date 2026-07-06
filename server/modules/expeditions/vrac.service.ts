@@ -56,7 +56,7 @@ export class VracExpeditionService {
     return user.id;
   }
 
-  static async create(input: CreateVracShipmentInput, userEmail: string) {
+  static async create(input: CreateVracShipmentInput, userEmail: string, organizationId: number) {
     try {
       return await prisma.$transaction(
         async (tx) => {
@@ -68,7 +68,12 @@ export class VracExpeditionService {
           }
 
           const uniqueLotIds = [...new Set(input.lines.map((line) => line.lotId))];
-          const lots = await tx.lot.findMany({ where: { id: { in: uniqueLotIds } } });
+          const lots = await tx.lot.findMany({
+            where: {
+              organizationId,
+              id: { in: uniqueLotIds },
+            },
+          });
           const lotsById = new Map(lots.map((lot) => [lot.id, lot]));
 
           if (lots.length !== uniqueLotIds.length) {
@@ -135,6 +140,7 @@ export class VracExpeditionService {
             const decrementResult = await tx.lot.updateMany({
               where: {
                 id: lot.id,
+                organizationId,
                 status: { in: VracExpeditionService.eligibleLotStatuses },
                 currentVolume: { gte: shipmentVolume },
               },
@@ -203,6 +209,7 @@ export class VracExpeditionService {
 
           const lotEvent = await tx.lotEvent.create({
             data: {
+              organizationId,
               eventType: 'EXPEDITION_VRAC',
               eventDatetime: shipmentDate,
               operatorUserId: operatorId,
@@ -249,6 +256,7 @@ export class VracExpeditionService {
               action: 'BULK_SHIPMENT_EXECUTED',
               details: `Expedition vrac #${lotEvent.id}: ${totalVolumeHl} hL, ${input.lines.length} ligne(s), vers ${input.client} / ${destinationLabel}.`,
               userId: userEmail,
+              organizationId,
             },
           });
 

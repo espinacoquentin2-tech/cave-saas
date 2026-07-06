@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
-    const result = await WorkOrderModuleService.list();
+    const result = await WorkOrderModuleService.list(actor);
 
     return NextResponse.json(
       {

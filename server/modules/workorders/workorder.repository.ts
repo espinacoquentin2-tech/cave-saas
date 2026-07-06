@@ -1,13 +1,13 @@
 import type { Prisma } from '@prisma/client';
 
 export class WorkOrderRepository {
-  static findByPublicId(tx: Prisma.TransactionClient, publicId: string) {
-    return tx.workOrder.findUnique({ where: { publicId } });
+  static findByPublicId(tx: Prisma.TransactionClient, publicId: string, organizationId: number) {
+    return tx.workOrder.findFirst({ where: { publicId, organizationId } });
   }
 
   static cancel(
     tx: Prisma.TransactionClient,
-    publicId: string,
+    id: number,
     data: {
       cancelledAt: Date;
       cancelledBy: string;
@@ -15,7 +15,7 @@ export class WorkOrderRepository {
     },
   ) {
     return tx.workOrder.update({
-      where: { publicId },
+      where: { id },
       data: {
         status: 'CANCELLED',
         ...data,
@@ -25,7 +25,7 @@ export class WorkOrderRepository {
 
   static createAuditLog(
     tx: Prisma.TransactionClient,
-    data: { action: string; details: string; userId: string },
+    data: { action: string; details: string; userId: string; organizationId: number },
   ) {
     return tx.auditLog.create({ data });
   }

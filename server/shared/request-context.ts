@@ -8,9 +8,13 @@ import { prisma } from '@/server/shared/prisma';
 const roleKeySchema = z.enum(['ADMIN', 'CHEF_CAVE', 'CAVISTE', 'LECTURE_SEULE']);
 
 export const requestActorSchema = z.object({
+  userId: z.number().int().positive(),
   email: z.string().trim().email(),
   role: roleKeySchema,
   roleKey: roleKeySchema,
+  organizationId: z.number().int().positive(),
+  organizationSlug: z.string().trim().min(1),
+  organizationName: z.string().trim().min(1),
 });
 
 export type RequestActor = z.infer<typeof requestActorSchema>;
@@ -65,6 +69,16 @@ const getSupabaseAuthClient = () => {
 export const getRequestId = (request: Request) =>
   request.headers.get('x-request-id') ?? crypto.randomUUID();
 
+const DEFAULT_ORGANIZATION_SLUG = 'organisation-demo';
+
+const ensureDevelopmentDefaultOrganization = () =>
+  prisma.organization.upsert({
+    where: { slug: DEFAULT_ORGANIZATION_SLUG },
+    create: { name: 'Organisation Démo', slug: DEFAULT_ORGANIZATION_SLUG },
+    update: {},
+    select: { id: true, name: true, slug: true },
+  });
+
 export const resolveAuthenticatedActor = async (request: Request): Promise<RequestActor> => {
   const token = parseBearerToken(request);
   const supabase = getSupabaseAuthClient();
@@ -79,7 +93,7 @@ export const resolveAuthenticatedActor = async (request: Request): Promise<Reque
 
   let dbUser = await prisma.user.findFirst({
     where: { email: { equals: user.email, mode: 'insensitive' } },
-    select: { email: true, role: true, roleKey: true },
+    select: { id: true, email: true, role: true, roleKey: true },
   });
 
   if (!dbUser) {
@@ -112,12 +126,12 @@ export const resolveAuthenticatedActor = async (request: Request): Promise<Reque
           role: formatRoleLabel(defaultRoleKey),
           roleKey: defaultRoleKey,
         },
-        select: { email: true, role: true, roleKey: true },
+        select: { id: true, email: true, role: true, roleKey: true },
       });
     } catch {
       dbUser = await prisma.user.findFirst({
         where: { email: { equals: user.email, mode: 'insensitive' } },
-        select: { email: true, role: true, roleKey: true },
+        select: { id: true, email: true, role: true, roleKey: true },
       });
     }
   }
@@ -144,20 +158,94 @@ export const resolveAuthenticatedActor = async (request: Request): Promise<Reque
       dbUser = await prisma.user.update({
         where: { email: dbUser.email },
         data: { role: formatRoleLabel('ADMIN'), roleKey: 'ADMIN' },
-        select: { email: true, role: true, roleKey: true },
+        select: { id: true, email: true, role: true, roleKey: true },
       });
     }
   }
 
-  const effectiveRoleKey = resolveEffectiveRoleKey(dbUser);
+  const requestedOrganizationId = request.headers.get('x-organization-id')?.trim();
+  const requestedOrganizationSlug = request.headers.get('x-organization-slug')?.trim();
+
+  let memberships = await prisma.organizationMember.findMany({
+    where: { userId: dbUser.id },
+    include: {
+      organization: {
+        select: { id: true, name: true, slug: true },
+      },
+    },
+    orderBy: { id: 'asc' },
+  });
+
+  if (memberships.length === 0 && process.env.NODE_ENV !== 'production') {
+    const fallbackOrganization = await ensureDevelopmentDefaultOrganization();
+    const fallbackRoleKey = resolveEffectiveRoleKey(dbUser) ?? 'CAVISTE';
+    await prisma.organizationMember.upsert({
+      where: {
+        organizationId_userId: {
+          organizationId: fallbackOrganization.id,
+          userId: dbUser.id,
+        },
+      },
+      create: {
+        organizationId: fallbackOrganization.id,
+        userId: dbUser.id,
+        roleKey: fallbackRoleKey,
+      },
+      update: {
+        roleKey: fallbackRoleKey,
+      },
+    });
+    memberships = [
+      {
+        id: 0,
+        organizationId: fallbackOrganization.id,
+        userId: dbUser.id,
+        roleKey: fallbackRoleKey,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        organization: fallbackOrganization,
+      },
+    ];
+  }
+
+  if (memberships.length === 0) {
+    throw new ForbiddenError('Aucune organisation active pour cet utilisateur.');
+  }
+
+  const selectedMembership =
+    requestedOrganizationId || requestedOrganizationSlug
+      ? memberships.find((membership) => {
+          if (requestedOrganizationId && membership.organizationId === Number(requestedOrganizationId)) {
+            return true;
+          }
+
+          return requestedOrganizationSlug ? membership.organization.slug === requestedOrganizationSlug : false;
+        })
+      : memberships.length === 1
+        ? memberships[0]
+        : null;
+
+  if (!selectedMembership) {
+    if (requestedOrganizationId || requestedOrganizationSlug) {
+      throw new ForbiddenError("Vous n'etes pas membre de l'organisation demandee.");
+    }
+
+    throw new ForbiddenError('Plusieurs organisations disponibles. Fournissez x-organization-id ou x-organization-slug.');
+  }
+
+  const effectiveRoleKey = normalizeRoleKey(selectedMembership.roleKey) ?? resolveEffectiveRoleKey(dbUser);
   if (!effectiveRoleKey) {
     throw new ForbiddenError('Rôle utilisateur invalide.');
   }
 
   return {
+    userId: dbUser.id,
     email: dbUser.email,
     role: effectiveRoleKey,
     roleKey: effectiveRoleKey,
+    organizationId: selectedMembership.organizationId,
+    organizationSlug: selectedMembership.organization.slug,
+    organizationName: selectedMembership.organization.name,
   };
 };
 

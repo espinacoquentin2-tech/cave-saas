@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     assertRole(actor, ['ADMIN', 'CHEF_CAVE', 'CAVISTE', 'LECTURE_SEULE']);
     const { searchParams } = new URL(request.url);
     const payload = listBottleLotsQuerySchema.parse({ id: searchParams.get('id') ?? undefined });
-    const bottles = await BottleModuleService.list(payload);
+    const bottles = await BottleModuleService.list(payload, actor);
 
     logger.info({
       action: 'bottles.get.success',

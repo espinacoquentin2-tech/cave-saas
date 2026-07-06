@@ -5,7 +5,7 @@ import { prisma } from '@/server/shared/prisma';
 
 
 export class TracabiliteService {
-  static async getLineage(data: TraceabilityRequestPayload) {
+  static async getLineage(data: TraceabilityRequestPayload, organizationId: number) {
     const { lotCode, type } = data;
 
     type BulkTraceableLot = Lot & { _type: 'bulk' };
@@ -21,11 +21,11 @@ export class TracabiliteService {
 
     // 1. TROUVER LE LOT CIBLE
     if (type === "bulk") {
-      const lot = await prisma.lot.findFirst({ where: { businessCode: lotCode } });
+      const lot = await prisma.lot.findFirst({ where: { businessCode: lotCode, organizationId } });
       if (!lot) throw new Error("Lot Vrac introuvable.");
       focusedLot = toBulkTraceable(lot);
     } else {
-      const bLot = await prisma.bottleLot.findFirst({ where: { businessCode: lotCode } });
+      const bLot = await prisma.bottleLot.findFirst({ where: { businessCode: lotCode, organizationId } });
       if (!bLot) throw new Error("Lot Bouteille introuvable.");
       focusedLot = toBottleTraceable(bLot);
     }
@@ -33,12 +33,14 @@ export class TracabiliteService {
     // 2. RECHERCHE DES PARENTS (Ascendance)
     if (focusedLot._type === 'bottle') {
       if (focusedLot.sourceLotId) {
-        const parent = await prisma.lot.findUnique({ where: { id: focusedLot.sourceLotId } });
+        const parent = await prisma.lot.findFirst({ where: { id: focusedLot.sourceLotId, organizationId } });
         if (parent) parents.push(toBulkTraceable(parent));
       }
 
       if (focusedLot.sourceBottleLotId) {
-        const parentBottle = await prisma.bottleLot.findUnique({ where: { id: focusedLot.sourceBottleLotId } });
+        const parentBottle = await prisma.bottleLot.findFirst({
+          where: { id: focusedLot.sourceBottleLotId, organizationId },
+        });
         if (parentBottle) parents.push(toBottleTraceable(parentBottle));
       }
       
@@ -48,8 +50,12 @@ export class TracabiliteService {
       // 👈 CORRECTION : Typage explicite du (c: string)
       const sourceCodes = focusedLot.notes.split("Sources:")[1].split(",").map((c: string) => c.trim());
       
-      const parentBulks = await prisma.lot.findMany({ where: { businessCode: { in: sourceCodes } } });
-      const parentBottles = await prisma.bottleLot.findMany({ where: { businessCode: { in: sourceCodes } } });
+      const parentBulks = await prisma.lot.findMany({
+        where: { businessCode: { in: sourceCodes }, organizationId },
+      });
+      const parentBottles = await prisma.bottleLot.findMany({
+        where: { businessCode: { in: sourceCodes }, organizationId },
+      });
       
       parents = [
         ...parentBulks.map((p) => toBulkTraceable(p)),
@@ -61,18 +67,18 @@ export class TracabiliteService {
     
     // Recherche des Vracs enfants (Seul Lot a le champ notes)
     const childBulks = await prisma.lot.findMany({
-      where: { notes: { contains: focusedLot.businessCode } }
+      where: { organizationId, notes: { contains: focusedLot.businessCode } }
     });
     
     // Recherche des Bouteilles enfants
     let childBottles: BottleLot[] = [];
     if (type === "bulk") {
       childBottles = await prisma.bottleLot.findMany({
-        where: { sourceLotId: focusedLot.id }
+        where: { sourceLotId: focusedLot.id, organizationId }
       });
     } else {
       childBottles = await prisma.bottleLot.findMany({
-        where: { sourceBottleLotId: focusedLot.id }
+        where: { sourceBottleLotId: focusedLot.id, organizationId }
       });
     }
 
@@ -85,7 +91,7 @@ export class TracabiliteService {
     if (focusedLot._type === 'bottle') {
       const [shipmentLines, bottleEventLinks] = await Promise.all([
         prisma.shipmentLine.findMany({
-          where: { bottleLotId: focusedLot.id },
+          where: { bottleLotId: focusedLot.id, shipment: { organizationId } },
           include: { shipment: true },
           orderBy: { id: 'desc' },
         }),
@@ -93,6 +99,7 @@ export class TracabiliteService {
           where: {
             bottleLotId: focusedLot.id,
             event: {
+              organizationId,
               eventType: 'EXPEDITION',
             },
           },
@@ -119,7 +126,7 @@ export class TracabiliteService {
       ];
     } else {
       const allExpeditions = await prisma.lotEvent.findMany({
-        where: { eventType: { in: ["EXPEDITION", "EXPEDITION_VRAC"] } }
+        where: { organizationId, eventType: { in: ["EXPEDITION", "EXPEDITION_VRAC"] } }
       });
       expeditions = allExpeditions
         .filter((e) => e.comment && e.comment.includes(focusedLot.businessCode))

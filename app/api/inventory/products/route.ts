@@ -134,7 +134,7 @@ export async function GET(request: Request) {
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
-    const products = await InventoryProductModuleService.list();
+    const products = await InventoryProductModuleService.list(actor);
 
     logger.info({
       action: 'inventory.products.get.success',
@@ -204,4 +204,3 @@ export async function GET(request: Request) {
     );
   }
 }
-

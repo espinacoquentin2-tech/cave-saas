@@ -30,14 +30,15 @@ export class LossRepository {
     return tx.user.findUnique({ where: { email } });
   }
 
-  static findLot(tx: LossTransaction, lotId: number) {
-    return tx.lot.findUnique({ where: { id: lotId } });
+  static findLot(tx: LossTransaction, lotId: number, organizationId: number) {
+    return tx.lot.findFirst({ where: { id: lotId, organizationId } });
   }
 
-  static decrementLot(tx: LossTransaction, lotId: number, amount: Prisma.Decimal) {
+  static decrementLot(tx: LossTransaction, lotId: number, organizationId: number, amount: Prisma.Decimal) {
     return tx.lot.updateMany({
       where: {
         id: lotId,
+        organizationId,
         currentVolume: { gte: amount },
       },
       data: {
@@ -46,12 +47,12 @@ export class LossRepository {
     });
   }
 
-  static updateLotStatus(tx: LossTransaction, lotId: number, status: string) {
-    return tx.lot.update({ where: { id: lotId }, data: { status } });
+  static updateLotStatus(tx: LossTransaction, lotId: number, organizationId: number, status: string) {
+    return tx.lot.updateMany({ where: { id: lotId, organizationId }, data: { status } });
   }
 
-  static updateContainerStatus(tx: LossTransaction, containerId: number, status: string) {
-    return tx.container.update({ where: { id: containerId }, data: { status } });
+  static updateContainerStatus(tx: LossTransaction, containerId: number, organizationId: number, status: string) {
+    return tx.container.updateMany({ where: { id: containerId, organizationId }, data: { status } });
   }
 
   static createLotEvent(
@@ -61,6 +62,7 @@ export class LossRepository {
       operatorUserId: number;
       eventDatetime: Date;
       comment: string;
+      organizationId: number;
     },
   ) {
     return tx.lotEvent.create({ data });
@@ -83,14 +85,15 @@ export class LossRepository {
     });
   }
 
-  static findBottleLot(tx: LossTransaction, bottleLotId: number) {
-    return tx.bottleLot.findUnique({ where: { id: bottleLotId } });
+  static findBottleLot(tx: LossTransaction, bottleLotId: number, organizationId: number) {
+    return tx.bottleLot.findFirst({ where: { id: bottleLotId, organizationId } });
   }
 
-  static decrementBottleLot(tx: LossTransaction, bottleLotId: number, amount: number) {
+  static decrementBottleLot(tx: LossTransaction, bottleLotId: number, organizationId: number, amount: number) {
     return tx.bottleLot.updateMany({
       where: {
         id: bottleLotId,
+        organizationId,
         currentBottleCount: { gte: amount },
       },
       data: {
@@ -99,8 +102,8 @@ export class LossRepository {
     });
   }
 
-  static updateBottleLotStatus(tx: LossTransaction, bottleLotId: number, status: string) {
-    return tx.bottleLot.update({ where: { id: bottleLotId }, data: { status } });
+  static updateBottleLotStatus(tx: LossTransaction, bottleLotId: number, organizationId: number, status: string) {
+    return tx.bottleLot.updateMany({ where: { id: bottleLotId, organizationId }, data: { status } });
   }
 
   static createBottleEvent(
@@ -110,6 +113,7 @@ export class LossRepository {
       operatorUserId: number;
       eventDatetime: Date;
       comment: string;
+      organizationId: number;
     },
   ) {
     return tx.bottleEvent.create({ data });
@@ -133,6 +137,7 @@ export class LossRepository {
       action: string;
       details: string;
       userId: string;
+      organizationId: number;
     },
   ) {
     return tx.auditLog.create({ data });

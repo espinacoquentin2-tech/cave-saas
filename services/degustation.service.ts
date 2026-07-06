@@ -4,7 +4,7 @@ import { prisma } from '@/server/shared/prisma';
 
 
 export class DegustationService {
-  static async saveRecord(data: SaveDegustationPayload, userEmail: string) {
+  static async saveRecord(data: SaveDegustationPayload, userEmail: string, organizationId: number) {
     return await prisma.$transaction(async (tx) => {
       // 1. IDEMPOTENCE
       const existingTx = await tx.idempotencyRecord.findUnique({
@@ -12,6 +12,16 @@ export class DegustationService {
       });
       if (existingTx) {
         throw new Error("ALREADY_APPLIED: Cette dégustation a déjà été enregistrée.");
+      }
+
+      if (data.lotId) {
+        const lot = await tx.lot.findFirst({ where: { id: Number(data.lotId), organizationId }, select: { id: true } });
+        if (!lot) throw new Error('Lot introuvable.');
+      }
+
+      if (data.bottleLotId) {
+        const bottleLot = await tx.bottleLot.findFirst({ where: { id: Number(data.bottleLotId), organizationId }, select: { id: true } });
+        if (!bottleLot) throw new Error('Lot bouteille introuvable.');
       }
 
       // 2. INSERTION DU RELEVÉ
@@ -28,7 +38,8 @@ export class DegustationService {
           noteGlobale: data.noteGlobale,
           sucreTest: data.phase === "DOSAGE" ? data.sucreTest : null, // Sécurité métier
           notes: data.notes,
-          operator: userEmail
+          operator: userEmail,
+          organizationId,
         }
       });
 
@@ -42,7 +53,8 @@ export class DegustationService {
         data: { 
           action: "DEGUSTATION_SAVE", 
           details: `Dégustation (${data.phase}) sur ${targetName} - Note: ${data.noteGlobale || '-'}`, 
-          userId: userEmail 
+          userId: userEmail,
+          organizationId,
         }
       });
 

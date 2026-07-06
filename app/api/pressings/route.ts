@@ -15,7 +15,10 @@ export async function GET(request: Request) {
   try {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, READ_ROLES);
-    const pressings = await prisma.pressing.findMany({ orderBy: { createdAt: 'desc' } });
+    const pressings = await prisma.pressing.findMany({
+      where: { organizationId: actor.organizationId },
+      orderBy: { createdAt: 'desc' },
+    });
     const formatted = pressings.map((pressing) => ({ ...pressing, parcelle: pressing.cru, poids: pressing.weight }));
 
     logger.info({
@@ -64,7 +67,7 @@ export async function POST(request: Request) {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
     const payload = CreateApportSchema.parse(await request.json());
-    const result = await VendangesService.createApport(payload);
+    const result = await VendangesService.createApport(payload, actor.organizationId);
 
     logger.info({
       action: 'pressings.post.success',

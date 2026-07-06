@@ -13,7 +13,7 @@ export async function POST(request: Request) {
     const actor = await resolveAuthenticatedActor(request);
     assertRole(actor, WRITE_ROLES);
     const payload = ProjectionsRequestSchema.parse(await request.json());
-    const projections = await VendangesService.calculateProjections(payload);
+    const projections = await VendangesService.calculateProjections(payload, actor.organizationId);
 
     logger.info({
       action: 'vendanges.calculate.post.success',
@@ -69,4 +69,3 @@ export async function POST(request: Request) {
     );
   }
 }
-

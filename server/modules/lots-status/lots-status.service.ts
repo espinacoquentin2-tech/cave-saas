@@ -6,7 +6,7 @@ import { RequestActor } from '@/server/shared/request-context';
 export class LotStatusModuleService {
   static async update(input: UpdateLotStatusInput, actor: RequestActor) {
     try {
-      return await LotsService.updateStatus(input, actor.email);
+      return await LotsService.updateStatus(input, actor.email, actor.organizationId);
     } catch (error) {
       if (error instanceof BusinessLogicError) {
         throw error;
