@@ -169,3 +169,60 @@ Les données métier créées par l'API doivent ensuite être créées depuis un
 - rôle super admin plateforme ;
 - PostgreSQL RLS ;
 - contraintes uniques métier composées par organisation, par exemple codes de lot ou de contenant.
+
+## Recette sécurité deux organisations
+
+Recette exécutée le 2026-07-06 avec le script `scripts/multitenancy-security-recipe.mjs`.
+Dernier run validé : `20260706133915`.
+Le rapport détaillé est disponible dans `docs/multitenancy-recipe-results.json`.
+
+Organisations utilisées :
+
+- `TEST-ORG-A-CODEX`, slug `test-org-a-codex`, id `2`
+- `TEST-ORG-B-CODEX`, slug `test-org-b-codex`, id `3`
+
+Memberships créés ou confirmés :
+
+- `admin@cave.fr` ADMIN dans A
+- `chef@cave.fr` CHEF_CAVE dans A
+- `caviste@cave.fr` CAVISTE dans A
+- `admin@cave.fr` ADMIN dans B, pour tester le choix explicite par `x-organization-id`
+
+Résultats validés :
+
+- un utilisateur membre de plusieurs organisations sans header `x-organization-id` reçoit `403` avec un message explicite ;
+- lectures A/B isolées sur lots, contenants, produits, workorders, analyses, dégustations et événements ;
+- 16 tentatives inter-organisation refusées sans `500` et sans mutation observée ;
+- opérations valides confirmées dans A : transfert, intrant, tirage, assemblage, analyse, dégustation, FA, expédition vrac ;
+- opérations valides confirmées dans B : transfert, analyse, workorder visible seulement par B ;
+- `AuditLog` est écrit avec l'organisation active sur les opérations API testées.
+
+Refus inter-organisation validés :
+
+- modification lot B depuis A ;
+- modification cuve B depuis A ;
+- modification produit B depuis A ;
+- annulation workOrder B depuis A ;
+- analyse ou dégustation liée à un lot B depuis A ;
+- transfert lot A vers cuve B ;
+- assemblage source A + source B ;
+- intrant produit B sur lot A ;
+- tirage lot A avec produits B ;
+- statut ou expédition BottleLot B depuis A ;
+- expédition vrac lot B depuis A ;
+- confirmation livraison expédition B depuis A ;
+- exécution workOrder B depuis A ;
+- traçabilité lot B depuis A.
+
+Corrections ciblées issues de la recette :
+
+- `/api/tracabilite` renvoie désormais `404` quand un lot est invisible ou introuvable dans l'organisation active, au lieu de transformer ce cas en `500`.
+- Le compteur de codes `TIRAGE-YYYY-NNNN` reste global tant que `bottle_lots.business_code` est unique globalement. Cela évite une collision entre organisations avant la V2 des contraintes uniques composées par organisation.
+
+Commande de déploiement recommandée pour appliquer la migration :
+
+```bash
+npx prisma migrate deploy
+```
+
+Ne pas utiliser `prisma migrate dev` en production.

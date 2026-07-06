@@ -98,7 +98,6 @@ export class TirageRepository {
   static countBottleLotsByTypeAndYear(tx: TirageTransaction, type: string, year: number, organizationId: number) {
     return tx.bottleLot.count({
       where: {
-        organizationId,
         type,
         businessCode: {
           startsWith: `${type}-${year}-`,

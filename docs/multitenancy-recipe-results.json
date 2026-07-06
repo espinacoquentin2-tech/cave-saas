@@ -1,0 +1,859 @@
+{
+  "run": "20260706133915",
+  "prefixes": {
+    "A": "TEST-ORG-A-CODEX",
+    "B": "TEST-ORG-B-CODEX"
+  },
+  "baseUrl": "http://localhost:3000",
+  "migration": {
+    "organizationsTable": true,
+    "organizationMembersTable": true,
+    "demoOrganizationId": 1,
+    "existingMemberships": 12,
+    "scopedTables": [
+      {
+        "table": "containers",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "lots",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "analyses",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "lot_events",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "bottle_lots",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "bottle_events",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "shipments",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "fa_readings",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "pressings",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "Maturation",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "Parcelle",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "Degustation",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "Pressoir",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "products",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "stock_movements",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "audit_logs",
+        "columnExists": true,
+        "nullCount": 0
+      },
+      {
+        "table": "work_orders",
+        "columnExists": true,
+        "nullCount": 0
+      }
+    ],
+    "sequence": {
+      "max_id": 3,
+      "last_value": 7
+    }
+  },
+  "organizations": {
+    "A": {
+      "id": 2,
+      "name": "TEST-ORG-A-CODEX",
+      "slug": "test-org-a-codex",
+      "primaryDomain": null,
+      "createdAt": "2026-07-06T13:33:41.946Z",
+      "updatedAt": "2026-07-06T13:39:17.487Z"
+    },
+    "B": {
+      "id": 3,
+      "name": "TEST-ORG-B-CODEX",
+      "slug": "test-org-b-codex",
+      "primaryDomain": null,
+      "createdAt": "2026-07-06T13:33:42.004Z",
+      "updatedAt": "2026-07-06T13:39:17.545Z"
+    }
+  },
+  "memberships": [
+    {
+      "organizationId": 2,
+      "userId": 2,
+      "roleKey": "ADMIN",
+      "membershipId": 9
+    },
+    {
+      "organizationId": 2,
+      "userId": 3,
+      "roleKey": "CHEF_CAVE",
+      "membershipId": 10
+    },
+    {
+      "organizationId": 2,
+      "userId": 4,
+      "roleKey": "CAVISTE",
+      "membershipId": 11
+    },
+    {
+      "organizationId": 3,
+      "userId": 2,
+      "roleKey": "ADMIN",
+      "membershipId": 12
+    }
+  ],
+  "data": {
+    "A": {
+      "transferSourceContainer": 501,
+      "transferDestContainer": 502,
+      "assemblageMainContainer": 503,
+      "assemblageReserveContainer": 504,
+      "assemblageDestContainer": 505,
+      "intrantContainer": 506,
+      "tirageContainer": 507,
+      "vracContainer": 508,
+      "genericContainer": 509,
+      "transferLot": 409,
+      "assemblageMainLot": 410,
+      "assemblageReserveLot": 411,
+      "intrantLot": 412,
+      "tirageLot": 413,
+      "vracLot": 414,
+      "genericLot": 415,
+      "intrantProduct": 400,
+      "bottleProduct": 401,
+      "capsuleProduct": 402,
+      "biduleProduct": 403,
+      "bottleLot": 195,
+      "analysis": 189,
+      "degustation": 62,
+      "workOrder": 124,
+      "traceEvent": 393
+    },
+    "B": {
+      "transferSourceContainer": 510,
+      "transferDestContainer": 511,
+      "assemblageMainContainer": 512,
+      "assemblageReserveContainer": 513,
+      "assemblageDestContainer": 514,
+      "intrantContainer": 515,
+      "tirageContainer": 516,
+      "vracContainer": 517,
+      "genericContainer": 518,
+      "transferLot": 416,
+      "assemblageMainLot": 417,
+      "assemblageReserveLot": 418,
+      "intrantLot": 419,
+      "tirageLot": 420,
+      "vracLot": 421,
+      "genericLot": 422,
+      "intrantProduct": 404,
+      "bottleProduct": 405,
+      "capsuleProduct": 406,
+      "biduleProduct": 407,
+      "bottleLot": 196,
+      "analysis": 190,
+      "degustation": 63,
+      "workOrder": 125,
+      "traceEvent": 394
+    }
+  },
+  "mutations": [
+    {
+      "at": "2026-07-06T13:39:18.770Z",
+      "type": "db.create.container",
+      "organizationId": 2,
+      "id": 501,
+      "code": "TEST-ORG-A-CODEX-20260706133915-CUVE-TRANSFER-SOURCE"
+    },
+    {
+      "at": "2026-07-06T13:39:18.799Z",
+      "type": "db.create.container",
+      "organizationId": 2,
+      "id": 502,
+      "code": "TEST-ORG-A-CODEX-20260706133915-CUVE-TRANSFER-DEST"
+    },
+    {
+      "at": "2026-07-06T13:39:18.845Z",
+      "type": "db.create.container",
+      "organizationId": 2,
+      "id": 503,
+      "code": "TEST-ORG-A-CODEX-20260706133915-CUVE-ASSEMB-MAIN"
+    },
+    {
+      "at": "2026-07-06T13:39:18.883Z",
+      "type": "db.create.container",
+      "organizationId": 2,
+      "id": 504,
+      "code": "TEST-ORG-A-CODEX-20260706133915-CUVE-ASSEMB-RESERVE"
+    },
+    {
+      "at": "2026-07-06T13:39:18.912Z",
+      "type": "db.create.container",
+      "organizationId": 2,
+      "id": 505,
+      "code": "TEST-ORG-A-CODEX-20260706133915-CUVE-ASSEMB-DEST"
+    },
+    {
+      "at": "2026-07-06T13:39:18.950Z",
+      "type": "db.create.container",
+      "organizationId": 2,
+      "id": 506,
+      "code": "TEST-ORG-A-CODEX-20260706133915-CUVE-INTRANT"
+    },
+    {
+      "at": "2026-07-06T13:39:18.977Z",
+      "type": "db.create.container",
+      "organizationId": 2,
+      "id": 507,
+      "code": "TEST-ORG-A-CODEX-20260706133915-CUVE-TIRAGE"
+    },
+    {
+      "at": "2026-07-06T13:39:19.005Z",
+      "type": "db.create.container",
+      "organizationId": 2,
+      "id": 508,
+      "code": "TEST-ORG-A-CODEX-20260706133915-CUVE-VRAC"
+    },
+    {
+      "at": "2026-07-06T13:39:19.052Z",
+      "type": "db.create.container",
+      "organizationId": 2,
+      "id": 509,
+      "code": "TEST-ORG-A-CODEX-20260706133915-CUVE-GENERIC"
+    },
+    {
+      "at": "2026-07-06T13:39:19.226Z",
+      "type": "db.create.lot",
+      "organizationId": 2,
+      "id": 409,
+      "code": "TEST-ORG-A-CODEX-20260706133915-LOT-TRANSFER",
+      "containerId": 501
+    },
+    {
+      "at": "2026-07-06T13:39:19.352Z",
+      "type": "db.create.lot",
+      "organizationId": 2,
+      "id": 410,
+      "code": "TEST-ORG-A-CODEX-20260706133915-LOT-ASSEMB-MAIN",
+      "containerId": 503
+    },
+    {
+      "at": "2026-07-06T13:39:19.470Z",
+      "type": "db.create.lot",
+      "organizationId": 2,
+      "id": 411,
+      "code": "TEST-ORG-A-CODEX-20260706133915-LOT-ASSEMB-RESERVE",
+      "containerId": 504
+    },
+    {
+      "at": "2026-07-06T13:39:19.591Z",
+      "type": "db.create.lot",
+      "organizationId": 2,
+      "id": 412,
+      "code": "TEST-ORG-A-CODEX-20260706133915-LOT-INTRANT",
+      "containerId": 506
+    },
+    {
+      "at": "2026-07-06T13:39:19.713Z",
+      "type": "db.create.lot",
+      "organizationId": 2,
+      "id": 413,
+      "code": "TEST-ORG-A-CODEX-20260706133915-LOT-TIRAGE",
+      "containerId": 507
+    },
+    {
+      "at": "2026-07-06T13:39:19.822Z",
+      "type": "db.create.lot",
+      "organizationId": 2,
+      "id": 414,
+      "code": "TEST-ORG-A-CODEX-20260706133915-LOT-VRAC",
+      "containerId": 508
+    },
+    {
+      "at": "2026-07-06T13:39:19.934Z",
+      "type": "db.create.lot",
+      "organizationId": 2,
+      "id": 415,
+      "code": "TEST-ORG-A-CODEX-20260706133915-LOT-GENERIC",
+      "containerId": 509
+    },
+    {
+      "at": "2026-07-06T13:39:19.999Z",
+      "type": "db.create.product",
+      "organizationId": 2,
+      "id": 400,
+      "name": "TEST-ORG-A-CODEX-20260706133915-PRODUIT-INTRANT"
+    },
+    {
+      "at": "2026-07-06T13:39:20.060Z",
+      "type": "db.create.product",
+      "organizationId": 2,
+      "id": 401,
+      "name": "TEST-ORG-A-CODEX-20260706133915-PRODUIT-BOUTEILLES"
+    },
+    {
+      "at": "2026-07-06T13:39:20.087Z",
+      "type": "db.create.product",
+      "organizationId": 2,
+      "id": 402,
+      "name": "TEST-ORG-A-CODEX-20260706133915-PRODUIT-CAPSULES"
+    },
+    {
+      "at": "2026-07-06T13:39:20.116Z",
+      "type": "db.create.product",
+      "organizationId": 2,
+      "id": 403,
+      "name": "TEST-ORG-A-CODEX-20260706133915-PRODUIT-BIDULES"
+    },
+    {
+      "at": "2026-07-06T13:39:20.176Z",
+      "type": "db.create.bottleLot",
+      "organizationId": 2,
+      "id": 195,
+      "code": "TEST-ORG-A-CODEX-20260706133915-BOTTLELOT"
+    },
+    {
+      "at": "2026-07-06T13:39:20.266Z",
+      "type": "db.create.analysis",
+      "organizationId": 2,
+      "id": 189,
+      "lotId": 415
+    },
+    {
+      "at": "2026-07-06T13:39:20.334Z",
+      "type": "db.create.degustation",
+      "organizationId": 2,
+      "id": 62,
+      "lotId": 415
+    },
+    {
+      "at": "2026-07-06T13:39:20.406Z",
+      "type": "db.create.workOrder",
+      "organizationId": 2,
+      "id": 124,
+      "publicId": "TEST-ORG-A-CODEX-20260706133915-WO"
+    },
+    {
+      "at": "2026-07-06T13:39:20.512Z",
+      "type": "db.create.lotEvent",
+      "organizationId": 2,
+      "id": 393,
+      "lotId": 415
+    },
+    {
+      "at": "2026-07-06T13:39:20.549Z",
+      "type": "db.create.container",
+      "organizationId": 3,
+      "id": 510,
+      "code": "TEST-ORG-B-CODEX-20260706133915-CUVE-TRANSFER-SOURCE"
+    },
+    {
+      "at": "2026-07-06T13:39:20.599Z",
+      "type": "db.create.container",
+      "organizationId": 3,
+      "id": 511,
+      "code": "TEST-ORG-B-CODEX-20260706133915-CUVE-TRANSFER-DEST"
+    },
+    {
+      "at": "2026-07-06T13:39:20.652Z",
+      "type": "db.create.container",
+      "organizationId": 3,
+      "id": 512,
+      "code": "TEST-ORG-B-CODEX-20260706133915-CUVE-ASSEMB-MAIN"
+    },
+    {
+      "at": "2026-07-06T13:39:20.713Z",
+      "type": "db.create.container",
+      "organizationId": 3,
+      "id": 513,
+      "code": "TEST-ORG-B-CODEX-20260706133915-CUVE-ASSEMB-RESERVE"
+    },
+    {
+      "at": "2026-07-06T13:39:20.742Z",
+      "type": "db.create.container",
+      "organizationId": 3,
+      "id": 514,
+      "code": "TEST-ORG-B-CODEX-20260706133915-CUVE-ASSEMB-DEST"
+    },
+    {
+      "at": "2026-07-06T13:39:20.811Z",
+      "type": "db.create.container",
+      "organizationId": 3,
+      "id": 515,
+      "code": "TEST-ORG-B-CODEX-20260706133915-CUVE-INTRANT"
+    },
+    {
+      "at": "2026-07-06T13:39:20.844Z",
+      "type": "db.create.container",
+      "organizationId": 3,
+      "id": 516,
+      "code": "TEST-ORG-B-CODEX-20260706133915-CUVE-TIRAGE"
+    },
+    {
+      "at": "2026-07-06T13:39:20.873Z",
+      "type": "db.create.container",
+      "organizationId": 3,
+      "id": 517,
+      "code": "TEST-ORG-B-CODEX-20260706133915-CUVE-VRAC"
+    },
+    {
+      "at": "2026-07-06T13:39:20.900Z",
+      "type": "db.create.container",
+      "organizationId": 3,
+      "id": 518,
+      "code": "TEST-ORG-B-CODEX-20260706133915-CUVE-GENERIC"
+    },
+    {
+      "at": "2026-07-06T13:39:21.051Z",
+      "type": "db.create.lot",
+      "organizationId": 3,
+      "id": 416,
+      "code": "TEST-ORG-B-CODEX-20260706133915-LOT-TRANSFER",
+      "containerId": 510
+    },
+    {
+      "at": "2026-07-06T13:39:21.163Z",
+      "type": "db.create.lot",
+      "organizationId": 3,
+      "id": 417,
+      "code": "TEST-ORG-B-CODEX-20260706133915-LOT-ASSEMB-MAIN",
+      "containerId": 512
+    },
+    {
+      "at": "2026-07-06T13:39:21.273Z",
+      "type": "db.create.lot",
+      "organizationId": 3,
+      "id": 418,
+      "code": "TEST-ORG-B-CODEX-20260706133915-LOT-ASSEMB-RESERVE",
+      "containerId": 513
+    },
+    {
+      "at": "2026-07-06T13:39:21.382Z",
+      "type": "db.create.lot",
+      "organizationId": 3,
+      "id": 419,
+      "code": "TEST-ORG-B-CODEX-20260706133915-LOT-INTRANT",
+      "containerId": 515
+    },
+    {
+      "at": "2026-07-06T13:39:21.482Z",
+      "type": "db.create.lot",
+      "organizationId": 3,
+      "id": 420,
+      "code": "TEST-ORG-B-CODEX-20260706133915-LOT-TIRAGE",
+      "containerId": 516
+    },
+    {
+      "at": "2026-07-06T13:39:21.636Z",
+      "type": "db.create.lot",
+      "organizationId": 3,
+      "id": 421,
+      "code": "TEST-ORG-B-CODEX-20260706133915-LOT-VRAC",
+      "containerId": 517
+    },
+    {
+      "at": "2026-07-06T13:39:21.738Z",
+      "type": "db.create.lot",
+      "organizationId": 3,
+      "id": 422,
+      "code": "TEST-ORG-B-CODEX-20260706133915-LOT-GENERIC",
+      "containerId": 518
+    },
+    {
+      "at": "2026-07-06T13:39:21.765Z",
+      "type": "db.create.product",
+      "organizationId": 3,
+      "id": 404,
+      "name": "TEST-ORG-B-CODEX-20260706133915-PRODUIT-INTRANT"
+    },
+    {
+      "at": "2026-07-06T13:39:21.793Z",
+      "type": "db.create.product",
+      "organizationId": 3,
+      "id": 405,
+      "name": "TEST-ORG-B-CODEX-20260706133915-PRODUIT-BOUTEILLES"
+    },
+    {
+      "at": "2026-07-06T13:39:21.823Z",
+      "type": "db.create.product",
+      "organizationId": 3,
+      "id": 406,
+      "name": "TEST-ORG-B-CODEX-20260706133915-PRODUIT-CAPSULES"
+    },
+    {
+      "at": "2026-07-06T13:39:21.852Z",
+      "type": "db.create.product",
+      "organizationId": 3,
+      "id": 407,
+      "name": "TEST-ORG-B-CODEX-20260706133915-PRODUIT-BIDULES"
+    },
+    {
+      "at": "2026-07-06T13:39:21.881Z",
+      "type": "db.create.bottleLot",
+      "organizationId": 3,
+      "id": 196,
+      "code": "TEST-ORG-B-CODEX-20260706133915-BOTTLELOT"
+    },
+    {
+      "at": "2026-07-06T13:39:21.917Z",
+      "type": "db.create.analysis",
+      "organizationId": 3,
+      "id": 190,
+      "lotId": 422
+    },
+    {
+      "at": "2026-07-06T13:39:21.945Z",
+      "type": "db.create.degustation",
+      "organizationId": 3,
+      "id": 63,
+      "lotId": 422
+    },
+    {
+      "at": "2026-07-06T13:39:21.973Z",
+      "type": "db.create.workOrder",
+      "organizationId": 3,
+      "id": 125,
+      "publicId": "TEST-ORG-B-CODEX-20260706133915-WO"
+    },
+    {
+      "at": "2026-07-06T13:39:22.033Z",
+      "type": "db.create.lotEvent",
+      "organizationId": 3,
+      "id": 394,
+      "lotId": 422
+    },
+    {
+      "at": "2026-07-06T13:39:22.148Z",
+      "type": "db.create.bottleEvent.expedition",
+      "organizationId": 3,
+      "id": 118
+    }
+  ],
+  "reads": [
+    {
+      "at": "2026-07-06T13:39:23.955Z",
+      "route": "/api/lots",
+      "organizationId": 2,
+      "status": 200,
+      "field": "businessCode"
+    },
+    {
+      "at": "2026-07-06T13:39:24.337Z",
+      "route": "/api/lots",
+      "organizationId": 3,
+      "status": 200,
+      "field": "businessCode"
+    },
+    {
+      "at": "2026-07-06T13:39:24.666Z",
+      "route": "/api/containers",
+      "organizationId": 2,
+      "status": 200,
+      "field": "code"
+    },
+    {
+      "at": "2026-07-06T13:39:24.924Z",
+      "route": "/api/containers",
+      "organizationId": 3,
+      "status": 200,
+      "field": "code"
+    },
+    {
+      "at": "2026-07-06T13:39:25.238Z",
+      "route": "/api/inventory/products",
+      "organizationId": 2,
+      "status": 200,
+      "field": "name"
+    },
+    {
+      "at": "2026-07-06T13:39:25.471Z",
+      "route": "/api/inventory/products",
+      "organizationId": 3,
+      "status": 200,
+      "field": "name"
+    },
+    {
+      "at": "2026-07-06T13:39:25.780Z",
+      "route": "/api/analyses",
+      "organizationId": 2,
+      "status": 200,
+      "field": "notes"
+    },
+    {
+      "at": "2026-07-06T13:39:25.977Z",
+      "route": "/api/analyses",
+      "organizationId": 3,
+      "status": 200,
+      "field": "notes"
+    },
+    {
+      "at": "2026-07-06T13:39:26.316Z",
+      "route": "/api/degustations",
+      "organizationId": 2,
+      "status": 200,
+      "field": "notes"
+    },
+    {
+      "at": "2026-07-06T13:39:26.561Z",
+      "route": "/api/degustations",
+      "organizationId": 3,
+      "status": 200,
+      "field": "notes"
+    },
+    {
+      "at": "2026-07-06T13:39:27.094Z",
+      "route": "/api/events",
+      "organizationId": 2,
+      "status": 200,
+      "field": "comment"
+    },
+    {
+      "at": "2026-07-06T13:39:27.439Z",
+      "route": "/api/events",
+      "organizationId": 3,
+      "status": 200,
+      "field": "comment"
+    },
+    {
+      "at": "2026-07-06T13:39:27.747Z",
+      "route": "/api/workorders",
+      "organizationId": 2,
+      "status": 200
+    }
+  ],
+  "refusals": [
+    {
+      "at": "2026-07-06T13:39:29.017Z",
+      "label": "modifier lot B depuis A",
+      "method": "POST",
+      "route": "/api/lots/volume",
+      "status": 404
+    },
+    {
+      "at": "2026-07-06T13:39:29.867Z",
+      "label": "modifier cuve B depuis A",
+      "method": "PUT",
+      "route": "/api/containers",
+      "status": 404
+    },
+    {
+      "at": "2026-07-06T13:39:30.952Z",
+      "label": "modifier produit B depuis A",
+      "method": "POST",
+      "route": "/api/inventory/movements",
+      "status": 404
+    },
+    {
+      "at": "2026-07-06T13:39:32.797Z",
+      "label": "annuler workOrder B depuis A",
+      "method": "POST",
+      "route": "/api/workorders/TEST-ORG-B-CODEX-20260706133915-WO/cancel",
+      "status": 404
+    },
+    {
+      "at": "2026-07-06T13:39:33.731Z",
+      "label": "modifier analyse B depuis A",
+      "method": "POST",
+      "route": "/api/analyses",
+      "status": 400
+    },
+    {
+      "at": "2026-07-06T13:39:34.594Z",
+      "label": "créer dégustation A sur lot B",
+      "method": "POST",
+      "route": "/api/degustations",
+      "status": 400
+    },
+    {
+      "at": "2026-07-06T13:39:35.639Z",
+      "label": "transfert lot A vers cuve B",
+      "method": "POST",
+      "route": "/api/transfers",
+      "status": 404
+    },
+    {
+      "at": "2026-07-06T13:39:36.918Z",
+      "label": "assemblage source A + B",
+      "method": "POST",
+      "route": "/api/assemblages",
+      "status": 404
+    },
+    {
+      "at": "2026-07-06T13:39:37.928Z",
+      "label": "intrant produit B sur lot A",
+      "method": "POST",
+      "route": "/api/lots/intrants",
+      "status": 404
+    },
+    {
+      "at": "2026-07-06T13:39:39.176Z",
+      "label": "tirage lot A avec produits B",
+      "method": "POST",
+      "route": "/api/tirage",
+      "status": 404
+    },
+    {
+      "at": "2026-07-06T13:39:40.195Z",
+      "label": "statut BottleLot B depuis A",
+      "method": "POST",
+      "route": "/api/bottles/status",
+      "status": 404
+    },
+    {
+      "at": "2026-07-06T13:39:40.996Z",
+      "label": "expédier BottleLot B depuis A",
+      "method": "POST",
+      "route": "/api/bottles/expedier",
+      "status": 404
+    },
+    {
+      "at": "2026-07-06T13:39:41.886Z",
+      "label": "expédition vrac lot B depuis A",
+      "method": "POST",
+      "route": "/api/expeditions/vrac",
+      "status": 404
+    },
+    {
+      "at": "2026-07-06T13:39:42.710Z",
+      "label": "confirmer expédition B depuis A",
+      "method": "POST",
+      "route": "/api/expeditions/confirm-delivery",
+      "status": 404
+    },
+    {
+      "at": "2026-07-06T13:39:44.547Z",
+      "label": "exécuter workOrder B depuis A",
+      "method": "PATCH",
+      "route": "/api/workorders/TEST-ORG-B-CODEX-20260706133915-WO",
+      "status": 404
+    },
+    {
+      "at": "2026-07-06T13:39:45.341Z",
+      "label": "tracer lot B depuis A",
+      "method": "POST",
+      "route": "/api/tracabilite",
+      "status": 404
+    }
+  ],
+  "validOperations": [
+    {
+      "at": "2026-07-06T13:39:46.375Z",
+      "label": "transfert valide A",
+      "status": 201
+    },
+    {
+      "at": "2026-07-06T13:39:47.242Z",
+      "label": "intrant valide A",
+      "status": 201
+    },
+    {
+      "at": "2026-07-06T13:39:48.725Z",
+      "label": "tirage valide A",
+      "status": 201
+    },
+    {
+      "at": "2026-07-06T13:39:50.353Z",
+      "label": "assemblage valide A",
+      "status": 201
+    },
+    {
+      "at": "2026-07-06T13:39:50.831Z",
+      "label": "analyse valide A",
+      "status": 201
+    },
+    {
+      "at": "2026-07-06T13:39:51.261Z",
+      "label": "dégustation valide A",
+      "status": 201
+    },
+    {
+      "at": "2026-07-06T13:39:51.723Z",
+      "label": "FA valide A",
+      "status": 201
+    },
+    {
+      "at": "2026-07-06T13:39:52.411Z",
+      "label": "expédition vrac valide A",
+      "status": 201
+    },
+    {
+      "at": "2026-07-06T13:39:53.894Z",
+      "label": "transfert valide B",
+      "status": 201
+    },
+    {
+      "at": "2026-07-06T13:39:54.322Z",
+      "label": "analyse valide B",
+      "status": 201
+    },
+    {
+      "at": "2026-07-06T13:39:54.589Z",
+      "label": "workOrder B visible seulement par B",
+      "status": 200
+    }
+  ],
+  "frontendHeaders": [
+    {
+      "at": "2026-07-06T13:39:23.450Z",
+      "case": "multi-membership without x-organization-id",
+      "status": 403,
+      "message": "Plusieurs organisations disponibles. Fournissez x-organization-id ou x-organization-slug."
+    }
+  ],
+  "fixesNeeded": [],
+  "auditLogsAfterApi": [
+    {
+      "_count": 6,
+      "organizationId": 2
+    },
+    {
+      "_count": 2,
+      "organizationId": 3
+    }
+  ]
+}

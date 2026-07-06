@@ -57,6 +57,19 @@ export async function POST(request: Request) {
       );
     }
 
+    if (error instanceof Error && error.message.toLowerCase().includes('introuvable')) {
+      logger.warn({
+        action: 'tracabilite.post.not_found',
+        requestId,
+        details: { message: error.message },
+      });
+
+      return NextResponse.json(
+        { error: 'NOT_FOUND', message: error.message },
+        { status: 404, headers: { 'x-request-id': requestId } },
+      );
+    }
+
     logger.error({
       action: 'tracabilite.post.unhandled_error',
       requestId,
