@@ -1,0 +1,388 @@
+{
+  "ok": true,
+  "runId": "20260706214807",
+  "baseUrl": "http://localhost:3000",
+  "phases": {
+    "initialDb": {
+      "organizations": {
+        "A": 2,
+        "B": 3
+      },
+      "users": [
+        {
+          "email": "admin-a@cave.test",
+          "roleKey": "ADMIN",
+          "organizationId": 2
+        },
+        {
+          "email": "admin-b@cave.test",
+          "roleKey": "ADMIN",
+          "organizationId": 3
+        },
+        {
+          "email": "caviste-a@cave.test",
+          "roleKey": "CAVISTE",
+          "organizationId": 2
+        },
+        {
+          "email": "caviste-b@cave.test",
+          "roleKey": "CAVISTE",
+          "organizationId": 3
+        },
+        {
+          "email": "chef-a@cave.test",
+          "roleKey": "CHEF_CAVE",
+          "organizationId": 2
+        },
+        {
+          "email": "chef-b@cave.test",
+          "roleKey": "CHEF_CAVE",
+          "organizationId": 3
+        },
+        {
+          "email": "lecture-a@cave.test",
+          "roleKey": "LECTURE_SEULE",
+          "organizationId": 2
+        },
+        {
+          "email": "lecture-b@cave.test",
+          "roleKey": "LECTURE_SEULE",
+          "organizationId": 3
+        }
+      ],
+      "duplicateMemberships": []
+    },
+    "activityAndTasks": {
+      "A": true,
+      "B": true
+    },
+    "finalDb": {
+      "scopedChecks": {
+        "A": {
+          "containersWrongOrg": 0,
+          "lotsWrongOrg": 0,
+          "productsWrongOrg": 0,
+          "workOrdersWrongOrg": 0
+        },
+        "B": {
+          "containersWrongOrg": 0,
+          "lotsWrongOrg": 0,
+          "productsWrongOrg": 0,
+          "workOrdersWrongOrg": 0
+        }
+      },
+      "duplicateMemberships": []
+    }
+  },
+  "accounts": [
+    {
+      "email": "admin-a@cave.test",
+      "roleKey": "ADMIN",
+      "organization": "TEST-ORG-A-CODEX",
+      "status": 200
+    },
+    {
+      "email": "chef-a@cave.test",
+      "roleKey": "CHEF_CAVE",
+      "organization": "TEST-ORG-A-CODEX",
+      "status": 200
+    },
+    {
+      "email": "caviste-a@cave.test",
+      "roleKey": "CAVISTE",
+      "organization": "TEST-ORG-A-CODEX",
+      "status": 200
+    },
+    {
+      "email": "lecture-a@cave.test",
+      "roleKey": "LECTURE_SEULE",
+      "organization": "TEST-ORG-A-CODEX",
+      "status": 200
+    },
+    {
+      "email": "admin-b@cave.test",
+      "roleKey": "ADMIN",
+      "organization": "TEST-ORG-B-CODEX",
+      "status": 200
+    },
+    {
+      "email": "chef-b@cave.test",
+      "roleKey": "CHEF_CAVE",
+      "organization": "TEST-ORG-B-CODEX",
+      "status": 200
+    },
+    {
+      "email": "caviste-b@cave.test",
+      "roleKey": "CAVISTE",
+      "organization": "TEST-ORG-B-CODEX",
+      "status": 200
+    },
+    {
+      "email": "lecture-b@cave.test",
+      "roleKey": "LECTURE_SEULE",
+      "organization": "TEST-ORG-B-CODEX",
+      "status": 200
+    }
+  ],
+  "reads": [
+    {
+      "organization": "A",
+      "route": "/api/lots",
+      "status": 200,
+      "expected": "DEMO-DOMAINE-A",
+      "forbiddenAbsent": true
+    },
+    {
+      "organization": "A",
+      "route": "/api/containers",
+      "status": 200,
+      "expected": "DEMO-DOMAINE-A",
+      "forbiddenAbsent": true
+    },
+    {
+      "organization": "A",
+      "route": "/api/inventory/products",
+      "status": 200,
+      "expected": "DEMO-DOMAINE-A",
+      "forbiddenAbsent": true
+    },
+    {
+      "organization": "A",
+      "route": "/api/workorders",
+      "status": 200,
+      "expected": "DEMO-DOMAINE-A",
+      "forbiddenAbsent": true
+    },
+    {
+      "organization": "A",
+      "route": "/api/analyses",
+      "status": 200,
+      "expected": "DEMO-DOMAINE-A",
+      "forbiddenAbsent": true
+    },
+    {
+      "organization": "A",
+      "route": "/api/degustations",
+      "status": 200,
+      "expected": "DEMO-DOMAINE-A",
+      "forbiddenAbsent": true
+    },
+    {
+      "organization": "A",
+      "route": "/api/events?limit=200",
+      "status": 200,
+      "expected": "DEMO-DOMAINE-A",
+      "forbiddenAbsent": true
+    },
+    {
+      "organization": "B",
+      "route": "/api/lots",
+      "status": 200,
+      "expected": "DEMO-DOMAINE-B",
+      "forbiddenAbsent": true
+    },
+    {
+      "organization": "B",
+      "route": "/api/containers",
+      "status": 200,
+      "expected": "DEMO-DOMAINE-B",
+      "forbiddenAbsent": true
+    },
+    {
+      "organization": "B",
+      "route": "/api/inventory/products",
+      "status": 200,
+      "expected": "DEMO-DOMAINE-B",
+      "forbiddenAbsent": true
+    },
+    {
+      "organization": "B",
+      "route": "/api/workorders",
+      "status": 200,
+      "expected": "DEMO-DOMAINE-B",
+      "forbiddenAbsent": true
+    },
+    {
+      "organization": "B",
+      "route": "/api/analyses",
+      "status": 200,
+      "expected": "DEMO-DOMAINE-B",
+      "forbiddenAbsent": true
+    },
+    {
+      "organization": "B",
+      "route": "/api/degustations",
+      "status": 200,
+      "expected": "DEMO-DOMAINE-B",
+      "forbiddenAbsent": true
+    },
+    {
+      "organization": "B",
+      "route": "/api/events?limit=200",
+      "status": 200,
+      "expected": "DEMO-DOMAINE-B",
+      "forbiddenAbsent": true
+    }
+  ],
+  "mutations": [
+    {
+      "organization": "A",
+      "prefix": "TEST-A-RUN-CODEX",
+      "sourceContainerId": 560,
+      "destContainerId": 561,
+      "productId": 434,
+      "lotId": 458,
+      "workOrderId": "WO-5150d125-8bf9-4445-b54a-df4706b7a3c5",
+      "transferStatus": 201,
+      "completedStatus": 200
+    },
+    {
+      "organization": "B",
+      "prefix": "TEST-B-RUN-CODEX",
+      "sourceContainerId": 562,
+      "destContainerId": 563,
+      "productId": 435,
+      "lotId": 460,
+      "workOrderId": "WO-fc114701-509a-4e16-9bcf-b85f0a3d5405",
+      "transferStatus": 201,
+      "completedStatus": 200
+    }
+  ],
+  "refusals": [
+    {
+      "actor": "admin-a@cave.test",
+      "case": "forced x-organization-id on /api/me",
+      "status": 403
+    },
+    {
+      "actor": "chef-a@cave.test",
+      "case": "forced x-organization-id on /api/me",
+      "status": 403
+    },
+    {
+      "actor": "caviste-a@cave.test",
+      "case": "forced x-organization-id on /api/me",
+      "status": 403
+    },
+    {
+      "actor": "lecture-a@cave.test",
+      "case": "forced x-organization-id on /api/me",
+      "status": 403
+    },
+    {
+      "actor": "admin-b@cave.test",
+      "case": "forced x-organization-id on /api/me",
+      "status": 403
+    },
+    {
+      "actor": "chef-b@cave.test",
+      "case": "forced x-organization-id on /api/me",
+      "status": 403
+    },
+    {
+      "actor": "caviste-b@cave.test",
+      "case": "forced x-organization-id on /api/me",
+      "status": 403
+    },
+    {
+      "actor": "lecture-b@cave.test",
+      "case": "forced x-organization-id on /api/me",
+      "status": 403
+    },
+    {
+      "actor": "lecture-a@cave.test",
+      "organization": "A",
+      "case": "read-only container creation",
+      "status": 403
+    },
+    {
+      "actor": "lecture-b@cave.test",
+      "organization": "B",
+      "case": "read-only container creation",
+      "status": 403
+    },
+    {
+      "actorOrganization": "A",
+      "targetOrganization": "B",
+      "case": "modifier un lot B",
+      "route": "/api/lots/volume",
+      "status": 404
+    },
+    {
+      "actorOrganization": "A",
+      "targetOrganization": "B",
+      "case": "modifier une cuve B",
+      "route": "/api/containers",
+      "status": 404
+    },
+    {
+      "actorOrganization": "A",
+      "targetOrganization": "B",
+      "case": "utiliser un produit B",
+      "route": "/api/inventory/movements",
+      "status": 404
+    },
+    {
+      "actorOrganization": "A",
+      "targetOrganization": "B",
+      "case": "exécuter un workOrder B",
+      "route": "/api/workorders/WO-fc114701-509a-4e16-9bcf-b85f0a3d5405",
+      "status": 404
+    },
+    {
+      "actorOrganization": "A",
+      "targetOrganization": "B",
+      "case": "consulter la traçabilité d’un lot B",
+      "route": "/api/tracabilite",
+      "status": 404
+    },
+    {
+      "actorOrganization": "B",
+      "targetOrganization": "A",
+      "case": "modifier un lot A",
+      "route": "/api/lots/volume",
+      "status": 404
+    },
+    {
+      "actorOrganization": "B",
+      "targetOrganization": "A",
+      "case": "modifier une cuve A",
+      "route": "/api/containers",
+      "status": 404
+    },
+    {
+      "actorOrganization": "B",
+      "targetOrganization": "A",
+      "case": "utiliser un produit A",
+      "route": "/api/inventory/movements",
+      "status": 404
+    },
+    {
+      "actorOrganization": "B",
+      "targetOrganization": "A",
+      "case": "exécuter un workOrder A",
+      "route": "/api/workorders/WO-5150d125-8bf9-4445-b54a-df4706b7a3c5",
+      "status": 404
+    },
+    {
+      "actorOrganization": "B",
+      "targetOrganization": "A",
+      "case": "consulter la traçabilité d’un lot A",
+      "route": "/api/tracabilite",
+      "status": 404
+    }
+  ],
+  "ui": [
+    {
+      "organization": "A",
+      "dashboard": true,
+      "cuverieLots": true
+    },
+    {
+      "organization": "B",
+      "dashboard": true,
+      "cuverieLots": true
+    }
+  ],
+  "risks": []
+}

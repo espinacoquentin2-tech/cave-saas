@@ -151,6 +151,45 @@ Après nettoyage, aucun utilisateur n'a plusieurs memberships et aucun utilisate
 
 Les comptes E2E actuels sont mono-organisation. Le fichier `docs/multitenancy-recipe-results.json` est un rapport historique d'une phase antérieure qui testait un multi-org technique via header ; il est remplacé par la règle stricte décrite ici.
 
+### Recette A/B stricte du 2026-07-06
+
+Le script `scripts/codex-tenant-ab-recipe.mjs` a ete ajoute pour tester la regle stricte:
+
+- un utilisateur = une organisation;
+- aucune selection d'organisation par UI;
+- aucun header `x-organization-id` accepte;
+- organisation deduite de `/api/me`.
+
+Run valide: `20260706214807`.
+
+Rapport machine: `docs/codex-tenant-ab-recipe-results.json`.
+
+Comptes testes:
+
+- A: `admin-a@cave.test`, `chef-a@cave.test`, `caviste-a@cave.test`, `lecture-a@cave.test`;
+- B: `admin-b@cave.test`, `chef-b@cave.test`, `caviste-b@cave.test`, `lecture-b@cave.test`.
+
+Mutations reelles effectuees via API:
+
+- A: deux cuves `TEST-A-RUN-CODEX`, un produit, un lot, un work order de soutirage, un transfert et une cloture `DONE`;
+- B: la meme sequence avec `TEST-B-RUN-CODEX`.
+
+Pendant la mise au point du harnais, les runs `20260706214149`, `20260706214243`, `20260706214444`, `20260706214527`, `20260706214651` et `20260706214807` ont cree des donnees prefixees sans suppression. Inventaire final: pour A, 12 cuves, 12 lots, 6 produits et 6 work orders; pour B, 12 cuves, 12 lots, 6 produits et 6 work orders. Les controles DB finaux confirment que ces donnees restent rattachees a la bonne organisation.
+
+Resultats:
+
+- `/api/me` retourne `TEST-ORG-A-CODEX` pour tous les comptes A et `TEST-ORG-B-CODEX` pour tous les comptes B;
+- `x-organization-id` force retourne `403` pour chaque compte teste;
+- A ne voit pas les donnees `DEMO-DOMAINE-B` ou `TEST-B-RUN-CODEX`;
+- B ne voit pas les donnees `DEMO-DOMAINE-A` ou `TEST-A-RUN-CODEX`;
+- les taches, evenements, compteurs UI et activites recentes restent separes par organisation;
+- les tentatives de modification de lot, contenant, produit, work order et tracabilite de l'autre organisation retournent `403` ou `404`, jamais `200` ni `500`;
+- les snapshots DB avant/apres refus restent inchanges;
+- l'UI production valide l'espace A puis B, sans selecteur d'organisation, sans donnees croisees visibles dans Cuverie/Lots et sans overlay Next;
+- la requete de doublons `organization_members` est vide en fin de recette.
+
+Risque restant: la recette cree des donnees de test prefixees et ne les supprime pas volontairement. Les contraintes uniques metier composees par organisation restent listees en limite V2.
+
 ## Limites V2
 
 - super admin plateforme ;

@@ -162,3 +162,41 @@ Validation realisee:
 - Les lectures HTTP admin A/B sur lots, contenants, produits et work orders ne melangent pas les prefixes `DEMO-DOMAINE-A` et `DEMO-DOMAINE-B`.
 - Un appel avec `x-organization-id` force est refuse en `403`.
 - L'UI affiche `Espace : TEST-ORG-A-CODEX` pour admin A et `Espace : TEST-ORG-B-CODEX` pour admin B, sans selecteur d'organisation visible.
+
+## Recette A/B Codex du 2026-07-06
+
+Rapport detaille: `docs/codex-tenant-ab-recipe-results.json`.
+
+Run valide: `20260706214807`.
+
+Actions reelles documentees:
+
+- Organisation A: creation API de deux cuves `TEST-A-RUN-CODEX`, d'un produit stock, d'un lot, d'un ordre de travail de soutirage, execution par transfert puis cloture `DONE`.
+- Organisation B: meme recette avec le prefixe `TEST-B-RUN-CODEX`.
+
+Runs de mise au point ayant aussi cree des donnees prefixees sans suppression:
+
+- `20260706214149`
+- `20260706214243`
+- `20260706214444`
+- `20260706214527`
+- `20260706214651`
+- `20260706214807`
+
+Inventaire final des donnees prefixees creees pendant cette recette:
+
+- A: 12 cuves, 12 lots, 6 produits, 6 work orders, tous rattaches a `TEST-ORG-A-CODEX`;
+- B: 12 cuves, 12 lots, 6 produits, 6 work orders, tous rattaches a `TEST-ORG-B-CODEX`.
+
+Controles valides:
+
+- les 8 comptes E2E retournent leur organisation unique via `/api/me`;
+- `x-organization-id` force est refuse en `403` pour chaque compte;
+- les lectures A sur lots, contenants, produits, work orders, analyses, degustations et evenements contiennent A sans B;
+- les lectures B contiennent B sans A;
+- les mutations `LECTURE_SEULE` sont refusees en `403`;
+- 20 tentatives anti-telescopage A vers B et B vers A sont refusees en `403` ou `404`, sans `500` et sans mutation partielle;
+- l'UI production affiche l'espace A puis l'espace B, les donnees propres dans Cuverie/Lots, aucun selecteur d'organisation et aucun overlay Next;
+- les controles DB finaux ne trouvent aucun objet `TEST-A-RUN-CODEX` dans B, aucun objet `TEST-B-RUN-CODEX` dans A et aucun utilisateur multi-membership.
+
+Le script de recette ne fait aucun reset, aucun reseed, aucune suppression et ne modifie pas `dosage_value`.
