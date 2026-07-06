@@ -139,35 +139,41 @@ function LoginScreen({ onLogin }: LoginScreenProps) {
         return;
       }
 
-      let foundUser = findUserByEmail(state.users || [], authUser.email);
       const accessToken = data.session?.access_token;
+      let me: any = null;
 
-      if (!foundUser && accessToken) {
+      if (accessToken) {
         try {
-          const response = await fetch('/api/users?login=1', {
+          const response = await fetch('/api/me', {
             method: 'GET',
             headers: buildApiHeaders({ accessToken }),
           });
 
           if (response.ok) {
-            const payload = unwrapApiData(await response.json().catch(() => []));
-            if (Array.isArray(payload)) {
-              foundUser = findUserByEmail(payload, authUser.email);
-            }
+            me = await response.json().catch(() => null);
+          } else {
+            const payload = await response.json().catch(() => ({}));
+            setErr(extractApiErrorMessage(payload, "Configuration utilisateur invalide."));
+            setLoading(false);
+            return;
           }
         } catch {
-          // La synchronisation globale reprendra au chargement complet de l'application.
+          setErr("Impossible de charger l'organisation courante.");
+          setLoading(false);
+          return;
         }
       }
 
       onLogin({
         ...toUiUser({
           id: authUser.id,
-          email: authUser.email,
-          name: foundUser?.name,
-          role: foundUser?.role,
-          roleKey: foundUser?.roleKey,
+          email: me?.user?.email ?? authUser.email,
+          name: me?.user?.email ?? authUser.email,
+          roleKey: me?.roleKey,
         }),
+        organizationId: me?.organization?.id,
+        organizationSlug: me?.organization?.slug,
+        organizationName: me?.organization?.name,
         accessToken,
       });
     }
@@ -4809,6 +4815,7 @@ export default function App() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
   const [lastResetSummary, setLastResetSummary] = useState<any | null>(null);
+  const [configurationError, setConfigurationError] = useState<string | null>(null);
   
   const [openMenus, setOpenMenus] = useState<number[]>([1, 2, 3]); 
   const [adminOpen, setAdminOpen] = useState(false);     
@@ -4820,6 +4827,7 @@ export default function App() {
     const opts: RequestInit = { cache: 'no-store' };
 
     try {
+      setConfigurationError(null);
       const safeMap = (data: any, mapFn: (item: any) => any) => Array.isArray(data) ? data.map(mapFn) : [];
 
       const fetchSafe = async (url: string) => {
@@ -5123,18 +5131,36 @@ export default function App() {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
-      const email = session.user.email || "";
-        const name = email.split('@')[0].toUpperCase();
-        
-        setUser({
-          id: session.user.id, 
-          email: email, 
-          name: name, 
-          role: "Utilisateur",
-          roleKey: null,
-          initials: name.substring(0, 2),
-          accessToken: session.access_token,
-        });
+        try {
+          const response = await fetch('/api/me', {
+            method: 'GET',
+            headers: buildApiHeaders({ accessToken: session.access_token }),
+          });
+          const payload = await response.json().catch(() => ({}));
+
+          if (!response.ok) {
+            setConfigurationError(extractApiErrorMessage(payload, "Configuration utilisateur invalide."));
+            setUser(null);
+            return;
+          }
+
+          setConfigurationError(null);
+          setUser({
+            ...toUiUser({
+              id: session.user.id,
+              email: payload?.user?.email || session.user.email || "",
+              name: payload?.user?.email || session.user.email || "",
+              roleKey: payload?.roleKey,
+            }),
+            organizationId: payload?.organization?.id,
+            organizationSlug: payload?.organization?.slug,
+            organizationName: payload?.organization?.name,
+            accessToken: session.access_token,
+          });
+        } catch {
+          setConfigurationError("Impossible de charger l'organisation courante.");
+          setUser(null);
+        }
       }
     };
 
@@ -5147,8 +5173,8 @@ export default function App() {
 
   useEffect(() => {
     setLatestAccessToken(user?.accessToken);
-    if (user?.accessToken) fetchAll();
-  }, [user?.accessToken]);
+    if (user?.accessToken && !configurationError) fetchAll();
+  }, [user?.accessToken, configurationError]);
 
   const goNav = (id: string) => { setNav(id); setSelCont(null); setSelLot(null); };
   const logout = () => { supabase.auth.signOut(); setUser(null); setNav("dashboard"); setSelCont(null); setSelLot(null); };
@@ -5256,7 +5282,16 @@ export default function App() {
               cursor: pointer; opacity: 1;
             }
           `}</style>
-          {!user ? <LoginScreen onLogin={setUser} /> : (
+          {!user ? (
+            <>
+              <LoginScreen onLogin={setUser} />
+              {configurationError && (
+                <div style={{ position:"fixed", left:"50%", bottom:24, transform:"translateX(-50%)", maxWidth:520, background:T.red+"22", border:`1px solid ${T.red}66`, color:T.textStrong, borderRadius:6, padding:"12px 16px", fontSize:13 }}>
+                  {configurationError}
+                </div>
+              )}
+            </>
+          ) : (
             <div style={{ display:"flex", height:"100vh", background:T.bg, color:T.text, fontFamily:"system-ui,sans-serif" }}>
               
               {/* --- SIDEBAR --- */}
@@ -5326,7 +5361,7 @@ export default function App() {
                     <div style={{ fontSize:13, color:T.textStrong, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", fontWeight:"bold" }}>{user.name}</div>
                     <div style={{ fontSize:11, color:T.accent, marginTop:2 }}>{user.role}</div>
                     {user.organizationName && (
-                      <div style={{ fontSize:10, color:T.textDim, marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{user.organizationName}</div>
+                      <div style={{ fontSize:10, color:T.textDim, marginTop:2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>Espace : {user.organizationName}</div>
                     )}
                   </div>
                   <button onClick={logout} style={{ background:"none", border:`1px solid ${T.border}`, color:T.textDim, cursor:"pointer", fontSize:12, padding:"6px 10px", borderRadius:4, fontFamily:"monospace" }}>Q</button>
@@ -5338,8 +5373,8 @@ export default function App() {
                 <div style={{ background:T.surface, borderBottom:`1px solid ${T.border}`, padding:"12px 32px", display:"flex", alignItems:"center", gap:16, flexShrink:0 }}>
                   <GlobalSearch onNavigate={goNav} onSelectContainer={(c: any) => { setSelCont(c); goNav("cuverie"); }} onSelectLot={(l: any) => { setSelLot(l); goNav("lots"); }} />
                   {user.organizationName && (
-                    <div style={{ marginLeft:"auto", fontSize:11, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
-                      Organisation active: <span style={{ color:T.accentLight }}>{user.organizationName}</span>
+                    <div data-testid="organization-active-name" style={{ marginLeft:"auto", fontSize:11, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
+                      Espace : <span style={{ color:T.accentLight }}>{user.organizationName}</span>
                     </div>
                   )}
                 </div>

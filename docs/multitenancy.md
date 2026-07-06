@@ -1,228 +1,160 @@
 # Multi-tenancy Ma Cuverie
 
-## Architecture
+## Décision Produit
 
-Ma Cuverie évolue vers un modèle multi-tenant à base PostgreSQL commune.
+Ma Cuverie utilise une base PostgreSQL commune et sépare les données par `organizationId`.
 
-La séparation applicative repose sur `organizationId` :
+Règle définitive : un utilisateur appartient à une seule organisation. Il n'y a pas de sélecteur multi-organisation, pas de changement d'organisation dans l'UI, et pas de compte rattaché à plusieurs entreprises. Si une personne travaille pour deux entreprises, elle doit utiliser deux comptes distincts.
 
-- une table `organizations` représente une entreprise, maison, domaine ou organisation ;
-- une table `organization_members` relie les utilisateurs aux organisations ;
-- le rôle effectif vient en priorité de `OrganizationMember.roleKey` ;
-- `User.roleKey` reste conservé temporairement pour compatibilité V1 ;
-- les données métier racines portent un `organization_id`.
+## Modèle
 
-## Tables ajoutées
+Les tables `organizations` et `organization_members` sont conservées.
 
-- `organizations`
-- `organization_members`
+`organization_members` impose :
 
-`organization_members` impose une unicité `(organization_id, user_id)`.
+- unicité `(organization_id, user_id)` ;
+- unicité `user_id`, appliquée par la migration `20260706150000_unique_organization_member_user`, pour rendre impossible le multi-membership utilisateur.
 
-## Tables scopées
+Le rôle effectif vient de `OrganizationMember.roleKey`. `User.roleKey` reste présent seulement pour compatibilité temporaire V1.
 
-Les tables métier suivantes reçoivent `organization_id` :
+Les données métier racines portent `organization_id`, notamment `containers`, `lots`, `analyses`, `lot_events`, `bottle_lots`, `bottle_events`, `shipments`, `fa_readings`, `pressings`, `Maturation`, `Parcelle`, `Degustation`, `Pressoir`, `products`, `stock_movements`, `audit_logs` et `work_orders`.
 
-- `containers`
-- `lots`
-- `analyses`
-- `lot_events`
-- `bottle_lots`
-- `bottle_events`
-- `shipments`
-- `fa_readings`
-- `pressings`
-- `Maturation`
-- `Parcelle`
-- `Degustation`
-- `Pressoir`
-- `products`
-- `stock_movements`
-- `audit_logs`
-- `work_orders`
+Les tables de liaison restent rattachées via leur parent. `Place`, `Intrant` et `IdempotencyRecord` restent communes ou techniques dans cette phase.
 
-Les tables de liaison comme `lot_event_lots`, `lot_event_containers`, `bottle_event_links` et `shipment_lines` restent rattachées via leur parent.
+## Contexte Backend
 
-`Place`, `Intrant` et `IdempotencyRecord` restent des tables communes ou techniques dans cette phase.
+L'organisation active est déduite automatiquement depuis l'utilisateur connecté :
 
-## Organisation par défaut
+- 1 membership : son `organizationId`, son `roleKey`, `organizationName` et `organizationSlug` sont utilisés ;
+- 0 membership : refus clair, sauf fallback de développement déjà existant hors production vers `organisation-demo` ;
+- plus de 1 membership : refus avec `Utilisateur rattaché à plusieurs organisations. Configuration non autorisée.`
 
-La migration crée :
+Le backend refuse les headers `x-organization-id` et `x-organization-slug`. Ils ne permettent jamais de choisir une organisation.
 
-- nom : `Organisation Démo`
-- slug : `organisation-demo`
-- id : `1`
+Le client ne doit jamais fournir `organizationId` dans le body pour les opérations métier. Les créations injectent `organizationId` depuis le contexte backend.
 
-Toutes les données existantes sont backfillées vers cette organisation.
-Tous les utilisateurs existants reçoivent un membership vers cette organisation avec leur `User.roleKey`.
+## Scoping
 
-## Authentification
-
-Le contexte backend résout maintenant :
-
-- `userId`
-- `email`
-- `roleKey`
-- `organizationId`
-- `organizationSlug`
-- `organizationName`
-
-Si l'utilisateur a une seule organisation, elle devient active.
-S'il en a plusieurs, le client doit envoyer `x-organization-id` ou `x-organization-slug`.
-Une organisation demandée sans membership renvoie `403`.
-
-Le fallback sans membership est limité au non-production et rattache temporairement à `organisation-demo`.
-
-## Règles de scoping
-
-Les routes adaptées suivent ces règles :
+Les routes métier suivent les règles suivantes :
 
 - listes : `where: { organizationId }` ;
-- création : `organizationId` injecté depuis le contexte backend ;
+- détails : vérification par `id + organizationId` ;
+- création : `organizationId` injecté depuis l'acteur backend ;
 - mutation : recherche ou `updateMany` avec `id + organizationId` ;
-- audit logs : écriture avec `organizationId`.
+- opérations complexes : sources, cibles, produits, lots, cuves et BottleLots doivent appartenir à la même organisation ;
+- `AuditLog` et `WorkOrder` sont toujours écrits avec `organizationId`.
 
-Le client ne doit pas fournir `organizationId` dans le body pour créer ou modifier des données métier.
-
-## Routes adaptées dans cette phase
-
-- `/api/lots`
-- `/api/lots/volume`
-- `/api/lots/statuts`
-- `/api/lots/intrants`
-- `/api/lots/decuvage`
-- `/api/lots/assemblage`
-- `/api/containers`
-- `/api/containers/compartment`
-- `/api/events`
-- `/api/users`
-- `/api/inventory/products`
-- `/api/inventory/movements`
-- `/api/workorders`
-- `/api/workorders/[id]`
-- `/api/workorders/[id]/cancel`
-- `/api/analyses`
-- `/api/degustations`
-- `/api/fa`
-- `/api/bottles`
-- `/api/bottles/status`
-- `/api/bottles/degorger`
-- `/api/bottles/habiller`
-- `/api/bottles/expedier`
-- `/api/bottles/archive`
-- `/api/bottles/cancel-event`
-- `/api/expeditions/vrac`
-- `/api/expeditions/confirm-delivery`
-- `/api/parcelles`
-- `/api/pressoirs`
-- `/api/pressings`
-- `/api/pressings/cancel`
-- `/api/pressings/load`
-- `/api/pressings/ecoulement`
-- `/api/vendanges/calculate`
-- `/api/transfers`
-- `/api/tirage`
-- `/api/pertes`
-- `/api/maturation`
-- `/api/tracabilite`
-- `/api/mixtion/execute` reste désactivée en `410`
-
-## Opérations complexes adaptées
-
-Les opérations complexes suivantes vérifient désormais les objets avec `id + organizationId` avant mutation et créent les objets enfants avec `organizationId` :
-
-- transferts, soutirage et décuvage ;
-- assemblages, y compris sources vrac, sources bouteilles, destination et consommables ;
-- intrants et mouvements de stock ;
-- tirage direct, lots bouteilles, événements et consommables ;
-- changements de statut bouteilles, dégorgement, habillage, expédition, archivage et annulation d'expédition ;
-- expéditions vrac et confirmations de livraison ;
-- maturation ;
-- FA ;
-- pertes vrac et bouteilles ;
-- pressoir load/ecoulement ;
-- workorders, sources, cible lot et cible cuve ;
-- traçabilité, parents, enfants, shipments et événements.
-
-## Routes restant à auditer
-
-La recette de sécurité à deux organisations reste à exécuter après application de la migration.
-Les anciens services legacy non importés par les routes actives (`services/cuverie.service.ts`, `services/assemblage.service.ts`, `services/tirage.service.ts`) ne sont pas supprimés dans cette phase.
+Les routes actives auditées incluent notamment `/api/lots`, `/api/lots/statuts`, `/api/lots/volume`, `/api/containers`, `/api/transfers`, `/api/lots/intrants`, `/api/tirage`, `/api/assemblages`, `/api/lots/assemblage`, `/api/workorders`, `/api/bottles`, `/api/expeditions/*`, `/api/analyses`, `/api/degustations`, `/api/fa`, `/api/tracabilite`, `/api/users` et `/api/admin/reset-database`.
 
 ## Frontend
 
-Le frontend affiche l'organisation active dans l'interface.
-`buildApiHeaders` envoie `x-organization-id` si l'utilisateur courant possède `organizationId`.
+Le frontend affiche l'organisation courante comme information : `Espace : Organisation Démo`.
 
-Il n'y a pas encore de sélecteur multi-organisation complet faute d'endpoint de liste des memberships côté client.
+Il ne crée pas de sélecteur d'organisation, ne stocke pas `activeOrganizationId` dans `localStorage`, et n'envoie pas `x-organization-id` ni `x-organization-slug`.
 
-## Créer une organisation
+`GET /api/me` renvoie uniquement l'utilisateur courant, son organisation unique et son rôle :
 
-Créer une ligne dans `organizations`, puis créer les memberships dans `organization_members`.
-Les données métier créées par l'API doivent ensuite être créées depuis une session membre de cette organisation.
+```json
+{
+  "user": {
+    "id": 1,
+    "email": "admin@cave.fr"
+  },
+  "organization": {
+    "id": 1,
+    "name": "Organisation Démo",
+    "slug": "organisation-demo"
+  },
+  "roleKey": "ADMIN"
+}
+```
+
+En cas d'erreur de configuration, l'UI affiche un message clair et ne charge pas les données métier comme si l'espace était vide.
+
+## Utilisateurs Et Rôles
+
+`/api/users` liste uniquement les utilisateurs de l'organisation courante. Les administrateurs gèrent les utilisateurs de leur organisation. Il n'y a pas de super admin plateforme dans cette phase.
+
+Pour créer une nouvelle organisation :
+
+1. Créer une ligne dans `organizations`.
+2. Créer un utilisateur dans `users` si nécessaire.
+3. Créer exactement un membership dans `organization_members` pour cet utilisateur.
+
+Pour une personne qui travaille avec deux entreprises, créer deux comptes utilisateurs distincts, par exemple deux adresses e-mail différentes.
+
+## Reset Développement
+
+Le reset reste réservé au développement et conserve les garde-fous :
+
+- `NODE_ENV === "development"` ;
+- `ALLOW_DATABASE_RESET === "true"` ;
+- rôle `ADMIN` ;
+- confirmation exacte.
+
+Le reset peut rester global en développement. Si les données démo sont recréées, l'organisation démo et les memberships doivent rester cohérents : un utilisateur = une organisation.
+
+## Recette Sécurité
+
+La recette `scripts/multitenancy-security-recipe.mjs` utilise deux organisations :
+
+- `TEST-ORG-A-CODEX` ;
+- `TEST-ORG-B-CODEX`.
+
+Elle utilise des comptes distincts :
+
+- `admin-a@cave.test`, `chef-a@cave.test`, `caviste-a@cave.test`, `lecture-a@cave.test` pour A ;
+- `admin-b@cave.test`, `chef-b@cave.test`, `caviste-b@cave.test`, `lecture-b@cave.test` pour B.
+
+Si les comptes Supabase n'existent pas, le script n'invente pas les mots de passe. Il documente les comptes à créer ou les variables E2E à fournir.
+
+La recette vérifie :
+
+- A ne voit que les données A ;
+- B ne voit que les données B ;
+- les lectures et mutations croisées sont refusées sans `500` ;
+- les opérations inter-organisation sont refusées sans mutation partielle ;
+- un utilisateur sans membership est refusé clairement ;
+- un utilisateur avec deux memberships est refusé clairement ;
+- `x-organization-id` ne permet aucun contournement.
+
+Diagnostic local du 2026-07-06 avant application de la contrainte unique :
+
+```sql
+select user_id, count(*)
+from organization_members
+group by user_id
+having count(*) > 1;
+```
+
+Résultat constaté :
+
+```json
+[
+  { "user_id": 2, "count": 3 },
+  { "user_id": 3, "count": 2 },
+  { "user_id": 4, "count": 2 }
+]
+```
+
+La migration d'unicité ne doit pas être appliquée tant que ces doublons ne sont pas corrigés manuellement.
+
+Nettoyage effectué le 2026-07-06 :
+
+- `admin@cave.fr` conserve son membership `Organisation Démo` avec le rôle `ADMIN` ;
+- `chef@cave.fr` conserve son membership `Organisation Démo` avec le rôle `CHEF_CAVE` ;
+- `caviste@cave.fr` conserve son membership `Organisation Démo` avec le rôle `CAVISTE` ;
+- les memberships historiques vers `TEST-ORG-A-CODEX` et `TEST-ORG-B-CODEX` créés par l'ancienne recette multi-organisation ont été retirés ;
+- les organisations de test et leurs données métier n'ont pas été supprimées.
+
+Après nettoyage, aucun utilisateur n'a plusieurs memberships et aucun utilisateur existant ne se retrouve sans membership. La migration `20260706150000_unique_organization_member_user` a ensuite été appliquée avec `npx prisma migrate deploy`.
+
+Les comptes E2E actuels sont mono-organisation. Le fichier `docs/multitenancy-recipe-results.json` est un rapport historique d'une phase antérieure qui testait un multi-org technique via header ; il est remplacé par la règle stricte décrite ici.
 
 ## Limites V2
 
-- sélecteur UI multi-organisation ;
+- super admin plateforme ;
 - sous-domaines ;
 - domaines personnalisés ;
-- rôle super admin plateforme ;
 - PostgreSQL RLS ;
 - contraintes uniques métier composées par organisation, par exemple codes de lot ou de contenant.
-
-## Recette sécurité deux organisations
-
-Recette exécutée le 2026-07-06 avec le script `scripts/multitenancy-security-recipe.mjs`.
-Dernier run validé : `20260706133915`.
-Le rapport détaillé est disponible dans `docs/multitenancy-recipe-results.json`.
-
-Organisations utilisées :
-
-- `TEST-ORG-A-CODEX`, slug `test-org-a-codex`, id `2`
-- `TEST-ORG-B-CODEX`, slug `test-org-b-codex`, id `3`
-
-Memberships créés ou confirmés :
-
-- `admin@cave.fr` ADMIN dans A
-- `chef@cave.fr` CHEF_CAVE dans A
-- `caviste@cave.fr` CAVISTE dans A
-- `admin@cave.fr` ADMIN dans B, pour tester le choix explicite par `x-organization-id`
-
-Résultats validés :
-
-- un utilisateur membre de plusieurs organisations sans header `x-organization-id` reçoit `403` avec un message explicite ;
-- lectures A/B isolées sur lots, contenants, produits, workorders, analyses, dégustations et événements ;
-- 16 tentatives inter-organisation refusées sans `500` et sans mutation observée ;
-- opérations valides confirmées dans A : transfert, intrant, tirage, assemblage, analyse, dégustation, FA, expédition vrac ;
-- opérations valides confirmées dans B : transfert, analyse, workorder visible seulement par B ;
-- `AuditLog` est écrit avec l'organisation active sur les opérations API testées.
-
-Refus inter-organisation validés :
-
-- modification lot B depuis A ;
-- modification cuve B depuis A ;
-- modification produit B depuis A ;
-- annulation workOrder B depuis A ;
-- analyse ou dégustation liée à un lot B depuis A ;
-- transfert lot A vers cuve B ;
-- assemblage source A + source B ;
-- intrant produit B sur lot A ;
-- tirage lot A avec produits B ;
-- statut ou expédition BottleLot B depuis A ;
-- expédition vrac lot B depuis A ;
-- confirmation livraison expédition B depuis A ;
-- exécution workOrder B depuis A ;
-- traçabilité lot B depuis A.
-
-Corrections ciblées issues de la recette :
-
-- `/api/tracabilite` renvoie désormais `404` quand un lot est invisible ou introuvable dans l'organisation active, au lieu de transformer ce cas en `500`.
-- Le compteur de codes `TIRAGE-YYYY-NNNN` reste global tant que `bottle_lots.business_code` est unique globalement. Cela évite une collision entre organisations avant la V2 des contraintes uniques composées par organisation.
-
-Commande de déploiement recommandée pour appliquer la migration :
-
-```bash
-npx prisma migrate deploy
-```
-
-Ne pas utiliser `prisma migrate dev` en production.

@@ -37,8 +37,20 @@ const env = {
 };
 
 const baseUrl = env.E2E_BASE_URL || 'http://localhost:3000';
-const adminEmail = env.E2E_ADMIN_EMAIL;
-const adminPassword = env.E2E_ADMIN_PASSWORD;
+const usersByOrganization = {
+  A: {
+    ADMIN: { email: env.E2E_ADMIN_A_EMAIL || 'admin-a@cave.test', password: env.E2E_ADMIN_A_PASSWORD },
+    CHEF_CAVE: { email: env.E2E_CHEF_A_EMAIL || 'chef-a@cave.test', password: env.E2E_CHEF_A_PASSWORD },
+    CAVISTE: { email: env.E2E_CAVISTE_A_EMAIL || 'caviste-a@cave.test', password: env.E2E_CAVISTE_A_PASSWORD },
+    LECTURE_SEULE: { email: env.E2E_LECTURE_A_EMAIL || 'lecture-a@cave.test', password: env.E2E_LECTURE_A_PASSWORD },
+  },
+  B: {
+    ADMIN: { email: env.E2E_ADMIN_B_EMAIL || 'admin-b@cave.test', password: env.E2E_ADMIN_B_PASSWORD },
+    CHEF_CAVE: { email: env.E2E_CHEF_B_EMAIL || 'chef-b@cave.test', password: env.E2E_CHEF_B_PASSWORD },
+    CAVISTE: { email: env.E2E_CAVISTE_B_EMAIL || 'caviste-b@cave.test', password: env.E2E_CAVISTE_B_PASSWORD },
+    LECTURE_SEULE: { email: env.E2E_LECTURE_B_EMAIL || 'lecture-b@cave.test', password: env.E2E_LECTURE_B_PASSWORD },
+  },
+};
 const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -80,14 +92,14 @@ const safeJson = async (response) => {
   }
 };
 
-const makeApi = (token) => async (method, route, { orgId, body, noOrganizationHeader = false } = {}) => {
+const makeApi = (token) => async (method, route, { organizationHeaderId, body } = {}) => {
   const headers = {
     authorization: `Bearer ${token}`,
     'content-type': 'application/json',
     'x-request-id': `codex-${RUN}-${randomUUID()}`,
   };
-  if (!noOrganizationHeader && orgId) {
-    headers['x-organization-id'] = String(orgId);
+  if (organizationHeaderId) {
+    headers['x-organization-id'] = String(organizationHeaderId);
   }
   const response = await fetch(`${baseUrl}${route}`, {
     method,
@@ -119,6 +131,16 @@ const ensureUser = async (email, roleKey, name) => prisma.user.upsert({
 });
 
 const ensureMembership = async (organizationId, userId, roleKey) => {
+  const existingMemberships = await prisma.organizationMember.findMany({
+    where: { userId },
+    select: { id: true, organizationId: true, roleKey: true },
+  });
+  const foreignMembership = existingMemberships.find((membership) => membership.organizationId !== organizationId);
+  assert(
+    !foreignMembership,
+    `Utilisateur ${userId} déjà membre de l'organisation ${foreignMembership?.organizationId}. Correction manuelle requise avant la recette.`,
+  );
+
   const membership = await prisma.organizationMember.upsert({
     where: { organizationId_userId: { organizationId, userId } },
     create: { organizationId, userId, roleKey },
@@ -241,7 +263,7 @@ const createDegustation = async (org, lot) => {
   return degustation;
 };
 
-const createWorkOrder = async (org, lot, container) => {
+const createWorkOrder = async (org, lot, container, operatorEmail) => {
   const workOrder = await prisma.workOrder.create({
     data: {
       organizationId: org.id,
@@ -251,8 +273,8 @@ const createWorkOrder = async (org, lot, container) => {
       sources: [{ lotId: lot.id, volume: 1, role: 'MAIN' }],
       plannedVolume: decimal(1),
       details: `${org.prefix}-${RUN}-WORKORDER`,
-      createdBy: adminEmail,
-      operator: adminEmail,
+      createdBy: operatorEmail,
+      operator: operatorEmail,
     },
   });
   record('mutations', { type: 'db.create.workOrder', organizationId: org.id, id: workOrder.id, publicId: workOrder.publicId });
@@ -297,7 +319,7 @@ const verifyUnchanged = (before, after, label) => {
 };
 
 async function main() {
-  assert(adminEmail && adminPassword && supabaseUrl && supabaseAnonKey, 'Variables E2E/Supabase incomplètes.');
+  assert(supabaseUrl && supabaseAnonKey, 'Variables Supabase incomplètes.');
 
   const [organizationsTable, membersTable] = await Promise.all([
     prisma.$queryRaw`SELECT to_regclass('public.organizations')::text AS name`,
@@ -356,18 +378,40 @@ async function main() {
   });
   report.organizations = { A: orgA, B: orgB };
 
-  const admin = await ensureUser(adminEmail, 'ADMIN', 'Codex Admin E2E');
-  const chef = await ensureUser(env.E2E_CHEF_CAVE_EMAIL || 'chef@cave.fr', 'CHEF_CAVE', 'Codex Chef E2E');
-  const caviste = await ensureUser(env.E2E_CAVISTE_EMAIL || 'caviste@cave.fr', 'CAVISTE', 'Codex Caviste E2E');
-  await ensureMembership(orgA.id, admin.id, 'ADMIN');
-  await ensureMembership(orgA.id, chef.id, 'CHEF_CAVE');
-  await ensureMembership(orgA.id, caviste.id, 'CAVISTE');
-  await ensureMembership(orgB.id, admin.id, 'ADMIN');
+  const dbUsers = { A: {}, B: {} };
+  for (const orgKey of ['A', 'B']) {
+    const org = orgKey === 'A' ? orgA : orgB;
+    for (const [roleKey, account] of Object.entries(usersByOrganization[orgKey])) {
+      const user = await ensureUser(account.email, roleKey, `Codex ${roleKey} ${orgKey}`);
+      await ensureMembership(org.id, user.id, roleKey);
+      dbUsers[orgKey][roleKey] = user;
+    }
+  }
 
   const supabase = createClient(supabaseUrl, supabaseAnonKey, { auth: { persistSession: false, autoRefreshToken: false } });
-  const auth = await supabase.auth.signInWithPassword({ email: adminEmail, password: adminPassword });
-  assert(!auth.error && auth.data.session?.access_token, 'Connexion E2E impossible.');
-  const api = makeApi(auth.data.session.access_token);
+  const signIn = async (account, label) => {
+    if (!account.password) {
+      report.fixesNeeded.push({
+        label,
+        message: `Compte Supabase à créer ou mot de passe à fournir via variable E2E pour ${account.email}.`,
+      });
+      return null;
+    }
+
+    const auth = await supabase.auth.signInWithPassword({ email: account.email, password: account.password });
+    if (auth.error || !auth.data.session?.access_token) {
+      report.fixesNeeded.push({
+        label,
+        message: `Connexion Supabase impossible pour ${account.email}. Vérifier que le compte existe et que le mot de passe E2E est correct.`,
+      });
+      return null;
+    }
+
+    return makeApi(auth.data.session.access_token);
+  };
+  const apiA = await signIn(usersByOrganization.A.ADMIN, 'admin A');
+  const apiB = await signIn(usersByOrganization.B.ADMIN, 'admin B');
+  assert(apiA && apiB, 'Comptes Supabase E2E A/B indisponibles. Voir fixesNeeded dans le rapport.');
 
   const mkOrg = (dbOrg, prefix) => ({ id: dbOrg.id, prefix });
   const A = mkOrg(orgA, PREFIX_A);
@@ -398,8 +442,9 @@ async function main() {
     const bottleLot = await createBottleLot(org, 'BOTTLELOT', genericLot);
     const analysis = await createAnalysis(org, genericLot);
     const degustation = await createDegustation(org, genericLot);
-    const workOrder = await createWorkOrder(org, genericLot, transferDestContainer);
-    const traceEvent = await createTraceEvent(org, admin, genericLot);
+    const orgKey = org.prefix === PREFIX_A ? 'A' : 'B';
+    const workOrder = await createWorkOrder(org, genericLot, transferDestContainer, usersByOrganization[orgKey].ADMIN.email);
+    const traceEvent = await createTraceEvent(org, dbUsers[orgKey].ADMIN, genericLot);
     data[org.prefix] = {
       transferSourceContainer, transferDestContainer, assemblageMainContainer, assemblageReserveContainer,
       assemblageDestContainer, intrantContainer, tirageContainer, vracContainer, genericContainer,
@@ -426,13 +471,13 @@ async function main() {
   });
   record('mutations', { type: 'db.create.bottleEvent.expedition', organizationId: orgB.id, id: bExpeditionEvent.id });
 
-  const noHeader = await api('GET', '/api/lots', { noOrganizationHeader: true });
+  const headerBypass = await apiA('GET', '/api/lots', { organizationHeaderId: orgB.id });
   record('frontendHeaders', {
-    case: 'multi-membership without x-organization-id',
-    status: noHeader.status,
-    message: noHeader.body?.message ?? noHeader.body?.error ?? null,
+    case: 'x-organization-id rejected',
+    status: headerBypass.status,
+    message: headerBypass.body?.message ?? headerBypass.body?.error ?? null,
   });
-  assert(noHeader.status === 403, 'Un utilisateur multi-organisations sans header doit être refusé.');
+  assert(headerBypass.status === 403, 'Le header x-organization-id doit être refusé.');
 
   const readCases = [
     ['/api/lots', 'businessCode', AData.genericLot.businessCode, BData.genericLot.businessCode],
@@ -443,7 +488,7 @@ async function main() {
     ['/api/events', 'comment', `${PREFIX_A}-${RUN}-EVENT`, `${PREFIX_B}-${RUN}-EVENT`],
   ];
   for (const [route, field, expectedA, forbiddenB] of readCases) {
-    const responseA = await api('GET', route, { orgId: orgA.id });
+    const responseA = await apiA('GET', route);
     expectOk(responseA, `lecture A ${route}`);
     const payloadA = route === '/api/events' ? responseA.body.data : responseA.body;
     const textA = JSON.stringify(payloadA);
@@ -451,7 +496,7 @@ async function main() {
     assert(!textA.includes(String(forbiddenB)), `lecture A ${route}: donnée B visible`);
     record('reads', { route, organizationId: orgA.id, status: responseA.status, field });
 
-    const responseB = await api('GET', route, { orgId: orgB.id });
+    const responseB = await apiB('GET', route);
     expectOk(responseB, `lecture B ${route}`);
     const payloadB = route === '/api/events' ? responseB.body.data : responseB.body;
     const textB = JSON.stringify(payloadB);
@@ -460,7 +505,7 @@ async function main() {
     record('reads', { route, organizationId: orgB.id, status: responseB.status, field });
   }
 
-  const workOrdersA = await api('GET', '/api/workorders', { orgId: orgA.id });
+  const workOrdersA = await apiA('GET', '/api/workorders');
   expectOk(workOrdersA, 'lecture A workorders');
   assert(JSON.stringify(workOrdersA.body).includes(AData.workOrder.publicId), 'workOrder A absent');
   assert(!JSON.stringify(workOrdersA.body).includes(BData.workOrder.publicId), 'workOrder B visible depuis A');
@@ -497,29 +542,26 @@ async function main() {
 
   for (const [method, route, body, label] of refusalTests) {
     const before = await snapshot(refusalIds);
-    const response = await api(method, route, { orgId: orgA.id, body });
+    const response = await apiA(method, route, { body });
     expectNotOkNo500(response, label);
     const after = await snapshot(refusalIds);
     verifyUnchanged(before, after, label);
     record('refusals', { label, method, route, status: response.status });
   }
 
-  const validTransfer = await api('POST', '/api/transfers', {
-    orgId: orgA.id,
+  const validTransfer = await apiA('POST', '/api/transfers', {
     body: { lotId: AData.transferLot.id, fromId: AData.transferSourceContainer.id, destinations: [{ toId: AData.transferDestContainer.id, volume: 1 }], volume: 1, date: new Date().toISOString(), idempotencyKey: randomUUID(), note: 'valid A' },
   });
   expectOk(validTransfer, 'transfert valide A');
   record('validOperations', { label: 'transfert valide A', status: validTransfer.status });
 
-  const validIntrant = await api('POST', '/api/lots/intrants', {
-    orgId: orgA.id,
+  const validIntrant = await apiA('POST', '/api/lots/intrants', {
     body: { lotId: AData.intrantLot.id, intrant: 'Chaptalisation (Sucre)', quantity: 1, unit: 'kg', productId: AData.intrantProduct.id, note: 'valid A', idempotencyKey: `${PREFIX_A}-intrant-valid-${RUN}` },
   });
   expectOk(validIntrant, 'intrant valide A');
   record('validOperations', { label: 'intrant valide A', status: validIntrant.status });
 
-  const validTirage = await api('POST', '/api/tirage', {
-    orgId: orgA.id,
+  const validTirage = await apiA('POST', '/api/tirage', {
     body: {
       lotId: AData.tirageLot.id,
       sourceContainerId: AData.tirageContainer.id,
@@ -542,8 +584,7 @@ async function main() {
   expectOk(validTirage, 'tirage valide A');
   record('validOperations', { label: 'tirage valide A', status: validTirage.status });
 
-  const validAssemblage = await api('POST', '/api/assemblages', {
-    orgId: orgA.id,
+  const validAssemblage = await apiA('POST', '/api/assemblages', {
     body: {
       code: `${PREFIX_A}-${RUN}-ASSEMB-VALID`,
       assemblageType: 'BSA',
@@ -559,49 +600,43 @@ async function main() {
   expectOk(validAssemblage, 'assemblage valide A');
   record('validOperations', { label: 'assemblage valide A', status: validAssemblage.status });
 
-  const validAnalysisA = await api('POST', '/api/analyses', {
-    orgId: orgA.id,
+  const validAnalysisA = await apiA('POST', '/api/analyses', {
     body: { analyses: [{ lotId: AData.genericLot.id, analysisDate: new Date().toISOString(), ph: 3.18, notes: `${PREFIX_A}-${RUN}-ANALYSE-API` }], idempotencyKey: `${PREFIX_A}-analysis-valid-${RUN}` },
   });
   expectOk(validAnalysisA, 'analyse valide A');
   record('validOperations', { label: 'analyse valide A', status: validAnalysisA.status });
 
-  const validDegustationA = await api('POST', '/api/degustations', {
-    orgId: orgA.id,
+  const validDegustationA = await apiA('POST', '/api/degustations', {
     body: { date: new Date().toISOString(), phase: 'VINS_CLAIRS', lotId: String(AData.genericLot.id), robe: 'clair', nez: 'valid A', bouche: 'valid A', idempotencyKey: `${PREFIX_A}-deg-valid-${RUN}` },
   });
   expectOk(validDegustationA, 'dégustation valide A');
   record('validOperations', { label: 'dégustation valide A', status: validDegustationA.status });
 
-  const validFaA = await api('POST', '/api/fa', {
-    orgId: orgA.id,
+  const validFaA = await apiA('POST', '/api/fa', {
     body: { readings: [{ lotId: AData.genericLot.id, date: new Date().toISOString().slice(0, 10), density: 1000, temperature: 18 }], idempotencyKey: `${PREFIX_A}-fa-valid-${RUN}` },
   });
   expectOk(validFaA, 'FA valide A');
   record('validOperations', { label: 'FA valide A', status: validFaA.status });
 
-  const validVracA = await api('POST', '/api/expeditions/vrac', {
-    orgId: orgA.id,
+  const validVracA = await apiA('POST', '/api/expeditions/vrac', {
     body: { client: 'Client A Codex', lines: [{ lotId: AData.vracLot.id, volumeHl: 1, mode: 'VRAC' }], idempotencyKey: `${PREFIX_A}-vrac-valid-${RUN}` },
   });
   expectOk(validVracA, 'expédition vrac valide A');
   record('validOperations', { label: 'expédition vrac valide A', status: validVracA.status });
 
-  const validTransferB = await api('POST', '/api/transfers', {
-    orgId: orgB.id,
+  const validTransferB = await apiB('POST', '/api/transfers', {
     body: { lotId: BData.transferLot.id, fromId: BData.transferSourceContainer.id, destinations: [{ toId: BData.transferDestContainer.id, volume: 1 }], volume: 1, date: new Date().toISOString(), idempotencyKey: randomUUID(), note: 'valid B' },
   });
   expectOk(validTransferB, 'transfert valide B');
   record('validOperations', { label: 'transfert valide B', status: validTransferB.status });
 
-  const validAnalysisB = await api('POST', '/api/analyses', {
-    orgId: orgB.id,
+  const validAnalysisB = await apiB('POST', '/api/analyses', {
     body: { analyses: [{ lotId: BData.genericLot.id, analysisDate: new Date().toISOString(), ph: 3.2, notes: `${PREFIX_B}-${RUN}-ANALYSE-API` }], idempotencyKey: `${PREFIX_B}-analysis-valid-${RUN}` },
   });
   expectOk(validAnalysisB, 'analyse valide B');
   record('validOperations', { label: 'analyse valide B', status: validAnalysisB.status });
 
-  const workOrdersB = await api('GET', '/api/workorders', { orgId: orgB.id });
+  const workOrdersB = await apiB('GET', '/api/workorders');
   expectOk(workOrdersB, 'workOrder B visible par B');
   assert(JSON.stringify(workOrdersB.body).includes(BData.workOrder.publicId), 'workOrder B absent côté B');
   assert(!JSON.stringify(workOrdersB.body).includes(AData.workOrder.publicId), 'workOrder A visible côté B');

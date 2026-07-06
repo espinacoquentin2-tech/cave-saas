@@ -166,6 +166,10 @@ export const resolveAuthenticatedActor = async (request: Request): Promise<Reque
   const requestedOrganizationId = request.headers.get('x-organization-id')?.trim();
   const requestedOrganizationSlug = request.headers.get('x-organization-slug')?.trim();
 
+  if (requestedOrganizationId || requestedOrganizationSlug) {
+    throw new ForbiddenError("Le choix d'organisation par header client est interdit.");
+  }
+
   let memberships = await prisma.organizationMember.findMany({
     where: { userId: dbUser.id },
     include: {
@@ -212,27 +216,11 @@ export const resolveAuthenticatedActor = async (request: Request): Promise<Reque
     throw new ForbiddenError('Aucune organisation active pour cet utilisateur.');
   }
 
-  const selectedMembership =
-    requestedOrganizationId || requestedOrganizationSlug
-      ? memberships.find((membership) => {
-          if (requestedOrganizationId && membership.organizationId === Number(requestedOrganizationId)) {
-            return true;
-          }
-
-          return requestedOrganizationSlug ? membership.organization.slug === requestedOrganizationSlug : false;
-        })
-      : memberships.length === 1
-        ? memberships[0]
-        : null;
-
-  if (!selectedMembership) {
-    if (requestedOrganizationId || requestedOrganizationSlug) {
-      throw new ForbiddenError("Vous n'etes pas membre de l'organisation demandee.");
-    }
-
-    throw new ForbiddenError('Plusieurs organisations disponibles. Fournissez x-organization-id ou x-organization-slug.');
+  if (memberships.length > 1) {
+    throw new ForbiddenError('Utilisateur rattaché à plusieurs organisations. Configuration non autorisée.');
   }
 
+  const selectedMembership = memberships[0];
   const effectiveRoleKey = normalizeRoleKey(selectedMembership.roleKey) ?? resolveEffectiveRoleKey(dbUser);
   if (!effectiveRoleKey) {
     throw new ForbiddenError('Rôle utilisateur invalide.');
