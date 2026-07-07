@@ -43,6 +43,7 @@ import { DegustationModal } from "@/components/modules/degustation/DegustationMo
 import { DirectTirageModal } from "@/components/modules/DirectTirageModal";
 import { Expeditions } from "@/components/modules/Expeditions";
 import { Lots } from "@/components/modules/Lots";
+import { LegalDocuments } from "@/components/modules/LegalDocuments";
 import { Maturation } from "@/components/modules/Maturation";
 import { MaturationGraphModal } from "@/components/modules/maturation/MaturationGraphModal";
 import { MaturationModal } from "@/components/modules/maturation/MaturationModal";
@@ -191,6 +192,11 @@ function LoginScreen({ onLogin }: LoginScreenProps) {
           <FF label="Mot de passe"><Input data-testid="login-password-input" type="password" value={pwd} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPwd(e.target.value)} disabled={loading} placeholder="Mot de passe" /></FF>
           {err && <div data-testid="login-error-message" style={{ background:T.red+"22", border:`1px solid ${T.red}44`, borderRadius:3, padding:"10px 12px", fontSize:12, color:T.red, marginBottom:14, lineHeight:1.4 }}>{err}</div>}
           <Btn data-testid="login-submit-button" onClick={submit} disabled={loading || !email || !pwd} style={{ width:"100%", padding:13, marginTop:6 }}>{loading ? "Vérification..." : "Se connecter"}</Btn>
+          <div style={{ display:"flex", justifyContent:"center", gap:14, flexWrap:"wrap", marginTop:18, paddingTop:16, borderTop:`1px solid ${T.border}`, fontSize:11 }}>
+            <a href="/legal/mentions-legales" style={{ color:T.textDim, textDecoration:"none" }}>Mentions légales</a>
+            <a href="/legal/confidentialite" style={{ color:T.textDim, textDecoration:"none" }}>Confidentialité</a>
+            <a href="/legal/conditions-utilisation" style={{ color:T.textDim, textDecoration:"none" }}>Conditions d'utilisation</a>
+          </div>
         </div>
       </div>
     </div>
@@ -4799,6 +4805,7 @@ const NAV_CATEGORIES = [
 const ADMIN_NAV = [
   { id:"admin_users", label:"Utilisateurs",    icon:"👥" },
   { id:"admin_logs",  label:"Journal d'audit", icon:"📑" },
+  { id:"admin_legal", label:"Documents juridiques", icon:"⚖️" },
 ];
 
 export default function App() {
@@ -5250,6 +5257,7 @@ export default function App() {
       case "admin_wo":    return <WorkOrdersAdmin workOrders={workOrders} setWorkOrders={setWorkOrders} />;
       case "admin_users": return <AdminUsers />;
       case "admin_logs":  return <AdminLogs />;
+      case "admin_legal": return <LegalDocuments />;
       case "parametres":  return <Parametres theme={themeKey} setTheme={setThemeKey} />;
       default:            return <Dashboard setNav={goNav} workOrders={workOrders} setWorkOrders={setWorkOrders} onRefresh={fetchAll} canShowDatabaseReset={canShowDatabaseReset} onOpenResetModal={() => setShowResetModal(true)} lastResetSummary={lastResetSummary} TaskExecutionModal={TaskExecutionModal} />;
     }
