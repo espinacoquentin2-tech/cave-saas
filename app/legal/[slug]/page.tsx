@@ -95,7 +95,7 @@ export default async function PublicLegalPage({ params }: PublicLegalPageProps) 
 
         <Link
           data-testid="back-to-login-link"
-          href="/"
+          href="/app"
           style={{
             display: "inline-flex",
             marginTop: 22,
