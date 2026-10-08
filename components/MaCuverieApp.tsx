@@ -1,7 +1,7 @@
 "use client";
 // @ts-nocheck
 
-import React, { useState, useReducer, useEffect } from "react";
+import React, { useState, useReducer, useEffect, useRef } from "react";
 import {
   THEMES, CONTAINER_TYPES, LOT_STATUSES, LOT_STATUS_COLORS,
   CEPAGES,
@@ -123,59 +123,67 @@ function LoginScreen({ onLogin }: LoginScreenProps) {
   const [err, setErr] = useState(""); 
   const [loading, setLoading] = useState(false);
 
-  const submit = async () => {
-    setLoading(true); 
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (loading || !event.currentTarget.reportValidity()) return;
+    setLoading(true);
     setErr("");
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pwd });
-    
-    if (error) { 
-      setErr("Identifiants incorrects ou utilisateur non trouvé."); 
-      setLoading(false); 
-    } else {
-      const authUser = data.user;
-      if (!authUser || !authUser.email) {
-        setErr("Utilisateur introuvable.");
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: pwd });
+
+      if (error) {
+        setErr("Identifiants incorrects ou utilisateur non trouvé.");
         setLoading(false);
-        return;
-      }
-
-      const accessToken = data.session?.access_token;
-      let me: any = null;
-
-      if (accessToken) {
-        try {
-          const response = await fetch('/api/me', {
-            method: 'GET',
-            headers: buildApiHeaders({ accessToken }),
-          });
-
-          if (response.ok) {
-            me = await response.json().catch(() => null);
-          } else {
-            const payload = await response.json().catch(() => ({}));
-            setErr(extractApiErrorMessage(payload, "Configuration utilisateur invalide."));
-            setLoading(false);
-            return;
-          }
-        } catch {
-          setErr("Impossible de charger l'organisation courante.");
+      } else {
+        const authUser = data.user;
+        if (!authUser || !authUser.email) {
+          setErr("Utilisateur introuvable.");
           setLoading(false);
           return;
         }
-      }
 
-      onLogin({
-        ...toUiUser({
-          id: authUser.id,
-          email: me?.user?.email ?? authUser.email,
-          name: me?.user?.email ?? authUser.email,
-          roleKey: me?.roleKey,
-        }),
-        organizationId: me?.organization?.id,
-        organizationSlug: me?.organization?.slug,
-        organizationName: me?.organization?.name,
-        accessToken,
-      });
+        const accessToken = data.session?.access_token;
+        let me: any = null;
+
+        if (accessToken) {
+          try {
+            const response = await fetch('/api/me', {
+              method: 'GET',
+              headers: buildApiHeaders({ accessToken }),
+            });
+
+            if (response.ok) {
+              me = await response.json().catch(() => null);
+            } else {
+              const payload = await response.json().catch(() => ({}));
+              setErr(extractApiErrorMessage(payload, "Configuration utilisateur invalide."));
+              setLoading(false);
+              return;
+            }
+          } catch {
+            setErr("Impossible de charger l'organisation courante.");
+            setLoading(false);
+            return;
+          }
+        }
+
+        onLogin({
+          ...toUiUser({
+            id: authUser.id,
+            email: me?.user?.email ?? authUser.email,
+            name: me?.user?.email ?? authUser.email,
+            roleKey: me?.roleKey,
+          }),
+          organizationId: me?.organization?.id,
+          organizationSlug: me?.organization?.slug,
+          organizationName: me?.organization?.name,
+          accessToken,
+        });
+      }
+    } catch {
+      setErr("Connexion impossible pour le moment. Réessayez dans quelques instants.");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -187,11 +195,11 @@ function LoginScreen({ onLogin }: LoginScreenProps) {
           <div data-testid="app-brand-title" style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:42, color:T.accentLight, letterSpacing:1 }}>Ma Cuverie</div>
           <div style={{ fontSize:11, color:T.textDim, letterSpacing:2.5, marginTop:6, textTransform:"uppercase" }}>Gestion de cave et de cuverie</div>
         </div>
-        <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:"32px 32px 24px", borderTop:`2px solid ${T.accent}` }}>
-          <FF label="Adresse e-mail"><Input data-testid="login-email-input" type="email" value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} disabled={loading} placeholder="vous@domaine.fr" /></FF>
-          <FF label="Mot de passe"><Input data-testid="login-password-input" type="password" value={pwd} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPwd(e.target.value)} disabled={loading} placeholder="Mot de passe" /></FF>
-          {err && <div data-testid="login-error-message" style={{ background:T.red+"22", border:`1px solid ${T.red}44`, borderRadius:3, padding:"10px 12px", fontSize:12, color:T.red, marginBottom:14, lineHeight:1.4 }}>{err}</div>}
-          <Btn data-testid="login-submit-button" onClick={submit} disabled={loading || !email || !pwd} style={{ width:"100%", padding:13, marginTop:6 }}>{loading ? "Vérification..." : "Se connecter"}</Btn>
+        <form onSubmit={submit} style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:6, padding:"32px 32px 24px", borderTop:`2px solid ${T.accent}` }}>
+          <FF label="Adresse e-mail" htmlFor="login-email"><Input id="login-email" data-testid="login-email-input" type="email" name="email" autoComplete="username" required maxLength={254} value={email} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)} disabled={loading} placeholder="vous@domaine.fr" aria-describedby={err ? "login-error" : undefined} /></FF>
+          <FF label="Mot de passe" htmlFor="login-password"><Input id="login-password" data-testid="login-password-input" type="password" name="password" autoComplete="current-password" required maxLength={1024} value={pwd} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPwd(e.target.value)} disabled={loading} placeholder="Mot de passe" /></FF>
+          {err && <div id="login-error" role="alert" data-testid="login-error-message" style={{ background:T.red+"22", border:`1px solid ${T.red}44`, borderRadius:3, padding:"10px 12px", fontSize:12, color:T.red, marginBottom:14, lineHeight:1.4 }}>{err}</div>}
+          <Btn type="submit" data-testid="login-submit-button" disabled={loading || !email || !pwd} style={{ width:"100%", padding:13, marginTop:6 }}>{loading ? "Vérification..." : "Se connecter"}</Btn>
           <div style={{ display:"flex", justifyContent:"center", gap:14, flexWrap:"wrap", marginTop:18, paddingTop:16, borderTop:`1px solid ${T.border}`, fontSize:11 }}>
             <a href="/legal/mentions-legales" style={{ color:T.textDim, textDecoration:"none" }}>Mentions légales</a>
             <a href="/legal/confidentialite" style={{ color:T.textDim, textDecoration:"none" }}>Confidentialité</a>
@@ -202,7 +210,7 @@ function LoginScreen({ onLogin }: LoginScreenProps) {
               Retour au site
             </a>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );
@@ -273,6 +281,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   const lotSourceId = task.lotId || (task.sources && task.sources[0]?.lotId);
   const lotSource = (state.lots || []).find((l: any) => String(l.id) === String(lotSourceId));
   const isLotTirageEligible = isTirageEligibleLotStatus(lotSource?.status);
+  const needsMixtion = task.recette === "TIRAGE" && tirageTypeMise === "EFFERVESCENT" && lotSource?.qualiteLot !== "MIXTION_TIRAGE";
   
   if (task.recette === "TIRAGE" && tirageTypeMise === "EFFERVESCENT" && lotSource) {
       baseYear = parseInt(lotSource.year || lotSource.millesime) || parseInt((lotSource.businessCode || lotSource.code).substring(0,4)) || baseYear;
@@ -300,6 +309,10 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
   const execute = async () => {
     setExecutionError("");
+    if (needsMixtion) {
+      setExecutionError("Préparez et contrôlez la mixtion depuis Planif. Tirage avant la mise en bouteilles.");
+      return;
+    }
     if (isTankCapacityIssue) {
       setExecutionError("Capacité insuffisante pour ce volume !");
       return;
@@ -563,6 +576,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
       {task.recette === "TIRAGE" ? (
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          {needsMixtion && <p role="status">Le tirage effervescent nécessite une mixtion contrôlée. Ouvrez « Planif. Tirage » puis « Mixtion et tirage » pour la préparer avec le levain qualifié.</p>}
           {lotSource && !isLotTirageEligible && (
             <div style={{ background:T.red+"15", border:`1px solid ${T.red}55`, borderRadius:4, padding:14 }}>
               <div style={{ color:T.red, fontSize:12, fontWeight:"bold", marginBottom:4 }}>Lot non éligible au tirage</div>
@@ -4816,6 +4830,29 @@ const ADMIN_NAV = [
 export default function App() {
   const [themeKey, setThemeKey]     = useState<string>("terroir");
   const [user, setUser]             = useState<any | null>(null);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const navigationToggle = useRef<HTMLButtonElement>(null);
+  const navigationClose = useRef<HTMLButtonElement>(null);
+  const closeNavigation = () => {
+    setMobileNavigationOpen(false);
+    navigationToggle.current?.focus();
+  };
+  useEffect(() => {
+    if (!mobileNavigationOpen) return;
+    navigationClose.current?.focus();
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeNavigation();
+    };
+    const onResize = () => {
+      if (window.innerWidth > 860) setMobileNavigationOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", onResize);
+    };
+  }, [mobileNavigationOpen]);
   const [nav, setNav]               = useState<string>("dashboard");
   const [selContainer, setSelCont]  = useState<any | null>(null);
   const [selLot, setSelLot]         = useState<any | null>(null);
@@ -5187,7 +5224,7 @@ export default function App() {
     if (user?.accessToken && !configurationError) fetchAll();
   }, [user?.accessToken, configurationError]);
 
-  const goNav = (id: string) => { setNav(id); setSelCont(null); setSelLot(null); };
+  const goNav = (id: string) => { if (mobileNavigationOpen) closeNavigation(); setNav(id); setSelCont(null); setSelLot(null); };
   const logout = async () => {
     try {
       await supabase.auth.signOut();
@@ -5329,11 +5366,13 @@ export default function App() {
               )}
             </>
           ) : (
-            <div style={{ display:"flex", height:"100vh", background:T.bg, color:T.text, fontFamily:"system-ui,sans-serif" }}>
+            <div className="app-shell" style={{ display:"flex", height:"100dvh", background:T.bg, color:T.text, fontFamily:"system-ui,sans-serif" }}>
               
               {/* --- SIDEBAR --- */}
-              <div style={{ width:240, background:T.surface, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", flexShrink:0 }}>
+              {mobileNavigationOpen && <button className="app-navigation-backdrop" aria-label="Fermer la navigation" onClick={closeNavigation} />}
+              <div id="app-sidebar" className="app-sidebar" data-mobile-open={mobileNavigationOpen} style={{ width:240, background:T.surface, borderRight:`1px solid ${T.border}`, display:"flex", flexDirection:"column", flexShrink:0 }}>
                 <div style={{ padding:"24px 20px 20px", borderBottom:`1px solid ${T.border}` }}>
+                  <button ref={navigationClose} className="app-navigation-close" onClick={closeNavigation} aria-label="Fermer le menu">Fermer ×</button>
                   <div data-testid="app-brand-title" style={{ fontSize:22, fontFamily:"'Playfair Display', Georgia, serif", color:T.accentLight, letterSpacing:1 }}>Ma Cuverie</div>
                   <div style={{ fontSize:9, color:T.textDim, textTransform:"uppercase", letterSpacing:2.2, marginTop:4 }}>Suivi cuverie & traçabilité</div>
                 </div>
@@ -5411,16 +5450,17 @@ export default function App() {
               
               {/* --- MAIN CONTENT AREA --- */}
               <div style={{ flex:1, display:"flex", flexDirection:"column", minWidth:0, overflow:"hidden" }}>
-                <div style={{ background:T.surface, borderBottom:`1px solid ${T.border}`, padding:"12px 32px", display:"flex", alignItems:"center", gap:16, flexShrink:0 }}>
+                <div className="app-topbar" style={{ background:T.surface, borderBottom:`1px solid ${T.border}`, padding:"12px 32px", display:"flex", alignItems:"center", gap:16, flexShrink:0 }}>
+                  <button ref={navigationToggle} className="app-navigation-toggle" aria-label="Ouvrir la navigation" aria-controls="app-sidebar" aria-expanded={mobileNavigationOpen} onClick={() => setMobileNavigationOpen(true)}>☰</button>
                   <GlobalSearch onNavigate={goNav} onSelectContainer={(c: any) => { setSelCont(c); goNav("cuverie"); }} onSelectLot={(l: any) => { setSelLot(l); goNav("lots"); }} />
                   {user.organizationName && (
-                    <div data-testid="organization-active-name" style={{ marginLeft:"auto", fontSize:11, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
+                    <div className="app-organization-label" data-testid="organization-active-name" style={{ marginLeft:"auto", fontSize:11, color:T.textDim, textTransform:"uppercase", letterSpacing:1 }}>
                       Espace : <span style={{ color:T.accentLight }}>{user.organizationName}</span>
                     </div>
                   )}
                 </div>
                 
-                <div style={{ flex:1, overflowY:"auto", padding:"40px 48px" }}>
+                <div className="app-module-content" style={{ flex:1, overflowY:"auto", padding:"40px 48px" }}>
 
                   <AdminResetDatabaseModal
                     open={showResetModal}

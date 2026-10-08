@@ -11,7 +11,7 @@ export const THEMES: any = {
     bg: "#0f0d0a", surface: "#1a1713", surfaceHigh: "#242018",
     border: "#2e2a22", borderLight: "#3d3830",
     accent: "#c9a84c", accentLight: "#e2c47a", accentDim: "#7a6330",
-    text: "#e8dcc8", textDim: "#8a7d6a", textStrong: "#f0e8d8",
+    text: "#e8dcc8", textDim: "#a99b87", textStrong: "#f0e8d8",
     red: "#c44444", green: "#4a9960", blue: "#4a7ab5",
     loginBg: "linear-gradient(135deg,#0f0d0a 0%,#1e1a14 60%,#0a0807 100%)",
   },

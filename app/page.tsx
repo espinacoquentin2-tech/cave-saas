@@ -12,6 +12,7 @@ import {
 } from "@/lib/public-site-content";
 
 export const metadata: Metadata = {
+  alternates: { canonical: "/" },
   title: "Ma Cuverie - Gestion de cave et de cuverie",
   description:
     "Logiciel de gestion de cave, cuverie, lots, stocks, analyses, dégustations et traçabilité pour domaines, maisons et caves.",
@@ -30,7 +31,7 @@ export default function PublicHomePage() {
           <a href="#tracabilite">Traçabilité</a>
           <a href="#demo">Démo</a>
           <Link className="nav-app-link" href="/app">
-            Accéder à l'application
+            Accéder à l&apos;application
           </Link>
         </nav>
       </header>
@@ -45,12 +46,9 @@ export default function PublicHomePage() {
           </p>
           <p className="hero-subtitle">{publicHero.subtitle}</p>
           <div className="hero-actions">
-            <a data-testid="public-demo-button" className="button primary" href={PUBLIC_DEMO_MAILTO}>
+            <a data-testid="public-demo-button" data-demo-cta className="button primary" href={PUBLIC_DEMO_MAILTO}>
               Demander une démo
             </a>
-            <Link data-testid="public-app-button" className="button secondary" href="/app">
-              Accéder à l'application
-            </Link>
           </div>
           <p className="reassurance">{publicHero.reassurance}</p>
         </div>
@@ -170,8 +168,8 @@ export default function PublicHomePage() {
           <p className="eyebrow">Traçabilité / Sécurité</p>
           <h2>Traçabilité, rôles et séparation des données</h2>
           <p>
-            Les données métier sont affichées et manipulées dans l'espace de l'organisation connectée.
-            Les accès sont encadrés par des rôles et par un journal d'audit.
+            Les données métier sont affichées et manipulées dans l&apos;espace de l&apos;organisation connectée.
+            Les accès sont encadrés par des rôles et par un journal d&apos;audit.
           </p>
         </div>
         <div className="security-list">
@@ -209,12 +207,9 @@ export default function PublicHomePage() {
           et caves de Champagne.
         </p>
         <div className="hero-actions">
-          <a className="button primary" href={PUBLIC_DEMO_MAILTO}>
+          <a data-demo-cta className="button primary" href={PUBLIC_DEMO_MAILTO}>
             Demander une démo
           </a>
-          <Link className="button secondary" href="/app">
-            Accéder à l'application
-          </Link>
         </div>
         <span className="cta-note">Réponse personnalisée · Démo sur cas métier · Sans engagement</span>
       </section>
@@ -444,7 +439,7 @@ export default function PublicHomePage() {
         }
 
         .preview-kicker {
-          color: #8a7d6a;
+          color: #6b6050;
           font-size: 10px;
           letter-spacing: 1.4px;
           text-transform: uppercase;
@@ -512,7 +507,7 @@ export default function PublicHomePage() {
         }
 
         .preview-kpis span {
-          color: #8a7d6a;
+          color: #6b6050;
           font-size: 10px;
           margin-bottom: 5px;
         }

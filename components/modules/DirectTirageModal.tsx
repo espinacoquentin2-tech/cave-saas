@@ -170,6 +170,7 @@ export function DirectTirageModal({
   };
 
   const isTranquille = tirageForm.typeMise === "TRANQUILLE";
+  const needsMixtion = !isTranquille && lot.qualiteLot !== "MIXTION_TIRAGE";
   const baseYear = parseInt(lot.year || lot.millesime) || parseInt((lot.businessCode || lot.code).substring(0, 4)) || new Date().getFullYear();
   const nextYear = baseYear + 1;
   const releaseDate = new Date(`${nextYear}-01-01T00:00:00Z`);
@@ -208,6 +209,7 @@ export function DirectTirageModal({
           </div>
         </div>
       )}
+      {needsMixtion && <p role="status">Pour la prise de mousse, ouvrez « Planif. Tirage » puis « Mixtion et tirage » afin de prélever le levain qualifié et de contrôler la mixtion avant la mise en bouteilles.</p>}
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
         <FF label="Format">
@@ -293,7 +295,7 @@ export function DirectTirageModal({
 
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", marginTop: 16 }}>
         <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
-        <Btn onClick={submitTirage} disabled={isSubmitting || !tirageForm.volume || isTirageBlockedAOC || !isLotTirageEligible || isTirageStockShortage || tirageBottleCount <= 0}>
+        <Btn onClick={submitTirage} disabled={isSubmitting || needsMixtion || !tirageForm.volume || isTirageBlockedAOC || !isLotTirageEligible || isTirageStockShortage || tirageBottleCount <= 0}>
           {isSubmitting ? "Tirage en cours..." : "Valider le tirage"}
         </Btn>
       </div>

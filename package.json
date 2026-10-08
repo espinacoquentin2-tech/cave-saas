@@ -7,17 +7,21 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "test:security": "node --test tests/security/*.test.mjs",
+    "test:e2e:launch": "playwright test tests/e2e/launch-readiness.spec.ts",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui-v1": "playwright test tests/e2e/ui-v1-smoke.spec.ts",
-    "test:e2e:ui-v1:chrome": "playwright test tests/e2e/ui-v1-smoke.spec.ts --project=chrome"
+    "test:e2e:ui-v1:chrome": "playwright test tests/e2e/ui-v1-smoke.spec.ts --project=chrome",
+    "test:levains": "node --conditions=react-server --require ./tests/helpers/register-typescript.cjs --test tests/levains/*.test.cjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "@supabase/supabase-js": "^2.99.0",
-    "next": "^16.2.1",
+    "next": "16.3.8",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "server-only": "0.0.1",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -27,7 +31,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.1.6",
+    "eslint-config-next": "16.3.8",
     "prisma": "^5.22.0",
     "tailwindcss": "^4",
     "typescript": "^5"

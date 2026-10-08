@@ -1,3 +1,4 @@
+import { assertGenericLotMutationAllowed } from '@/lib/levain';
 // services/lots.service.ts
 import { z } from 'zod';
 import { Prisma } from '@prisma/client';
@@ -93,8 +94,9 @@ export class LotsService {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
       if (existingTx) throw new Error("ALREADY_APPLIED: Opération déjà enregistrée.");
 
-      const lot = await tx.lot.findFirst({ where: { id: data.lotId, organizationId } });
+      const lot = await tx.lot.findFirst({ where: { id: data.lotId, organizationId }, include: {currentContainer: true} });
       if (!lot) throw new Error("Lot introuvable.");
+      assertGenericLotMutationAllowed(lot, 'intrants');
 
       const isSucre = data.intrant === "Chaptalisation (Sucre)";
       const isAcide = data.intrant === "Acidification";
@@ -269,9 +271,10 @@ export class LotsService {
       const lotIds = [...new Set(validReadings.map((reading) => reading.lotId))];
       const lots = await tx.lot.findMany({
         where: { id: { in: lotIds }, organizationId },
-        select: { id: true },
+        select: { id: true, status:true, qualiteLot:true, currentContainer: {select:{displayName:true}} },
       });
       if (lots.length !== lotIds.length) throw new Error("Lot introuvable.");
+      lots.forEach(lot => assertGenericLotMutationAllowed(lot, 'status'));
 
       for (const r of validReadings) {
         await tx.faReading.create({ 
@@ -361,8 +364,9 @@ export class LotsService {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
       if (existingTx) throw new BusinessLogicError("ALREADY_APPLIED: Statut déjà modifié.", 409);
 
-      const lot = await tx.lot.findFirst({ where: { id: data.lotId, organizationId } });
+      const lot = await tx.lot.findFirst({ where: { id: data.lotId, organizationId }, include: {currentContainer: true} });
       if (!lot) throw new BusinessLogicError("Lot introuvable.", 404);
+      assertGenericLotMutationAllowed(lot, 'status');
 
       if (!isManualLotStatusTransitionAllowed(lot.status, data.newStatus)) {
         throw new BusinessLogicError(
@@ -406,8 +410,9 @@ export class LotsService {
       const existingTx = await tx.idempotencyRecord.findUnique({ where: { key: data.idempotencyKey } });
       if (existingTx) throw new Error("ALREADY_APPLIED: Volume déjà corrigé.");
 
-      const lot = await tx.lot.findFirst({ where: { id: data.lotId, organizationId } });
+      const lot = await tx.lot.findFirst({ where: { id: data.lotId, organizationId }, include: {currentContainer: true} });
       if (!lot) throw new Error("Lot introuvable.");
+      assertGenericLotMutationAllowed(lot, 'volume');
 
       const diff = data.newVolume - Number(lot.currentVolume);
       const eventType = diff > 0 ? 'CORRECTION_HAUSSE' : 'CORRECTION_BAISSE';

@@ -49,11 +49,11 @@ export function Modal({ title, onClose, children, wide }: any) {
   );
 }
 
-export function FF({ label, children }: any) {
+export function FF({ label, children, htmlFor }: any) {
   const T = useTheme();
   return (
     <div style={{ marginBottom:14 }}>
-      <label style={{ display:"block", fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:2, marginBottom:5 }}>{label}</label>
+      <label htmlFor={htmlFor} style={{ display:"block", fontSize:10, color:T.textDim, textTransform:"uppercase", letterSpacing:2, marginBottom:5 }}>{label}</label>
       {children}
     </div>
   );

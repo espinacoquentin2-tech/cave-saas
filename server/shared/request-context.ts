@@ -1,3 +1,4 @@
+import "server-only";
 import { createClient } from '@supabase/supabase-js';
 import { z } from 'zod';
 import { ForbiddenError, UnauthorizedError } from '@/lib/errors';

@@ -1,11 +1,11 @@
 // services/tracabilite.service.ts
-import { BottleLot, Lot } from '@prisma/client';
+import { BottleLot, Lot, Prisma } from '@prisma/client';
 import { TraceabilityRequestPayload } from '../validations/tracabilite.schema';
 import { prisma } from '@/server/shared/prisma';
 
 
 export class TracabiliteService {
-  static async getLineage(data: TraceabilityRequestPayload, organizationId: number) {
+  static async getLineage(data: TraceabilityRequestPayload, organizationId: number, db: Pick<Prisma.TransactionClient, "lot" | "bottleLot" | "shipmentLine" | "bottleEventLink" | "lotEvent"> = prisma) {
     const { lotCode, type } = data;
 
     type BulkTraceableLot = Lot & { _type: 'bulk' };
@@ -21,11 +21,11 @@ export class TracabiliteService {
 
     // 1. TROUVER LE LOT CIBLE
     if (type === "bulk") {
-      const lot = await prisma.lot.findFirst({ where: { businessCode: lotCode, organizationId } });
+      const lot = await db.lot.findFirst({ where: { businessCode: lotCode, organizationId } });
       if (!lot) throw new Error("Lot Vrac introuvable.");
       focusedLot = toBulkTraceable(lot);
     } else {
-      const bLot = await prisma.bottleLot.findFirst({ where: { businessCode: lotCode, organizationId } });
+      const bLot = await db.bottleLot.findFirst({ where: { businessCode: lotCode, organizationId } });
       if (!bLot) throw new Error("Lot Bouteille introuvable.");
       focusedLot = toBottleTraceable(bLot);
     }
@@ -33,12 +33,12 @@ export class TracabiliteService {
     // 2. RECHERCHE DES PARENTS (Ascendance)
     if (focusedLot._type === 'bottle') {
       if (focusedLot.sourceLotId) {
-        const parent = await prisma.lot.findFirst({ where: { id: focusedLot.sourceLotId, organizationId } });
+        const parent = await db.lot.findFirst({ where: { id: focusedLot.sourceLotId, organizationId } });
         if (parent) parents.push(toBulkTraceable(parent));
       }
 
       if (focusedLot.sourceBottleLotId) {
-        const parentBottle = await prisma.bottleLot.findFirst({
+        const parentBottle = await db.bottleLot.findFirst({
           where: { id: focusedLot.sourceBottleLotId, organizationId },
         });
         if (parentBottle) parents.push(toBottleTraceable(parentBottle));
@@ -50,10 +50,10 @@ export class TracabiliteService {
       // 👈 CORRECTION : Typage explicite du (c: string)
       const sourceCodes = focusedLot.notes.split("Sources:")[1].split(",").map((c: string) => c.trim());
       
-      const parentBulks = await prisma.lot.findMany({
+      const parentBulks = await db.lot.findMany({
         where: { businessCode: { in: sourceCodes }, organizationId },
       });
-      const parentBottles = await prisma.bottleLot.findMany({
+      const parentBottles = await db.bottleLot.findMany({
         where: { businessCode: { in: sourceCodes }, organizationId },
       });
       
@@ -63,39 +63,52 @@ export class TracabiliteService {
       ];
     }
 
+    // Les levains portent leur ascendance dans les événements structurés.
+    // Les notes historiques restent prises en charge pour les autres flux.
+    let levainChildren: Lot[] = [];
+    if (focusedLot._type === 'bulk') {
+      const events = { organizationId, eventType: { in: ['CREATION_LEVAIN', 'PREPARATION_LEVAIN', 'ALIMENTATION_LEVAIN', 'CREATION_MIXTION'] } };
+      const [levainParents, descendants] = await Promise.all([
+        db.lot.findMany({ where: { organizationId, id: { not: focusedLot.id }, lotEventLots: { some: { roleInEvent: 'SOURCE', event: { ...events, lots: { some: { lotId: focusedLot.id, roleInEvent: 'CIBLE' } } } } } } }),
+        db.lot.findMany({ where: { organizationId, id: { not: focusedLot.id }, lotEventLots: { some: { roleInEvent: 'CIBLE', event: { ...events, lots: { some: { lotId: focusedLot.id, roleInEvent: 'SOURCE' } } } } } } }),
+      ]);
+      parents = [...new Map([...parents, ...levainParents.map(toBulkTraceable)].map(lot => [`${lot._type}:${lot.id}`, lot])).values()];
+      levainChildren = descendants;
+    }
+
     // 3. RECHERCHE DES ENFANTS ET EXPÉDITIONS (Descendance)
     
     // Recherche des Vracs enfants (Seul Lot a le champ notes)
-    const childBulks = await prisma.lot.findMany({
+    const childBulks = await db.lot.findMany({
       where: { organizationId, notes: { contains: focusedLot.businessCode } }
     });
     
     // Recherche des Bouteilles enfants
     let childBottles: BottleLot[] = [];
     if (type === "bulk") {
-      childBottles = await prisma.bottleLot.findMany({
+      childBottles = await db.bottleLot.findMany({
         where: { sourceLotId: focusedLot.id, organizationId }
       });
     } else {
-      childBottles = await prisma.bottleLot.findMany({
+      childBottles = await db.bottleLot.findMany({
         where: { sourceBottleLotId: focusedLot.id, organizationId }
       });
     }
 
     children = [
-      ...childBulks.map((c) => toBulkTraceable(c)),
+      ...[...new Map([...childBulks, ...levainChildren].map(lot => [lot.id, lot])).values()].map(toBulkTraceable),
       ...childBottles.map((c) => toBottleTraceable(c))
     ];
 
     // Recherche des expéditions
     if (focusedLot._type === 'bottle') {
       const [shipmentLines, bottleEventLinks] = await Promise.all([
-        prisma.shipmentLine.findMany({
+        db.shipmentLine.findMany({
           where: { bottleLotId: focusedLot.id, shipment: { organizationId } },
           include: { shipment: true },
           orderBy: { id: 'desc' },
         }),
-        prisma.bottleEventLink.findMany({
+        db.bottleEventLink.findMany({
           where: {
             bottleLotId: focusedLot.id,
             event: {
@@ -125,7 +138,7 @@ export class TracabiliteService {
         })),
       ];
     } else {
-      const allExpeditions = await prisma.lotEvent.findMany({
+      const allExpeditions = await db.lotEvent.findMany({
         where: { organizationId, eventType: { in: ["EXPEDITION", "EXPEDITION_VRAC"] } }
       });
       expeditions = allExpeditions

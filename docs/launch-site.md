@@ -30,7 +30,7 @@ contact@macuverie.fr
 
 Cette adresse est à remplacer si une autre adresse professionnelle est retenue.
 
-Aucun formulaire backend et aucun outil analytics ne sont ajoutés pour cette première version.
+Aucun formulaire backend n'est ajouté : la demande de démo reste un lien email. Une intégration Plausible facultative est disponible, désactivée par défaut et bloquée avant consentement. Voir `docs/launch-readiness.md`.
 Les visuels de la landing sont des mockups HTML/CSS/SVG illustratifs et ne s'appuient sur aucune donnée métier réelle. La landing ne charge aucune donnée client.
 
 ## Pages juridiques

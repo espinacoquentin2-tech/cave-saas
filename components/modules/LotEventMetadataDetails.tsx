@@ -88,6 +88,26 @@ export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
     return null;
   }
 
+  if (metadata.schemaVersion === 2 && isObject(metadata.recipe)) {
+    const recipe = metadata.recipe;
+    const calculation = recipe.calculation || {};
+    const parameters = recipe.parameters || recipe;
+    const protocol = recipe.protocol;
+    return <div style={{padding:12, background:T.surfaceHigh, color:T.textStrong}}>
+      {protocol && <p>Protocole : {protocol.reference}<br />{protocol.text}</p>}
+      {recipe.step && <p>Étape : {recipe.step.label} — {recipe.step.performedAt}</p>}
+      {parameters.finalVolumeHl != null && <p>Volume final : {parameters.finalVolumeHl} hL</p>}
+      {calculation.wineVolumeHl != null && <p>Vin direct : {calculation.wineVolumeHl} hL · liqueur : {calculation.liqueurVolumeHl} hL · eau : {calculation.waterVolumeHl} hL · DAP : {calculation.dapKg} kg</p>}
+      {Array.isArray(metadata.lotDebits) && metadata.lotDebits.map((lot: JsonObject) => <p key={lot.lotId}>Lot source #{lot.lotId} : {lot.volumeHl} hL prélevés ; reste {lot.remainingVolumeHl} hL</p>)}
+      {Array.isArray(metadata.productDebits) && metadata.productDebits.map((p: JsonObject) => <p key={p.productId}>{p.name} : {p.quantity} {p.unit}</p>)}
+      {recipe.measurements && <div>{Object.entries(recipe.measurements).filter(([,v])=>v!=null).map(([name,v])=><p key={name}>{({temperatureC:'Température (°C)',density20:'Masse volumique à 20 °C',alcoholPct:'TAV (%)',residualSugarGPerL:'Sucres résiduels (g/L GF)',ph:'pH',populationMillionsPerMl:'Population (millions/mL)'} as Record<string,string>)[name] || name} : {String(v)}</p>)}</div>}
+      {recipe.intervention && <p>Intervention : {recipe.intervention === 'AERATION' ? 'Aération' : 'Agitation'}</p>}
+      {recipe.missingMeasurementsReason && <p>Mesures indisponibles : {recipe.missingMeasurementsReason}</p>}
+      {recipe.wineDensity20 != null && <p>Point de tirage : vin {recipe.wineDensity20}, mixtion {recipe.mixtionDensity20} — corrigés à 20 °C</p>}
+      {recipe.comment && <p>Observations : {recipe.comment}</p>}
+    </div>;
+  }
+
   const operation = String(metadata.operation || "").toUpperCase();
   if (
     operation !== "EXPEDITION_VRAC" &&
@@ -95,13 +115,26 @@ export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
     operation !== "TRANSFERT" &&
     operation !== "CORRECTION_VOLUME" &&
     operation !== "TIRAGE" &&
-    operation !== "ASSEMBLAGE"
+    operation !== "ASSEMBLAGE" &&
+    operation !== "CREATION_LEVAIN" &&
+    operation !== "ALIMENTATION_LEVAIN"
   ) {
     return null;
   }
 
   const rows: Array<[string, string | null]> =
-    operation === "INTRANT"
+    operation === "CREATION_LEVAIN" || operation === "ALIMENTATION_LEVAIN"
+      ? [
+          ["Lot source", metadata.sourceLotId ? `#${metadata.sourceLotId}` : null],
+          ["Lot levain", metadata.levainLotId ? `#${metadata.levainLotId}` : null],
+          ["Vin prélevé", formatNumber(metadata.volumeHl ?? metadata.calculation?.wineVolumeHl, " hL")],
+          ["Volume avant", formatNumber(metadata.parameters?.remainingVolumeHl, " hL")],
+          ["Volume final", formatNumber(metadata.parameters?.finalVolumeHl ?? metadata.volumeHl, " hL")],
+          ["Liqueur ajoutée", formatNumber(metadata.calculation?.liqueurVolumeHl, " hL")],
+          ["Eau ajoutée", formatNumber(metadata.calculation?.waterVolumeHl, " hL")],
+          ["DAP calculé", formatNumber(metadata.calculation?.dapKg, " kg")],
+        ]
+      : operation === "INTRANT"
       ? [
           ["Intrant", metadata.intrant || null],
           ["Quantité", formatNumber(metadata.quantity)],

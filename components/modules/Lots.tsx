@@ -152,7 +152,7 @@ export function Lots({ onSelectLot }: { onSelectLot: any }) {
           const container = (l._type === "bulk" && !isDeadBulk) ? (state.containers || []).find((c: any) => c.id === l.containerId) : null;
 
           return (
-            <div key={l.code} onClick={() => onSelectLot(l)} style={{ display: "grid", gridTemplateColumns: "2fr 60px 80px 90px 110px 1fr 130px", padding: "14px 16px", borderBottom: i < filtered.length - 1 ? `1px solid ${T.border}` : "none", cursor: "pointer", alignItems: "center", opacity: tab === "historique" ? 0.6 : 1 }} onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = T.surfaceHigh} onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = "transparent"}>
+            <div data-testid="lot-row" key={l.code} onClick={() => onSelectLot(l)} style={{ display: "grid", gridTemplateColumns: "2fr 60px 80px 90px 110px 1fr 130px", padding: "14px 16px", borderBottom: i < filtered.length - 1 ? `1px solid ${T.border}` : "none", cursor: "pointer", alignItems: "center", opacity: tab === "historique" ? 0.6 : 1 }} onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = T.surfaceHigh} onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => e.currentTarget.style.background = "transparent"}>
               <div style={{ fontSize: 13, color: T.accent, fontFamily: "monospace", fontWeight: 600 }}>{l.code}</div>
               <div style={{ fontSize: 13, color: T.text }}>{l.millesime}</div>
               <div style={{ fontSize: 12, color: T.accentLight, fontFamily: "monospace" }}>{l.cepage}</div>
