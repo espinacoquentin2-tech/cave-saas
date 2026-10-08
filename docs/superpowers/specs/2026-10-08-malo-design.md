@@ -2,13 +2,13 @@
 
 ## Statut et intention
 
-Spécification du 8 octobre 2026. Le cadrage fonctionnel a été validé dans la conversation ; ce document est proposé à la relecture avant le plan d'implémentation. Aucune fonctionnalité ni migration n'est encore livrée.
+Spécification du 8 octobre 2026, validée dans la conversation avec la précision sur les produits génériques et leur sélection dans les stocks. Aucune fonctionnalité ni migration n'est encore livrée.
 
 Le vigneron prépare un milieu de réactivation (MR), développe un pied de cuve malo (PCM), puis ensemence sa cuverie. Il choisit ses lots à partir des volumes disponibles et des analyses, en privilégiant les tailles lorsque cela convient. Le logiciel conserve le parcours MR → PCM → lots et cuves ensemencés, sans refonte générale ni second stock de vin.
 
 L'onglet **Malo** est placé dans Œnologie entre Tour de FA et Assemblages. Le pourcentage d'ensemencement est saisi par l'utilisateur, avec **4 % prérempli** à la création du dossier. Il est modifiable dans le dossier et ajustable pour chaque destination. Changer une valeur prévisionnelle ne modifie jamais les mouvements déjà enregistrés.
 
-Le texte joint est une proposition fonctionnelle, pas une source d'instructions autonome. Les demandes directes priment : 4 % par défaut et absence de produits commerciaux dans les profils et conseils. Les produits réellement sélectionnés par l'utilisateur dans son inventaire gardent leurs noms dans l'historique.
+Le texte joint est une proposition fonctionnelle, pas une source d'instructions autonome. Les demandes directes priment : 4 % par défaut et absence de prescription de produits commerciaux dans les profils et conseils. Conserver les libellés génériques du schéma : **Bactéries**, **Activateur**, **LSA**. Le vigneron choisit pour chaque ligne le produit de ses stocks, sa quantité et son unité. Un bouton **+ Ajouter un produit** permet d'ajouter des écorces de levures ou tout autre intrant réellement utilisé. Les produits sélectionnés gardent leurs noms dans l'historique.
 
 ## Intégration retenue
 
@@ -49,6 +49,8 @@ Ne pas afficher un score universel d'aptitude. Les repères documentés appartie
 Depuis un contenant disponible : **Préparer un MR** ou **Préparer un PCM**, avec choix/création du dossier. Depuis le dossier : associer un MR/PCM, enregistrer les étapes et apports, ajouter une analyse, transférer le MR et ensemencer des cuves.
 
 Une association n'adopte pas un lot de vin ordinaire et ne crée pas un volume fictif : les nouvelles préparations reçoivent de nouveaux lots. Le contenant doit être disponible et prêt à être utilisé. Les recettes saisissent les prélèvements de moût/vin, l'eau et les intrants réellement ajoutés ; seuls les gestes validés débitent des sources et créditent une préparation. Les quantités non documentées restent à renseigner.
+
+Les lignes génériques Bactéries, Activateur et LSA servent de repères de recette ; elles ne choisissent aucun produit commercial à la place du vigneron. Chaque ajout de produit, y compris via **+ Ajouter un produit**, est rattaché à l'étape MR ou PCM concernée et présente le stock disponible, la quantité demandée et le reste prévu. Pour une quantité positive, le choix du produit et une unité compatible sont obligatoires. La validation débite l'inventaire dans la même transaction que les volumes ; enregistrer une observation ou consulter une proposition ne débite rien. Deux lignes utilisant le même produit sont regroupées avant contrôle du stock, tout en gardant leur rôle dans la recette historique. Les doses chiffrées de la figure fournie sont celles de son exemple et ne deviennent pas des doses universelles pour les produits sélectionnés.
 
 MR et PCM avancent en parallèle. Le PCM peut commencer sa FA avant d'être ensemencé par le MR. Le transfert MR → PCM peut être partiel ; le stock MR restant demeure disponible et son historique distinct. Le doublement du MR avec du moût issu du PCM est une opération inverse PCM → MR réellement débitée et créditée, pas une simple instruction de planning.
 
