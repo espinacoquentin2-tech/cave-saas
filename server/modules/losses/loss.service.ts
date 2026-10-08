@@ -71,11 +71,17 @@ export class LossModuleService {
           organizationId: actor.organizationId,
         });
 
+        if (lot.maloPreparationId) {
+          await tx.lotEvent.update({where:{id:event.id},data:{metadata:{schemaVersion:1,preparationId:lot.maloPreparationId,role:lot.maloRole,operation:'PERTE_MALO',idempotencyKey:input.idempotencyKey,volumeHl:input.amount,remainingVolumeHl:remainingQuantity}}});
+          await tx.lot.update({where:{id:lot.id},data:{maloCompositionEventId:event.id,...(remainingQuantity<=0?{currentContainerId:null}:{})}});
+          if (lot.maloRole === "PCM") await tx.maloPreparation.update({where:{id:lot.maloPreparationId},data:{initialAnalysisId:null,referenceCompositionEventId:null}});
+          if (lot.currentContainerId) await tx.lotEventContainer.create({data:{eventId:event.id,containerId:lot.currentContainerId,roleInEvent:"SOURCE"}});
+        }
         await LossRepository.createLotEventLink(tx, {
           eventId: event.id,
           lotId: lot.id,
           roleInEvent: 'SOURCE',
-          volumeChange: toDecimal(input.amount),
+          volumeChange: toDecimal(lot.maloRole ? -input.amount : input.amount),
         });
 
         await LossRepository.createIdempotencyRecord(tx, input.idempotencyKey, actor.email);

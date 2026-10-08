@@ -188,6 +188,8 @@ export class AdminResetService {
     counts.bottleEvents = (await tx.bottleEvent.deleteMany()).count;
     counts.bottleLots = (await tx.bottleLot.deleteMany()).count;
 
+    await tx.lot.updateMany({data:{maloPreparationId:null,maloRole:null,maloCompositionEventId:null}});
+    await tx.maloPreparation.deleteMany();
     counts.analyses = (await tx.analysis.deleteMany()).count;
     counts.faReadings = (await tx.faReading.deleteMany()).count;
 

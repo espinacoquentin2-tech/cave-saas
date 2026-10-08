@@ -29,7 +29,7 @@ test('profils distincts et calendrier en jours civils', () => {
  assert.equal(profiles.getMaloProtocol('CUSTOM').mrMalicThreshold,null);
 });
 test('préparations et sous-produits exclus des sources ordinaires',()=>{
- for(const l of [{status:'VIN_DE_BASE',maloRole:'MR'}, {status:'VIN_DE_BASE',qualiteLot:'LEVAIN'},{status:'LIES'}]) assert.equal(malo.isMaloSourceEligible({...l,currentVolume:10}),false);
+ for(const l of [{status:'VIN_DE_BASE',maloRole:'MR'}, {status:'VIN_DE_BASE',qualiteLot:'LEVAIN'},{status:'LIES'},{status:'ACTIF',qualiteLot:null,currentContainer:{displayName:'Cuve Levain'}}]) assert.equal(malo.isMaloSourceEligible({...l,currentVolume:10}),false);
  assert.equal(malo.isMaloSourceEligible({status:'MOUT_DEBOURBE',currentVolume:10}),true);
  assert.throws(()=>malo.assertMaloGenericMutationAllowed({maloRole:'PCM'},'volume'));
 });

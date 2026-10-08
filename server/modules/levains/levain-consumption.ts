@@ -176,7 +176,7 @@ export async function consumeRecipe(
             id: lot.currentContainerId,
             organizationId: actor.organizationId,
           },
-          data: { status: "EN_NETTOYAGE" },
+          data: { status: lot.maloRole ? "NETTOYAGE" : "EN_NETTOYAGE" },
         });
     }
     lotDebits.push({

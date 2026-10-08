@@ -1,3 +1,4 @@
+import { assertMaloGenericMutationAllowed } from '@/lib/malo';
 import { Prisma } from '@prisma/client';
 import { BusinessLogicError } from '@/lib/errors';
 import { CreateTransferInput } from '@/server/modules/transfers/transfer.schemas';
@@ -61,6 +62,7 @@ export class TransferService {
         throw new BusinessLogicError('Lot source ou cuve source introuvable.', 404);
       }
 
+      assertMaloGenericMutationAllowed(sourceLot, "transférer");
       assertSourceConsistency(sourceLot, input);
 
       const remainderStatus = normalizeRemainderStatus(input.remainderType);
@@ -100,6 +102,7 @@ export class TransferService {
           throw new BusinessLogicError(`Cuve cible ${containerId} introuvable.`, 404);
         }
 
+        if (targetContainer.usage) throw new BusinessLogicError('Utilisez le dossier Malo pour remplir ce contenant.',409);
         const occupiedVolume = targetContainer.currentLots.reduce(
           (sum, lot) => sum + toNumber(lot.currentVolume),
           0,

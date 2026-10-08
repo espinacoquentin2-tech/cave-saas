@@ -1,0 +1,8 @@
+const test=require('node:test');const assert=require('node:assert/strict');const {randomUUID}=require('node:crypto');
+const {fixture,prisma}=require('../helpers/malo-fixture.cjs');const {setup}=require('../helpers/malo-cycle.cjs');const {PUT}=require('../../app/api/containers/route.ts');const context=require('../../server/shared/request-context.ts');
+test('usage : contenant actif protégé, réaffectation vide idempotente', {skip:!process.env.MALO_TEST_DATABASE},()=>fixture(async f=>{
+ const s=await setup(f),mr=await f.tx.lot.findUnique({where:{id:s.mr}});const originalTx=prisma.$transaction,originalActor=context.resolveAuthenticatedActor;prisma.$transaction=work=>f.tx.$executeRawUnsafe('SAVEPOINT container_usage').then(async()=>{try{const r=await work(f.tx);await f.tx.$executeRawUnsafe('RELEASE SAVEPOINT container_usage');return r}catch(e){await f.tx.$executeRawUnsafe('ROLLBACK TO SAVEPOINT container_usage');await f.tx.$executeRawUnsafe('RELEASE SAVEPOINT container_usage');throw e}});context.resolveAuthenticatedActor=async()=>f.actor;
+ try{const key=randomUUID(),req=()=>new Request('http://localhost/api/containers',{method:'PUT',body:JSON.stringify({id:mr.currentContainerId,usage:null,idempotencyKey:key})});assert.equal((await PUT(req())).status,409);
+ await s.transfer('MR_TO_PCM',s.mr,s.pcm,1.5);assert.equal((await PUT(req())).status,200);assert.equal((await PUT(req())).status,200);assert.equal((await f.tx.container.findUnique({where:{id:mr.currentContainerId}})).usage,null);assert.equal(await f.tx.lotEvent.count({where:{organizationId:f.actor.organizationId,eventType:'CHANGEMENT_USAGE_CONTENANT'}}),1);
+ }finally{prisma.$transaction=originalTx;context.resolveAuthenticatedActor=originalActor}
+}));

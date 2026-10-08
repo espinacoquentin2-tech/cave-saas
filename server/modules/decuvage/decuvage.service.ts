@@ -1,3 +1,4 @@
+import { assertMaloGenericMutationAllowed } from '@/lib/malo';
 import { Prisma } from '@prisma/client';
 import { BusinessLogicError } from '@/lib/errors';
 import { DecuvageInput } from '@/server/modules/decuvage/decuvage.schemas';
@@ -30,6 +31,7 @@ export class DecuvageService {
       }
 
       const totalDecuvage = Number((input.volGoutte + input.volPresse).toFixed(3));
+      assertMaloGenericMutationAllowed(sourceLot, "décuver");
       const sourceVolume = toNumber(sourceLot.currentVolume);
       if (sourceVolume < totalDecuvage) {
         throw new BusinessLogicError(
@@ -61,6 +63,7 @@ export class DecuvageService {
           throw new BusinessLogicError(`Cuve cible ${containerId} introuvable.`, 404);
         }
 
+        if(container.usage)throw new BusinessLogicError('Utilisez le dossier Malo pour ce contenant.',409);
         const occupiedVolume = container.currentLots.reduce((sum, lot) => sum + toNumber(lot.currentVolume), 0);
         const nextVolume = occupiedVolume + volume;
         const capacity = toNumber(container.capacityValue);

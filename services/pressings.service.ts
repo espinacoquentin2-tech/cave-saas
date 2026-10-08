@@ -114,6 +114,8 @@ export class PressingService {
         baseStatus: string
       ) => {
         for (const dest of dests) {
+          const target = await tx.container.findFirst({where:{id:dest.cuveId,organizationId}});
+          if (!target || target.usage) throw new Error('Destination indisponible : utilisez le dossier Malo pour ses préparations.');
           const code = `${millesime}-${press.cepage}-${cruFormatted}-${suffix}-${String(ts + counter).slice(-4)}`;
           
           const lot = await tx.lot.create({

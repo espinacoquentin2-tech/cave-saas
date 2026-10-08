@@ -1,3 +1,4 @@
+import { assertMaloGenericMutationAllowed } from '@/lib/malo';
 // services/cuverie.service.ts
 import { Lot, Prisma } from '@prisma/client';
 import { DecuvagePayload, TransferPayload } from '../validations/cuverie.schema';
@@ -26,6 +27,7 @@ export class CuverieService {
 
       // Vérification mathématique stricte
       const totalDecuvage = data.volGoutte + data.volPresse;
+      assertMaloGenericMutationAllowed(sourceLot, "transférer");
       if (Number(sourceLot.currentVolume) < totalDecuvage) {
          throw new BusinessLogicError(`Volume insuffisant. Dispo: ${Number(sourceLot.currentVolume)}hL, Demandé: ${totalDecuvage}hL.`);
       }
@@ -61,6 +63,7 @@ export class CuverieService {
 
       const createSubLot = async (vol: number, targetContainerId: number | null | undefined, suffix: string, typeDesc: string) => {
         if (vol <= 0) return;
+        if (targetContainerId && (await tx.container.findUnique({where:{id:targetContainerId}}))?.usage) throw new BusinessLogicError("Contenant réservé à une préparation Malo.",409);
         const newLot = await tx.lot.create({
           data: {
             technicalCode: `${sourceLot.technicalCode}${suffix}-${Date.now()}`,
@@ -114,6 +117,7 @@ export class CuverieService {
       const sourceContainer = await tx.container.findUnique({ where: { id: data.fromId } });
       if (!sourceLot || !sourceContainer) throw new BusinessLogicError("Source introuvable.", 404);
 
+      assertMaloGenericMutationAllowed(sourceLot, "transférer");
       if (Number(sourceLot.currentVolume) < data.volume) {
          throw new BusinessLogicError(`Volume source insuffisant. Dispo: ${Number(sourceLot.currentVolume)}hL`);
       }
@@ -180,6 +184,7 @@ export class CuverieService {
       for (const dest of data.destinations) {
         const targetContainer = await tx.container.findUnique({ where: { id: dest.toId }, include: { currentLots: { where: { status: 'ACTIF' } } } });
         if (!targetContainer) throw new BusinessLogicError(`Cuve cible ID ${dest.toId} introuvable.`);
+        if (targetContainer.usage) throw new BusinessLogicError("Contenant réservé à une préparation Malo.",409);
         
         // On calcule le volume actuel de la cible en lisant les Decimals
         const targetCurrentVol = targetContainer.currentLots.reduce((sum, l) => sum + Number(l.currentVolume), 0);

@@ -55,6 +55,7 @@ export class MixtionService {
       if (!tank)
         throw new BusinessLogicError("Cuve de mixtion introuvable.", 404);
       if (
+        tank.usage ||
         tank.currentLots.length ||
         tank.capacityUnit !== "hL" ||
         tank.id === source.currentContainerId ||

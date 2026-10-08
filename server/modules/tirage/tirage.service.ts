@@ -1,3 +1,4 @@
+import { assertMaloGenericMutationAllowed } from '@/lib/malo';
 import { Prisma } from '@prisma/client';
 import { MIXTION_NON_COMPOSITION_EVENTS } from '@/lib/mixtion';
 import {
@@ -130,6 +131,7 @@ export class TirageModuleService {
         if (!sourceLot) {
           throw new BusinessLogicError('Lot source introuvable.', 404);
         }
+        assertMaloGenericMutationAllowed(sourceLot, 'mettre en bouteilles');
 
         if (!input.isTranquille) {
           if (sourceLot.qualiteLot !== 'MIXTION_TIRAGE') throw new BusinessLogicError('Préparez une mixtion avec un levain qualifié avant le tirage.', 409);

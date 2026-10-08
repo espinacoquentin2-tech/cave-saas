@@ -24,6 +24,7 @@ model User {
   lotEvents    LotEvent[]
   bottleEvents BottleEvent[]
   memberships  OrganizationMember[]
+  maloPreparations MaloPreparation[]
 
   @@map("users")
 }
@@ -54,6 +55,7 @@ model Organization {
   stockMovements StockMovement[]
   auditLogs      AuditLog[]
   workOrders     WorkOrder[]
+  maloPreparations MaloPreparation[]
 
   @@map("organizations")
 }
@@ -116,6 +118,7 @@ model Container {
   zone           String?
   status         String   @default("VIDE")
   notes          String?
+  usage          String?
   createdAt      DateTime @default(now()) @map("created_at")
 
   // NOUVEAU : Relations Parent/Enfant pour les compartiments
@@ -148,6 +151,10 @@ model Lot {
   // LA NOUVELLE COLONNE INDISPENSABLE 👇
   qualiteLot         String?  @map("qualite_lot")
   notes              String?
+  maloPreparationId  Int? @map("malo_preparation_id")
+  maloRole           String? @map("malo_role")
+  maloCompositionEventId Int? @map("malo_composition_event_id")
+  maloPreparation    MaloPreparation? @relation(fields: [maloPreparationId], references: [id], onDelete: Restrict)
 
   organization     Organization?  @relation(fields: [organizationId], references: [id])
   currentContainer Container?     @relation(fields: [currentContainerId], references: [id])
@@ -159,6 +166,7 @@ model Lot {
 
   @@index([organizationId])
   @@index([qualiteLot])
+  @@unique([maloPreparationId, maloRole])
   @@map("lots")
 }
 
@@ -191,6 +199,7 @@ model Analysis {
 
   organization Organization? @relation(fields: [organizationId], references: [id])
   lot          Lot           @relation(fields: [lotId], references: [id])
+  maloInitialReferences MaloPreparation[] @relation("MaloInitialAnalysis")
 
   @@index([organizationId])
   @@map("analyses")
@@ -215,9 +224,35 @@ model LotEvent {
   lots         LotEventLot[]
   containers   LotEventContainer[]
   intrants     LotEventIntrant[]
+  maloReferenceCompositions MaloPreparation[] @relation("MaloReferenceComposition")
 
   @@index([organizationId])
   @@map("lot_events")
+}
+
+model MaloPreparation {
+  id Int @id @default(autoincrement())
+  organizationId Int @map("organization_id")
+  name String
+  year Int
+  status String @default("EN_COURS")
+  notes String?
+  plannedVolumeHl Decimal @map("planned_volume_hl")
+  dosePct Decimal @default(4) @map("dose_pct")
+  protocolSnapshot Json @map("protocol_snapshot")
+  plannedDestinations Json @default("[]") @map("planned_destinations")
+  creatorUserId Int @map("creator_user_id")
+  creator User @relation(fields: [creatorUserId], references: [id], onDelete: Restrict)
+  initialAnalysisId Int? @map("initial_analysis_id")
+  referenceCompositionEventId Int? @map("reference_composition_event_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  organization Organization @relation(fields: [organizationId], references: [id])
+  initialAnalysis Analysis? @relation("MaloInitialAnalysis", fields: [initialAnalysisId], references: [id])
+  referenceComposition LotEvent? @relation("MaloReferenceComposition", fields: [referenceCompositionEventId], references: [id])
+  lots Lot[]
+  @@index([organizationId])
+  @@map("malo_preparations")
 }
 
 model LotEventLot {

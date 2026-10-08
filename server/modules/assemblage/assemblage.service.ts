@@ -1,3 +1,4 @@
+import { assertMaloGenericMutationAllowed } from '@/lib/malo';
 import { Prisma, PrismaClient } from '@prisma/client';
 import {
   AssemblageDecisionComponent,
@@ -316,6 +317,8 @@ export class AssemblageModuleService {
           throw new BusinessLogicError('Cuve de destination introuvable ou archivée.', 404);
         }
 
+        sourceLots.forEach(l => assertMaloGenericMutationAllowed(l, 'assembler'));
+        if(destinationContainer.usage) throw new BusinessLogicError('Utilisez le dossier Malo pour ce contenant.',409);
         if (DESTINATION_EXCLUDED_TYPES.has(destinationContainer.type)) {
           throw new BusinessLogicError(
             `Le contenant ${destinationContainer.displayName} n'est pas compatible avec un assemblage final.`,

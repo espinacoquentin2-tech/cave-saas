@@ -1,3 +1,4 @@
+import { isMaloLot } from '@/lib/malo';
 import "server-only";
 import { Prisma } from "@prisma/client";
 import { BusinessLogicError } from "@/lib/errors";
@@ -49,7 +50,7 @@ export async function readTankLot(tx: Tx, id: number, actor: RequestActor) {
 export async function wineLot(tx: Tx, id: number, actor: RequestActor) {
   const lot = await readLot(tx, id, actor);
   if (
-    !isTirageEligibleLotStatus(lot.status) ||
+    isMaloLot(lot) || !isTirageEligibleLotStatus(lot.status) ||
     getLevainState(
       lot,
       /LEVAIN/i.test(lot.currentContainer?.displayName ?? ""),
