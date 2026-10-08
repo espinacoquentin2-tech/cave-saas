@@ -13,7 +13,8 @@
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:ui-v1": "playwright test tests/e2e/ui-v1-smoke.spec.ts",
     "test:e2e:ui-v1:chrome": "playwright test tests/e2e/ui-v1-smoke.spec.ts --project=chrome",
-    "test:levains": "node --conditions=react-server --require ./tests/helpers/register-typescript.cjs --test tests/levains/*.test.cjs"
+    "test:levains": "node --conditions=react-server --require ./tests/helpers/register-typescript.cjs --test tests/levains/*.test.cjs",
+    "test:malo": "node --conditions=react-server --require ./tests/helpers/register-typescript.cjs --test tests/malo/*.test.cjs"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",
