@@ -2,6 +2,7 @@
 // @ts-nocheck
 
 import React, { useEffect, useState } from "react";
+import { calculateLevainFeeding } from "@/lib/levain";
 import { Btn, FF, Input, Select } from "@/components/ui";
 import { useAuth, useStore, useTheme } from "@/lib/store";
 import { buildApiHeaders, buildTirageStockItems, extractApiErrorMessage, getLotCode, toSafeNumber } from "@/lib/client-app-helpers";
@@ -100,6 +101,8 @@ export function PlanificateurTirage() {
   const [mixDestTankId, setMixDestTankId] = useState("");
   const [mixVolVinSaisi, setMixVolVinSaisi] = useState("");
 
+  const [createLevainKey, setCreateLevainKey] = useState(() => crypto.randomUUID());
+  const [feedLevainKey, setFeedLevainKey] = useState(() => crypto.randomUUID());
   const [createLevainSourceId, setCreateLevainSourceId] = useState("");
   const [alimSourceTankId, setAlimSourceTankId] = useState("");
   const [alimLevainTankId, setAlimLevainTankId] = useState("");
@@ -156,7 +159,7 @@ export function PlanificateurTirage() {
     if (t.includes("BOURBE") || t.includes("LIE") || t.includes("REBECHE")) return false;
     if (n.includes("BOURBE") || n.includes("LIE") || n.includes("REBECHE")) return false;
     const lot = getContainerLot(c);
-    if (!lot) return false;
+    if (!lot || lot.qualiteLot === "LEVAIN" || n.includes("LEVAIN")) return false;
     if (!isTirageEligibleLotStatus(lot.status)) return false;
     return true;
   });
@@ -564,107 +567,68 @@ export function PlanificateurTirage() {
   // ===========================================================================
   // CALCULS : ALIMENTATION (Page 3)
   // ===========================================================================
-  const calcAlimentation = () => {
-    const vLevain = parseFloat(String(config.alimVolLevain)) || 0;
-    const vFinal = parseFloat(String(config.alimVolFinal)) || 0;
-    if (!vLevain || !vFinal || vFinal <= vLevain) return null;
-    const sucreConsomme = (config.alimDensiteVeille - config.alimDensiteMatin) * 2.5;
-    const vLiqueur = (vFinal * (20 + sucreConsomme) - (vLevain * 20)) / config.alimLiqueurG;
-    const alcLiqueur = config.alimLiqueurG >= 600 ? 6.8 : 7.5; 
-    const alcNeeds = (vFinal * 12.0) - (vLevain * 12.0) - (vLiqueur * alcLiqueur) - (vFinal * (sucreConsomme / 16.8));
-    const vVin = alcNeeds / config.alimAlcVin;
-    const vEau = vFinal - (vLevain + vVin + vLiqueur);
-    return { sucreConsomme: sucreConsomme.toFixed(1), vLiqueur: vLiqueur > 0 ? vLiqueur.toFixed(3) : "0.000", vVin: vVin > 0 ? vVin.toFixed(2) : "0.00", vEau: vEau > 0 ? vEau.toFixed(2) : "0.00", dap: ((vFinal * 100 * 20) / 1000).toFixed(2) };
+  const feedingParameters = {
+    remainingVolumeHl: Number(config.alimVolLevain), finalVolumeHl: Number(config.alimVolFinal),
+    previousDensity: Number(config.alimDensiteVeille), currentDensity: Number(config.alimDensiteMatin),
+    liqueurSugarGPerL: Number(config.alimLiqueurG), wineAlcoholPct: Number(config.alimAlcVin),
   };
-  const resAlim = calcAlimentation();
+  const feedingCalculation = calculateLevainFeeding(feedingParameters);
+  const resAlim = feedingCalculation ? {
+    sucreConsomme: feedingCalculation.consumedSugarGPerL.toFixed(1),
+    vLiqueur: feedingCalculation.liqueurVolumeHl.toFixed(3),
+    vVin: feedingCalculation.wineVolumeHl.toFixed(3),
+    vEau: feedingCalculation.waterVolumeHl.toFixed(3),
+    dap: feedingCalculation.dapKg.toFixed(2),
+  } : null;
 
   // ===========================================================================
   // ACTIONS DE CUVERIE INTELLIGENTES (SÉCURISÉES)
   // ===========================================================================
 
   const handleAutoCreateLevain = async () => {
-    if (!createLevainSourceId) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: "Sélectionnez la cuve de vin qui servira à créer le levain.", color: T.red } });
-      return;
-    }
-    
-    const sourceTank = state.containers.find((c: any) => String(c.id) === String(createLevainSourceId));
-    if (!sourceTank || parseFloat(sourceTank.currentVolume) < maxLevainVol) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: `Volume insuffisant dans la cuve source. Il vous faut au moins ${maxLevainVol.toFixed(1)} hL.`, color: T.red } });
-      return;
-    }
-
+    if (isSubmitting || !createLevainSourceId || !Number.isFinite(maxLevainVol) || maxLevainVol <= 0) return;
     setIsSubmitting(true);
-    const suggestedCap = Math.ceil(maxLevainVol * 1.2);
     try {
-      const res = await fetch('/api/containers', { 
-        method: 'POST', 
-        headers: buildApiHeaders(undefined),
-        body: JSON.stringify({ 
-          name: "Cuve à Levain", displayName: "Cuve Levain (Actif)", 
-          type: "CUVE_INOX", capacityValue: suggestedCap,
-          status: "PLEINE", zone: "Cuverie", currentVolume: parseFloat(maxLevainVol.toFixed(2)) 
-        }) 
+      const response = await fetch('/api/levains', {
+        method: 'POST', headers: buildApiHeaders(user),
+        body: JSON.stringify({ sourceContainerId: Number(createLevainSourceId), volumeHl: Number(maxLevainVol.toFixed(3)), idempotencyKey: createLevainKey }),
       });
-      
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Erreur lors de la création de la cuve.");
-        
-      const newSourceVol = parseFloat(sourceTank.currentVolume) - maxLevainVol;
-      dispatch({
-        type: "SET_CONTAINERS",
-        payload: state.containers.map((c: any) => c.id === sourceTank.id ? { ...c, currentVolume: newSourceVol } : c)
-      });
-
-      dispatch({ type: "ADD_CONTAINER", payload: data });
-      dispatch({ type: "TOAST_ADD", payload: { msg: `Levain créé ! ${maxLevainVol.toFixed(1)} hL prélevés.`, color: T.green } });
-      
-      setMixLevainTankId(data.id);
-      setAlimLevainTankId(data.id);
-      updateConfig('alimVolFinal', maxLevainVol);
-      
+      const payload = await response.json();
+      if (!response.ok) throw new Error(extractApiErrorMessage(payload, "Impossible de créer le levain."));
+      const { levainContainerId, levainVolumeHl } = payload.data;
+      setCreateLevainKey(crypto.randomUUID());
+      setMixLevainTankId(String(levainContainerId));
+      setAlimLevainTankId(String(levainContainerId));
+      updateConfig('alimVolLevain', levainVolumeHl);
+      updateConfig('alimVolFinal', levainVolumeHl);
       if (refreshData) await refreshData();
-      
-    } catch(e: any) { 
-      dispatch({ type: "TOAST_ADD", payload: { msg: `Erreur : ${e.message}`, color: T.red } });
+      dispatch({ type: "TOAST_ADD", payload: { msg: `Levain enregistré : ${levainVolumeHl.toFixed(3)} hL prélevés sur le vin source.`, color: T.green } });
+    } catch (error: any) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: error?.message || "Création impossible pour le moment.", color: T.red } });
     } finally {
       setIsSubmitting(false);
     }
   };
 
   const handleValiderAlimentation = async () => {
-    if (!alimSourceTankId || !alimLevainTankId) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: "Sélectionnez la cuve source (vin) et la cuve levain.", color: T.red } });
-      return;
+    if (isSubmitting || !alimSourceTankId || !alimLevainTankId || !feedingCalculation) return;
+    setIsSubmitting(true);
+    try {
+      const response = await fetch('/api/levains/feed', {
+        method: 'POST', headers: buildApiHeaders(user),
+        body: JSON.stringify({ ...feedingParameters, sourceContainerId: Number(alimSourceTankId), levainContainerId: Number(alimLevainTankId), idempotencyKey: feedLevainKey }),
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(extractApiErrorMessage(payload, "Impossible d’enregistrer le nourrissage."));
+      setFeedLevainKey(crypto.randomUUID());
+      updateConfig('alimVolLevain', payload.data.levainVolumeHl);
+      if (refreshData) await refreshData();
+      dispatch({ type: "TOAST_ADD", payload: { msg: `Alimentation enregistrée : ${payload.data.levainVolumeHl.toFixed(3)} hL dans le levain.`, color: T.green } });
+    } catch (error: any) {
+      dispatch({ type: "TOAST_ADD", payload: { msg: error?.message || "Nourrissage impossible pour le moment.", color: T.red } });
+    } finally {
+      setIsSubmitting(false);
     }
-    if (!resAlim) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: "Les volumes saisis sont incohérents.", color: T.red } });
-      return;
-    }
-
-    const sourceTank = state.containers.find((c: any) => String(c.id) === String(alimSourceTankId));
-    const levainTank = state.containers.find((c: any) => String(c.id) === String(alimLevainTankId));
-
-    const vVinNeeded = parseFloat(resAlim.vVin);
-    if (parseFloat(sourceTank.currentVolume) < vVinNeeded) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: `Volume insuffisant dans la cuve source. Il vous faut ${vVinNeeded.toFixed(2)} hL.`, color: T.red } });
-      return;
-    }
-
-    // Ici on applique la mise à jour optimiste frontend (en attendant ton API d'alimentation dédiée)
-    const newSourceVol = Math.max(0, parseFloat(sourceTank.currentVolume) - vVinNeeded);
-    const newLevainVol = parseFloat(String(config.alimVolFinal));
-
-    dispatch({
-      type: "SET_CONTAINERS",
-      payload: state.containers.map((c: any) => {
-        if (c.id === sourceTank.id) return { ...c, currentVolume: newSourceVol };
-        if (c.id === levainTank.id) return { ...c, currentVolume: newLevainVol };
-        return c;
-      })
-    });
-
-    dispatch({ type: "TOAST_ADD", payload: { msg: `Alimentation validée ! Levain remonté à ${newLevainVol} hL.`, color: T.green } });
   };
 
   return (
@@ -961,11 +925,11 @@ export function PlanificateurTirage() {
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                    <Select value={createLevainSourceId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCreateLevainSourceId(e.target.value)} style={{ width: 180, fontSize: 12 }}>
+                    <Select aria-label="Vin source du levain" value={createLevainSourceId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setCreateLevainSourceId(e.target.value)} style={{ width: 180, fontSize: 12 }}>
                       <option value="">-- Pomper le vin depuis --</option>
                       {cuvesVinBase.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
                     </Select>
-                    <Btn onClick={handleAutoCreateLevain} style={{ fontSize: 12, padding: "8px 16px" }} disabled={isSubmitting || !createLevainSourceId}>{isSubmitting ? "Création..." : "+ Créer le Levain"}</Btn>
+                    <Btn onClick={handleAutoCreateLevain} style={{ fontSize: 12, padding: "8px 16px" }} disabled={isSubmitting || !createLevainSourceId || maxLevainVol <= 0}>{isSubmitting ? "Création..." : "+ Créer le Levain"}</Btn>
                   </div>
                 </div>
               </div>
@@ -1010,22 +974,22 @@ export function PlanificateurTirage() {
             <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
               <div style={{ fontSize: 14, fontWeight: "bold", color: T.accentLight, marginBottom: 16 }}>1. Volumes (du Planning)</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <FF label="Volume Restant (hL)"><Input type="number" step="0.1" value={config.alimVolLevain} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimVolLevain', e.target.value)} /></FF>
-                <FF label="Volume Visé (hL)"><Input type="number" step="0.1" value={config.alimVolFinal} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimVolFinal', e.target.value)} /></FF>
+                <FF label="Volume Restant (hL)"><Input type="number" step="0.1" aria-label="Volume restant du levain (hL)" value={config.alimVolLevain} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimVolLevain', e.target.value)} /></FF>
+                <FF label="Volume Visé (hL)"><Input type="number" step="0.1" aria-label="Volume visé du levain (hL)" value={config.alimVolFinal} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimVolFinal', e.target.value)} /></FF>
               </div>
             </div>
             <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
               <div style={{ fontSize: 14, fontWeight: "bold", color: T.textStrong, marginBottom: 16 }}>2. Activité des Levures</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <FF label="Densité VEILLE (ex: 1006)"><Input type="number" value={config.alimDensiteVeille} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimDensiteVeille', e.target.value)} /></FF>
-                <FF label="Densité CE MATIN (ex: 998)"><Input type="number" value={config.alimDensiteMatin} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimDensiteMatin', e.target.value)} /></FF>
+                <FF label="Densité VEILLE (ex: 1006)"><Input type="number" aria-label="Densité veille" value={config.alimDensiteVeille} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimDensiteVeille', e.target.value)} /></FF>
+                <FF label="Densité CE MATIN (ex: 998)"><Input type="number" aria-label="Densité matin" value={config.alimDensiteMatin} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimDensiteMatin', e.target.value)} /></FF>
               </div>
             </div>
             <div style={{ background: T.surfaceHigh, padding: 20, borderRadius: 8, border: `1px solid ${T.border}` }}>
               <div style={{ fontSize: 14, fontWeight: "bold", color: T.textStrong, marginBottom: 16 }}>3. Intrants</div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <FF label="Liqueur (g/L)"><Input type="number" value={config.alimLiqueurG} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimLiqueurG', e.target.value)} /></FF>
-                <FF label="TAV Vin Nourricier (%)"><Input type="number" step="0.1" value={config.alimAlcVin} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimAlcVin', e.target.value)} /></FF>
+                <FF label="Liqueur (g/L)"><Input type="number" aria-label="Liqueur (g/L)" value={config.alimLiqueurG} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimLiqueurG', e.target.value)} /></FF>
+                <FF label="TAV Vin Nourricier (%)"><Input type="number" step="0.1" aria-label="TAV vin nourricier (%)" value={config.alimAlcVin} onChange={(e: React.ChangeEvent<HTMLInputElement>)=>updateConfig('alimAlcVin', e.target.value)} /></FF>
               </div>
             </div>
           </div>
@@ -1034,7 +998,7 @@ export function PlanificateurTirage() {
             <div style={{ position: "sticky", top: 20, background: T.surface, padding: 32, borderRadius: 8, border: `2px solid ${T.accent}`, boxShadow: `0 10px 30px ${T.accent}22` }}>
               <div style={{ fontSize: 12, color: T.accent, textTransform: "uppercase", letterSpacing: 2, fontWeight: "bold", marginBottom: 24, textAlign: "center" }}>Recette d'Alimentation</div>
               {!resAlim ? (
-                <div style={{ textAlign: "center", color: T.textDim, fontStyle: "italic", padding: "40px 0" }}>Vérifiez vos volumes. Le volume visé doit être supérieur au volume restant.</div>
+                <div style={{ textAlign: "center", color: T.textDim, fontStyle: "italic", padding: "40px 0" }}>Vérifiez les volumes, les densités et les paramètres de recette : le volume visé doit dépasser le volume restant et tous les apports calculés doivent être positifs ou nuls.</div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingBottom: 16, borderBottom: `1px dashed ${T.border}` }}>
@@ -1062,11 +1026,11 @@ export function PlanificateurTirage() {
                   <div style={{ background: T.accent+"11", border: `1px solid ${T.accent}44`, padding: 20, borderRadius: 6, marginTop: 16 }}>
                     <div style={{ fontSize: 12, textTransform: "uppercase", color: T.accentLight, fontWeight: "bold", marginBottom: 12 }}>🔄 Exécuter l'alimentation</div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
-                      <Select value={alimSourceTankId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAlimSourceTankId(e.target.value)} style={{ fontSize: 12 }}>
+                      <Select aria-label="Vin nourricier" value={alimSourceTankId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setAlimSourceTankId(e.target.value)} style={{ fontSize: 12 }}>
                         <option value="">-- Vin nourricier --</option>
                         {cuvesVinBase.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
                       </Select>
-                      <Select value={alimLevainTankId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
+                      <Select aria-label="Cuve à levain" value={alimLevainTankId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => {
                           setAlimLevainTankId(e.target.value);
                           const t = cuvesLevain.find((c: any) => String(c.id) === String(e.target.value));
                           if (t) updateConfig('alimVolLevain', t.currentVolume);
@@ -1075,7 +1039,7 @@ export function PlanificateurTirage() {
                         {cuvesLevain.map((c: any) => <option key={c.id} value={c.id}>{c.displayName || c.name} ({parseFloat(c.currentVolume).toFixed(1)} hL)</option>)}
                       </Select>
                     </div>
-                    <Btn onClick={handleValiderAlimentation} disabled={!alimSourceTankId || !alimLevainTankId} style={{ width: "100%", fontSize: 13 }}>Valider l'Alimentation</Btn>
+                    <Btn onClick={handleValiderAlimentation} disabled={isSubmitting || !alimSourceTankId || !alimLevainTankId || alimSourceTankId === alimLevainTankId} style={{ width: "100%", fontSize: 13 }}>{isSubmitting ? "Enregistrement..." : "Valider l’Alimentation"}</Btn>
                   </div>
                 </div>
               )}

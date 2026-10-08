@@ -95,13 +95,26 @@ export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
     operation !== "TRANSFERT" &&
     operation !== "CORRECTION_VOLUME" &&
     operation !== "TIRAGE" &&
-    operation !== "ASSEMBLAGE"
+    operation !== "ASSEMBLAGE" &&
+    operation !== "CREATION_LEVAIN" &&
+    operation !== "ALIMENTATION_LEVAIN"
   ) {
     return null;
   }
 
   const rows: Array<[string, string | null]> =
-    operation === "INTRANT"
+    operation === "CREATION_LEVAIN" || operation === "ALIMENTATION_LEVAIN"
+      ? [
+          ["Lot source", metadata.sourceLotId ? `#${metadata.sourceLotId}` : null],
+          ["Lot levain", metadata.levainLotId ? `#${metadata.levainLotId}` : null],
+          ["Vin prélevé", formatNumber(metadata.volumeHl ?? metadata.calculation?.wineVolumeHl, " hL")],
+          ["Volume avant", formatNumber(metadata.parameters?.remainingVolumeHl, " hL")],
+          ["Volume final", formatNumber(metadata.parameters?.finalVolumeHl ?? metadata.volumeHl, " hL")],
+          ["Liqueur ajoutée", formatNumber(metadata.calculation?.liqueurVolumeHl, " hL")],
+          ["Eau ajoutée", formatNumber(metadata.calculation?.waterVolumeHl, " hL")],
+          ["DAP calculé", formatNumber(metadata.calculation?.dapKg, " kg")],
+        ]
+      : operation === "INTRANT"
       ? [
           ["Intrant", metadata.intrant || null],
           ["Quantité", formatNumber(metadata.quantity)],

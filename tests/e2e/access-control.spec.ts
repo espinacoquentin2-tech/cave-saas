@@ -21,7 +21,14 @@ test("un compte lecture seule peut lire mais ne peut pas modifier les données",
   expect((await me.json()).roleKey).toBe("LECTURE_SEULE");
   expect((await request.get("/api/lots", { headers })).status()).toBe(200);
   // Payload vide volontaire : même en cas de régression, aucune donnée valide ne peut être créée.
-  for (const route of ["/api/containers", "/api/lots", "/api/transfers", "/api/pressings/load"]) {
+  for (const route of ["/api/containers", "/api/lots", "/api/transfers", "/api/pressings/load", "/api/levains", "/api/levains/feed"]) {
     expect((await request.post(route, { headers, data: {} })).status(), route).toBe(403);
+  }
+});
+
+
+test("les opérations de levain exigent une session", async ({ request }) => {
+  for (const route of ["/api/levains", "/api/levains/feed"]) {
+    expect((await request.post(route, { data: {} })).status(), route).toBe(401);
   }
 });

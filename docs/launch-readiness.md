@@ -59,7 +59,7 @@ Pour tester les événements d'audience, lancer un serveur de recette avec `ANAL
 
 ## Suite du développement
 
-La finalisation des levains reste un lot métier distinct : rendre persistants les nourrissages et la consommation du lot source, puis vérifier les bilans de volumes. La dette de lint historique du composant principal reste à traiter. L'audit npm complet signale encore cinq alertes hautes dans la chaîne d'outillage ESLint ; l'audit limité à la production ne signale aucune vulnérabilité connue au 8 octobre 2026.
+La création et le nourrissage des levains sont maintenant persistants, avec débit du lot source, bilans contrôlés et généalogie. Voir [le fonctionnement et la recette des levains](levains.md). La dette de lint historique du composant principal reste à traiter. L'audit npm complet signale encore cinq alertes hautes dans la chaîne d'outillage ESLint ; l'audit limité à la production ne signale aucune vulnérabilité connue au 8 octobre 2026.
 
 ## État de la liste de lancement
 
