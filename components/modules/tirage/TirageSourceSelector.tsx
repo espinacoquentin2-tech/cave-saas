@@ -56,7 +56,7 @@ export function TirageSourceSelector({
             }}
           >
             <option value="">-- Sélectionner une cuve source --</option>
-            {cuvesVinBase.map((container: any) => {
+            {cuvesVinBase.filter((container: any) => !getContainerLot(container)?.maloRole).map((container: any) => {
               const lot = getContainerLot(container);
               return (
                 <option key={container.id} value={container.id}>

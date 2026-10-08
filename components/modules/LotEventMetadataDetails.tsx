@@ -88,6 +88,20 @@ export function LotEventMetadataDetails({ metadata }: { metadata?: unknown }) {
     return null;
   }
 
+  if (metadata.schemaVersion === 1 && metadata.preparationId) {
+    return <div style={{fontSize:12,color:T.textDim}}>
+      <p>Dossier Malo #{metadata.preparationId}{metadata.role ? ` · ${metadata.role}` : ''}</p>
+      {metadata.volumeHl != null && <p>Volume : {formatNumber(metadata.volumeHl,' hL')}</p>}
+      {metadata.sourceLotId && <p>Source lot #{metadata.sourceLotId} → lot #{metadata.targetLotId}</p>}
+      {metadata.direction && <p>{metadata.direction === 'PCM_TO_MR' ? 'Doublement du MR avec un prélèvement du PCM' : 'Incorporation du MR au PCM'}</p>}
+      {Array.isArray(metadata.productDebits) && metadata.productDebits.map((p:JsonObject,i:number)=><p key={i}>{p.name} : {p.quantity} {p.unit} · mouvement #{p.movementId}</p>)}
+      {Array.isArray(metadata.recipe?.products) && metadata.recipe.products.map((p:JsonObject,i:number)=><p key={i}>{({BACTERIES:'Bactéries',ACTIVATEUR:'Activateur',LSA:'LSA',AUTRE:'Produit complémentaire'} as JsonObject)[p.role] || p.role} · produit #{p.productId} · {p.quantity} {p.unit}</p>)}
+      {Array.isArray(metadata.destinations) && metadata.destinations.map((d:JsonObject,i:number)=><p key={i}>{d.containerName || `Cuve #${d.containerId}`} · {d.volumeBeforeHl} + {d.volumeHl} = {d.volumeAfterHl} hL · {formatNumber(d.dosePct,' %')}</p>)}
+      {metadata.control?.current && <p>Contrôle : {String(metadata.control.current.extraData?.malique ?? '—')} g/L · {new Date(metadata.control.current.analysisDate).toLocaleString('fr-FR')}</p>}
+      {metadata.remainingPcmHl != null && <p>PCM restant : {metadata.remainingPcmHl} hL</p>}
+      {metadata.operator && <p>Opérateur : {metadata.operator}</p>}
+    </div>;
+  }
   if (metadata.schemaVersion === 2 && isObject(metadata.recipe)) {
     const recipe = metadata.recipe;
     const calculation = recipe.calculation || {};
