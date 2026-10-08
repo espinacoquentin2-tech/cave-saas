@@ -59,7 +59,7 @@ Pour tester les événements d'audience, lancer un serveur de recette avec `ANAL
 
 ## Suite du développement
 
-La création et le nourrissage des levains sont maintenant persistants, avec débit du lot source, bilans contrôlés et généalogie. Voir [le fonctionnement et la recette des levains](levains.md). La dette de lint historique du composant principal reste à traiter. L'audit npm complet signale encore cinq alertes hautes dans la chaîne d'outillage ESLint ; l'audit limité à la production ne signale aucune vulnérabilité connue au 8 octobre 2026.
+Le parcours levain couvre maintenant préparation, qualification, reprise historique, observations, nourrissage avec les deux modes de liqueur, mixtion persistante et mise en bouteilles. Les stocks de vins, LSA, sucre, liqueur et DAP sont débités dans des transactions atomiques, avec généalogie et sans double débit au tirage. Voir [le fonctionnement et la recette des levains](levains.md). La dette de lint historique du composant principal reste à traiter. L'audit npm complet signale encore cinq alertes hautes dans la chaîne d'outillage ESLint ; l'audit limité à la production ne signale aucune vulnérabilité connue au 8 octobre 2026.
 
 ## État de la liste de lancement
 
@@ -82,3 +82,10 @@ La création et le nourrissage des levains sont maintenant persistants, avec dé
 | Un seul CTA | Un objectif commercial répété : demander une démo. |
 
 Recette finale : 11 scénarios E2E réussis sur Chrome et build de production (y compris l'analytics activé sur la recette, avec requêtes interceptées), 5 tests de protection des variables publiques réussis, build et vérification TypeScript réussis. Le lint des fichiers publics/configuration/tests modifiés passe ; le lint global garde sa dette historique. La redirection HTTP, les en-têtes de sécurité, les liens internes, les trois largeurs et l'absence des secrets locaux dans les bundles navigateur ont également été vérifiés. Aucun déploiement ni modification de données métier n'a été effectué.
+
+
+## Recette de la révision levains et stocks — 8 octobre 2026
+
+38 tests de calcul et de base réussis, sans test SQL ignoré, dont une concurrence avec deux transactions réelles ; 5 tests de sécurité réussis. Le build de production, TypeScript, le lint ciblé et `git diff --check` passent. Sur le serveur de recette dédié au port 3101, 20 scénarios Chrome réussissent ; le seul scénario ignoré concerne l'analytics, désactivé dans cette configuration. Les tests couvrent notamment les deux modes de liqueur, la requalification après nourrissage, la reprise historique, les étapes LSA sans vin, la mixtion et les bouteilles, les réponses réseau/500 incertaines et les droits d'accès.
+
+Aucune organisation temporaire de recette ne reste en base après nettoyage. Les tests navigateur métier utilisent des écritures interceptées, les bilans et rollbacks sont vérifiés par les scénarios SQL distincts. Le serveur de recette est arrêté après vérification ; le serveur de développement utilisateur sur 3000 est conservé. Les fichiers sont prêts à être relus et commités sur la branche de travail, sans déploiement ni migration de schéma. La revue est personnelle à cette session, sans revue indépendante.

@@ -54,7 +54,7 @@ export const normalizeTirageBouchage = (value: string | null | undefined): Tirag
 export const getBottleFormatVolumeHl = (formatCode: string | null | undefined) => BOTTLE_FORMAT_TO_HL[formatCode ?? ''] ?? 0;
 
 export const getBottleFormatVolumeL = (formatCode: string | null | undefined) =>
-  round(getBottleFormatVolumeHl(formatCode) * 100, 4);
+  round(getBottleFormatVolumeHl(formatCode) * 100, 5);
 
 export const calculateBottleCount = (volumeHl: number, formatCode: string | null | undefined) => {
   const formatHl = getBottleFormatVolumeHl(formatCode);
@@ -71,13 +71,13 @@ export const calculateConsumedVolumeHl = (count: number, formatCode: string | nu
     return 0;
   }
 
-  return round(count * formatHl, 4);
+  return round(count * formatHl, 5);
 };
 
 export const calculateRealConsumedVolumeHl = calculateConsumedVolumeHl;
 
 export const calculateRemainingVolumeHl = (requestedVolumeHl: number, consumedVolumeHl: number) =>
-  round(Math.max(0, requestedVolumeHl - consumedVolumeHl), 4);
+  round(Math.max(0, requestedVolumeHl - consumedVolumeHl), 5);
 
 export const calculateTiragePlan = (input: {
   requestedVolumeHl: number;
@@ -88,7 +88,7 @@ export const calculateTiragePlan = (input: {
   const remainderVolumeHl = calculateRemainingVolumeHl(input.requestedVolumeHl, consumedVolumeHl);
 
   return {
-    requestedVolumeHl: round(input.requestedVolumeHl, 4),
+    requestedVolumeHl: round(input.requestedVolumeHl, 5),
     bottleCount,
     consumedVolumeHl,
     remainderVolumeHl,

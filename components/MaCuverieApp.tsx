@@ -281,6 +281,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
   const lotSourceId = task.lotId || (task.sources && task.sources[0]?.lotId);
   const lotSource = (state.lots || []).find((l: any) => String(l.id) === String(lotSourceId));
   const isLotTirageEligible = isTirageEligibleLotStatus(lotSource?.status);
+  const needsMixtion = task.recette === "TIRAGE" && tirageTypeMise === "EFFERVESCENT" && lotSource?.qualiteLot !== "MIXTION_TIRAGE";
   
   if (task.recette === "TIRAGE" && tirageTypeMise === "EFFERVESCENT" && lotSource) {
       baseYear = parseInt(lotSource.year || lotSource.millesime) || parseInt((lotSource.businessCode || lotSource.code).substring(0,4)) || baseYear;
@@ -308,6 +309,10 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
   const execute = async () => {
     setExecutionError("");
+    if (needsMixtion) {
+      setExecutionError("Préparez et contrôlez la mixtion depuis Planif. Tirage avant la mise en bouteilles.");
+      return;
+    }
     if (isTankCapacityIssue) {
       setExecutionError("Capacité insuffisante pour ce volume !");
       return;
@@ -571,6 +576,7 @@ function TaskExecutionModal({ task, onClose, workOrders, setWorkOrders, refreshD
 
       {task.recette === "TIRAGE" ? (
         <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
+          {needsMixtion && <p role="status">Le tirage effervescent nécessite une mixtion contrôlée. Ouvrez « Planif. Tirage » puis « Mixtion et tirage » pour la préparer avec le levain qualifié.</p>}
           {lotSource && !isLotTirageEligible && (
             <div style={{ background:T.red+"15", border:`1px solid ${T.red}55`, borderRadius:4, padding:14 }}>
               <div style={{ color:T.red, fontSize:12, fontWeight:"bold", marginBottom:4 }}>Lot non éligible au tirage</div>

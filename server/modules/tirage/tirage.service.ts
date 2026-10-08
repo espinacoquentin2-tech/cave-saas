@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { MIXTION_NON_COMPOSITION_EVENTS } from '@/lib/mixtion';
 import {
   calculateAdjuvantQuantity,
   calculateConsumedVolumeHl,
@@ -128,6 +129,15 @@ export class TirageModuleService {
         const sourceLot = await TirageRepository.findSourceLot(tx, input.lotId, actor.organizationId);
         if (!sourceLot) {
           throw new BusinessLogicError('Lot source introuvable.', 404);
+        }
+
+        if (!input.isTranquille) {
+          if (sourceLot.qualiteLot !== 'MIXTION_TIRAGE') throw new BusinessLogicError('Préparez une mixtion avec un levain qualifié avant le tirage.', 409);
+          const checked = await tx.lotEvent.findFirst({ where: { organizationId: actor.organizationId, eventType: 'CONTROLE_MIXTION', lots: { some: { lotId: sourceLot.id } } }, orderBy: { id: 'desc' } });
+          if (!checked) throw new BusinessLogicError('Contrôlez le point de tirage de la mixtion avant la mise en bouteilles.', 409);
+          const changed = await tx.lotEvent.findFirst({ where: { organizationId: actor.organizationId, id: { gt: checked.id }, eventType: { notIn: MIXTION_NON_COMPOSITION_EVENTS }, lots: { some: { lotId: sourceLot.id } } } });
+          if (changed) throw new BusinessLogicError('La mixtion a changé depuis son contrôle. Vérifiez à nouveau le point de tirage.', 409);
+          if ([...input.stockItems, ...input.calculatedItems].some(item => !item.kind?.startsWith('PACKAGING_'))) throw new BusinessLogicError('Les intrants et le levain ont déjà été consommés lors de la mixtion.', 400);
         }
 
         if (!isTirageEligibleLotStatus(sourceLot.status)) {
@@ -436,7 +446,7 @@ export class TirageModuleService {
           tx,
           sourceLot.id,
           actor.organizationId,
-          toDecimal(consumedVolume),
+          new Prisma.Decimal(consumedVolume.toFixed(5)),
         );
         if (decrementResult.count !== 1) {
           throw new BusinessLogicError(
@@ -445,10 +455,8 @@ export class TirageModuleService {
           );
         }
 
-        const remainingVolume = round(
-          toNumber(subtractDecimals(sourceLot.currentVolume, toDecimal(consumedVolume))),
-        );
-        const depletedSourceLot = remainingVolume <= 0.0001;
+        const remainingVolume = toNumber(subtractDecimals(sourceLot.currentVolume, new Prisma.Decimal(consumedVolume.toFixed(5))));
+        const depletedSourceLot = remainingVolume <= 0;
         if (depletedSourceLot) {
           await TirageRepository.updateSourceLotForTirage(tx, sourceLot.id, actor.organizationId, {
             status: 'TIRE',
@@ -488,8 +496,8 @@ export class TirageModuleService {
           format: input.format,
           bottleCount: input.count,
           requestedVolumeHl: input.volume,
-          consumedVolumeHl: round(consumedVolume, 4),
-          remainingVolumeHl: round(Math.max(remainingVolume, 0), 4),
+          consumedVolumeHl: round(consumedVolume, 5),
+          remainingVolumeHl: round(Math.max(remainingVolume, 0), 5),
           previousLotStatus,
           newLotStatus,
           pressureTargetBars: input.pressureTargetBars ?? null,
@@ -533,7 +541,7 @@ export class TirageModuleService {
           eventId: lotEvent.id,
           lotId: sourceLot.id,
           roleInEvent: 'SOURCE',
-          volumeChange: toDecimal(consumedVolume),
+          volumeChange: new Prisma.Decimal((-consumedVolume).toFixed(5)),
         });
 
         if (sourceLot.currentContainer?.id) {
@@ -662,8 +670,8 @@ export class TirageModuleService {
         return {
           bottleLotId: bottleLot.id,
           bottleLotCode: bottleLot.businessCode,
-          remainingVolume: round(Math.max(remainingVolume, 0)),
-          consumedVolume: round(consumedVolume),
+          remainingVolume: round(Math.max(remainingVolume, 0), 5),
+          consumedVolume: round(consumedVolume, 5),
           bottleCount: input.count,
           depletedSourceLot,
         };

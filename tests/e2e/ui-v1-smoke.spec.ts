@@ -210,8 +210,8 @@ async function smokeAssemblages(page: Page) {
 }
 
 async function smokeTirage(page: Page) {
-  await go(page, /planif\. tirage/i, /préparation & tirage/i);
-  await expectAnyVisible(page, [/source|format|pression|simulation mixtion|planning & stocks/i]);
+  await go(page, /planif\. tirage/i, /levains et tirage/i);
+  await expectAnyVisible(page, [/planning|préparation|contrôles|nourrissage/i]);
   await expect(page.locator("body")).not.toContainText(/supprimer|détruire|reset/i);
 }
 

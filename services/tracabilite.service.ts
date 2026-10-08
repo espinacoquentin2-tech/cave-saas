@@ -67,7 +67,7 @@ export class TracabiliteService {
     // Les notes historiques restent prises en charge pour les autres flux.
     let levainChildren: Lot[] = [];
     if (focusedLot._type === 'bulk') {
-      const events = { organizationId, eventType: { in: ['CREATION_LEVAIN', 'ALIMENTATION_LEVAIN'] } };
+      const events = { organizationId, eventType: { in: ['CREATION_LEVAIN', 'PREPARATION_LEVAIN', 'ALIMENTATION_LEVAIN', 'CREATION_MIXTION'] } };
       const [levainParents, descendants] = await Promise.all([
         db.lot.findMany({ where: { organizationId, id: { not: focusedLot.id }, lotEventLots: { some: { roleInEvent: 'SOURCE', event: { ...events, lots: { some: { lotId: focusedLot.id, roleInEvent: 'CIBLE' } } } } } } }),
         db.lot.findMany({ where: { organizationId, id: { not: focusedLot.id }, lotEventLots: { some: { roleInEvent: 'CIBLE', event: { ...events, lots: { some: { lotId: focusedLot.id, roleInEvent: 'SOURCE' } } } } } } }),
