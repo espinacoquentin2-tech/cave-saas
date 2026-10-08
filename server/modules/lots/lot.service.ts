@@ -38,6 +38,7 @@ export class LotModuleService {
         throw new BusinessLogicError('Cuve introuvable.', 404);
       }
 
+      if (container.usage) throw new BusinessLogicError('Utilisez le dossier Malo pour ce contenant.',409);
       const occupiedVolume = container.currentLots.reduce((sum, lot) => sum + toNumber(lot.currentVolume), 0);
       const capacity = toNumber(container.capacityValue);
       const nextVolume = occupiedVolume + input.volume;

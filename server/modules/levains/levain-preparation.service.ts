@@ -38,7 +38,7 @@ export class LevainPreparationService {
           (await tx.lot.count({
             where: { currentContainerId: tank.id, currentVolume: { gt: 0 } },
           })) ||
-          tank.capacityUnit !== "hL"
+          tank.capacityUnit !== "hL" || tank.usage
         )
           throw new BusinessLogicError(
             "Cuve de destination indisponible.",

@@ -27,7 +27,7 @@ function ContainerTile({ c, onClick }: ContainerTileProps) {
   const tc = getTypeColor(c.type);
 
   // Utilisation de currentContainerId pour la correspondance
-  const lot = isReallyEmpty ? null : (state.lots || []).find((l: any) => String(l.id) === String(c.lotId) || String(l.currentContainerId || l.containerId) === String(c.id));
+  const lot = isReallyEmpty ? null : (state.lots || []).find((l: any) => Number(l.currentVolume) > 0 && (String(l.id) === String(c.lotId) || String(l.currentContainerId || l.containerId) === String(c.id)));
   const displayStatus = isReallyEmpty && c.status !== "NETTOYAGE" ? "VIDE" : c.status;
 
   const formatVolShort = (vol: any) => typeof vol === "number" ? `${vol.toFixed(1)} hL` : `${vol} hL`;
@@ -52,6 +52,7 @@ function ContainerTile({ c, onClick }: ContainerTileProps) {
       ) : (
         <div style={{ fontSize:11, color:T.textDim, marginBottom:10, fontStyle:"italic" }}>Vide</div>
       )}
+      {c.usage && <Badge label={c.usage} color={T.accent} />}
       <FillBar pct={pct} color={tc} />
       <div style={{ display:"flex", justifyContent:"space-between", marginTop:10, alignItems:"center" }}>
         <div style={{ fontSize:13, color:T.textStrong, fontWeight: "bold" }}>
@@ -79,6 +80,7 @@ export function Cuverie({ onSelectContainer, AddContainerModal }: CuverieProps) 
   const [subFilter, setSubFilter] = useState("");
   const [search, setSearch] = useState("");
 
+  const [usageFilter,setUsageFilter]=useState("");
   const [filterZones, setFilterZones] = useState<string[]>([]);
   const [filterQualites, setFilterQualites] = useState<string[]>([]);
   const [modal, setModal] = useState(false);
@@ -101,15 +103,16 @@ export function Cuverie({ onSelectContainer, AddContainerModal }: CuverieProps) 
     if (
       c.status === "LIVRE" ||
       c.status === "ARCHIVÉE" ||
-      c.parentId ||
-      c.type === "COMPARTIMENT" ||
-      c.type === "CUVE_DEBOURBAGE" ||
-      c.type?.includes("Débourbage") ||
-      c.type?.includes("Belon")
+      (!c.usage && c.parentId) ||
+      (!c.usage && c.type === "COMPARTIMENT") ||
+      (!c.usage && c.type === "CUVE_DEBOURBAGE") ||
+      (!c.usage && c.type?.includes("Débourbage")) ||
+      (!c.usage && c.type?.includes("Belon"))
     ) {
       return false;
     }
 
+    if(usageFilter && c.usage!==usageFilter)return false;
     const matchSearch = !search || (c.displayName || c.name).toLowerCase().includes(search.toLowerCase());
     const matchZone = filterZones.length === 0 || filterZones.includes(c.zone);
     const lotInContainer = (state.lots || []).find((l: any) =>
@@ -161,6 +164,8 @@ export function Cuverie({ onSelectContainer, AddContainerModal }: CuverieProps) 
 
   return (
     <div>
+      <label style={{display:'block',marginBottom:12}}>Usage du contenant <select aria-label="Usage du contenant" value={usageFilter} onChange={e=>setUsageFilter(e.target.value)} style={{background:T.surface,color:T.text,padding:8,border:`1px solid ${T.border}`,marginLeft:10}}><option value="">Tous les usages</option><option value="MR">MR · Milieu de réactivation</option><option value="PCM">PCM · Pied de cuve malo</option></select></label>
+
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-end", marginBottom:28 }}>
         <div><h1 style={{ fontFamily:"'Playfair Display', Georgia, serif", fontSize:32, color:T.textStrong, margin:0 }}>Cuverie</h1></div>
         {!roleMatches(currentUserRoleKey, ["LECTURE_SEULE"]) && <Btn onClick={() => setModal(true)}>+ Ajouter cuve</Btn>}

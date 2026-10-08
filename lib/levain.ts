@@ -1,3 +1,4 @@
+import { assertMaloGenericMutationAllowed } from './malo';
 import { BusinessLogicError } from "./errors";
 import type {
   LevainFeedingParameters,
@@ -28,11 +29,13 @@ export function getLevainState(
 export function assertGenericLotMutationAllowed(
   lot: {
     status: string;
+    maloRole?: string | null;
     qualiteLot: string | null;
     currentContainer?: { displayName: string } | null;
   },
   operation: "status" | "volume" | "intrants",
 ): void {
+  assertMaloGenericMutationAllowed(lot, operation);
   if (lot.qualiteLot === "MIXTION_TIRAGE")
     throw new BusinessLogicError(
       "Utilisez le parcours mixtion et tirage pour modifier ce lot.",

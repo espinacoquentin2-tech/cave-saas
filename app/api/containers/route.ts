@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { ForbiddenError, UnauthorizedError } from '@/lib/errors';
+import { BusinessLogicError, ForbiddenError, UnauthorizedError } from '@/lib/errors';
 import { Prisma } from '@prisma/client';
 import { z, ZodError } from 'zod';
 import { logger, logApiError } from '@/server/shared/logger';
@@ -19,6 +19,8 @@ const createContainerSchema = z.object({
 });
 
 const updateContainerSchema = z.object({
+  usage: z.enum(["MR", "PCM"]).nullable().optional(),
+  idempotencyKey: z.string().uuid().optional(),
   id: z.coerce.number().int().positive(),
   status: z.string().trim().optional(),
   name: z.string().trim().optional(),
@@ -165,20 +167,29 @@ export async function PUT(request: Request) {
     assertRole(actor, WRITE_ROLES);
     const payload = updateContainerSchema.parse(await request.json());
 
-    const updatedContainer = await prisma.container.updateMany({
-      where: { id: payload.id, organizationId: actor.organizationId },
-      data: {
+    if (payload.usage !== undefined && !payload.idempotencyKey) throw new BusinessLogicError("Clé de modification d’usage requise.");
+    await prisma.$transaction(async tx => {
+      if (payload.usage !== undefined) {
+        const previous = await tx.idempotencyRecord.findUnique({ where: { key: payload.idempotencyKey! } });
+        if (previous) {
+          const event = await tx.lotEvent.findFirst({ where: { organizationId: actor.organizationId, eventType: 'CHANGEMENT_USAGE_CONTENANT', metadata: { path: ['idempotencyKey'], equals: payload.idempotencyKey } } });
+          if (event && (event.metadata as Prisma.JsonObject)?.containerId === payload.id && (event.metadata as Prisma.JsonObject)?.usage === payload.usage && previous.userId === `${actor.organizationId}:${actor.userId}`) return;
+          throw new BusinessLogicError('Clé déjà utilisée pour une autre opération.', 409);
+        }
+        await tx.idempotencyRecord.create({ data: { key: payload.idempotencyKey!, action: 'CHANGEMENT_USAGE_CONTENANT', userId: `${actor.organizationId}:${actor.userId}` } });
+      }
+      const container = await tx.container.findFirst({ where: { id: payload.id, organizationId: actor.organizationId }, include: { currentLots: { where: { currentVolume: { gt: 0 } } } } });
+      if (!container) throw new BusinessLogicError('Contenant introuvable.', 404);
+      const usageChanged = payload.usage !== undefined && payload.usage !== container.usage;
+      if ((usageChanged || (container.usage && payload.status && payload.status !== container.status)) && container.currentLots.length)
+        throw new BusinessLogicError('Le contenant doit être vide avant de changer son usage ou son statut Malo.', 409);
+      await tx.container.update({ where: { id: container.id }, data: {
         ...(payload.status ? { status: payload.status } : {}),
         ...(payload.name ? { displayName: payload.name } : {}),
-      },
-    });
-
-    if (updatedContainer.count !== 1) {
-      return NextResponse.json(
-        { error: 'NOT_FOUND', message: 'Contenant introuvable.' },
-        { status: 404, headers: { 'x-request-id': requestId } },
-      );
-    }
+        ...(payload.usage !== undefined ? { usage: payload.usage } : {}),
+      } });
+      if (payload.usage !== undefined) await tx.lotEvent.create({ data: { organizationId: actor.organizationId, operatorUserId: actor.userId, eventType: 'CHANGEMENT_USAGE_CONTENANT', eventDatetime: new Date(), metadata: { containerId: container.id, previousUsage: container.usage, usage: payload.usage, idempotencyKey: payload.idempotencyKey } } });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 
     logger.info({
       action: 'containers.put.success',
@@ -190,6 +201,9 @@ export async function PUT(request: Request) {
 
     return NextResponse.json({ success: true }, { status: 200, headers: { 'x-request-id': requestId } });
   } catch (error) {
+    if (error instanceof BusinessLogicError) return NextResponse.json({ error: 'BUSINESS_RULE_VIOLATION', message: error.message }, { status: error.statusCode, headers: { 'x-request-id': requestId } });
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') return NextResponse.json({ error: 'CONFLICT', message: 'Le contenant a changé. Actualisez les données.' }, { status: 409 });
+
     if (error instanceof UnauthorizedError || error instanceof ForbiddenError) {
       logger.warn({
         action: 'auth.rejected',

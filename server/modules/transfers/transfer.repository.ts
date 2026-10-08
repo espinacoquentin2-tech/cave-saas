@@ -11,6 +11,7 @@ export interface TransferSourceSnapshot {
   mainGrapeCode: string;
   sequenceNumber: number;
   status: string;
+  maloRole: string | null;
   currentVolume: Prisma.Decimal;
   currentContainerId: number | null;
   currentContainer: {

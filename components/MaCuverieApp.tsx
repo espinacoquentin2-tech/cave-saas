@@ -35,6 +35,9 @@ import {
 import { AdminResetDatabaseModal } from "@/components/modules/AdminResetDatabaseModal";
 import { Administratif } from "@/components/modules/Administratif";
 import { AdminUsers } from "@/components/modules/AdminUsers";
+import { Malo } from '@/components/modules/Malo';
+import { AnalyseModal } from '@/components/modules/analyses/AnalyseModal';
+import { MaloContainerActions, MaloReceivedHistory } from '@/components/modules/malo/MaloContainerActions';
 import { Assemblages } from "@/components/modules/Assemblages";
 import { Cuverie } from "@/components/modules/Cuverie";
 import { Dashboard } from "@/components/modules/Dashboard";
@@ -2846,6 +2849,8 @@ function ContainerDetail({ container: initialContainer, onBack, onSelectLot, onS
         )}
       </div>
       
+      <MaloContainerActions container={container} />
+      <MaloReceivedHistory containerId={Number(container.id)} />
       <div style={{ display:"grid", gridTemplateColumns:"280px 1fr", gap:20, alignItems:"start" }}>
         
         <div style={{ display:"flex", flexDirection:"column", gap:14 }}>
@@ -3648,6 +3653,9 @@ function LotDetail({ lot: initialLot, onBack, onSelectLot }: { lot: any; onBack:
 
     return (
       <div>
+      {lot.maloPreparationId && <Btn variant="secondary" onClick={()=>window.dispatchEvent(new CustomEvent('open-malo',{detail:{preparationId:lot.maloPreparationId}}))}>Ouvrir le dossier {lot.maloRole}</Btn>}
+      <MaloReceivedHistory lotId={Number(lot.id)} />
+
         {renderNavHeader()}
         
         <div style={{ background:T.surface, border:`1px solid ${T.border}`, borderRadius:4, padding:24, marginBottom:16, borderLeft:`3px solid ${isDeadBottle ? T.textDim : statusC}` }}>
@@ -4198,79 +4206,6 @@ const ANALYSIS_FIELDS = [
 ];
 const EMPTY_A = { analysisDate:"", lotId:"", ph:"", at:"", so2Free:"", alcohol:"", notes:"" };
 
-function AnalyseModal({ initial, onClose, onSuccess, title }: { initial: any; onClose: any; onSuccess: any; title: any }) {
-  const T = useTheme(); 
-  const { state, dispatch } = useStore();
-  const [form, setForm] = useState(initial ? { ...initial } : { ...EMPTY_A, analysisDate: new Date().toISOString().slice(0, 10), notes: "Saisie manuelle" });
-  
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
-
-  const set = (k: any,v: any) => setForm((f: any) => ({ ...f, [k]:v }));
-
-  const handleSave = async () => {
-    if (!form.analysisDate || !form.lotId) return alert("La date et le lot sont obligatoires.");
-    
-    setIsSubmitting(true);
-    try {
-      const payload = {
-        analyses: [form], // L'API attend un tableau
-        idempotencyKey
-      };
-
-      const res = await fetch('/api/analyses', {
-        method: 'POST',
-        headers: buildApiHeaders(undefined),
-        body: JSON.stringify(payload)
-      });
-
-      const data = await res.json();
-      if (!res.ok) throw new Error(extractApiErrorMessage(data, "Erreur lors de la sauvegarde."));
-
-      dispatch({ type: "TOAST_ADD", payload: { msg: "Analyse enregistrée avec succès.", color: T.green } });
-      onSuccess(); // Déclenche le rafraîchissement global
-
-    } catch (e: any) {
-      dispatch({ type: "TOAST_ADD", payload: { msg: e?.message || "Erreur lors de la sauvegarde.", color: T.red } });
-      setIsSubmitting(false);
-    }
-  };
-
-  return (
-    <Modal title={title || "Saisir une analyse manuellement"} onClose={onClose}>
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom: 16 }}>
-        <FF label="Date">
-          <Input type="date" value={form.analysisDate} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set("analysisDate", e.target.value)} disabled={isSubmitting} />
-        </FF>
-        <FF label="Lot analysé">
-          <Select value={form.lotId} onChange={(e: React.ChangeEvent<HTMLSelectElement>) => set("lotId", e.target.value)} disabled={isSubmitting}>
-            <option value="">-- Choisir le lot --</option>
-            {(state.lots || []).map((l: any) => <option key={l.id} value={l.id}>{l.code}</option>)}
-          </Select>
-        </FF>
-      </div>
-      
-      <div style={{ background: T.surfaceHigh, padding: 16, borderRadius: 6, border: `1px solid ${T.border}` }}>
-        <div style={{ fontSize: 12, textTransform: "uppercase", color: T.textDim, marginBottom: 12, fontWeight: "bold" }}>Paramètres Œnologiques</div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 1fr", gap:10 }}>
-          {ANALYSIS_FIELDS.map((f: any) => (
-            <FF key={f.key} label={f.label}>
-              <Input type="text" inputMode="decimal" value={form[f.key] || ""} onChange={(e: React.ChangeEvent<HTMLInputElement>) => set(f.key, e.target.value)} disabled={isSubmitting} placeholder={f.hint} />
-            </FF>
-          ))}
-        </div>
-      </div>
-
-      <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:24 }}>
-        <Btn variant="secondary" onClick={onClose} disabled={isSubmitting}>Annuler</Btn>
-        <Btn onClick={handleSave} disabled={isSubmitting || !form.lotId} style={{ background: isSubmitting ? T.textDim : T.accent }}>
-          {isSubmitting ? "Enregistrement..." : "Enregistrer"}
-        </Btn>
-      </div>
-    </Modal>
-  );
-}
-
 function AIImportModal({ initialFile, onClose, onSuccess }: { initialFile: any; onClose: any; onSuccess: any }) {
   const T = useTheme(); 
   const { state, dispatch } = useStore();
@@ -4794,6 +4729,7 @@ const NAV_CATEGORIES = [
       { id:"maturation",  label:"Maturation",      icon:"🍇" },
       { id:"planificateur", label:"Planif. Vendanges", icon:"📅" },
       { id:"tour_fa",     label:"Tour de FA",      icon:"🌡️" },
+      { id:"malo", label:"Malo", icon:"🦠" },
       { id:"assemblages", label:"Assemblages",     icon:"🧪" },
       { id:"tirage",      label:"Planif. Tirage",  icon:"🍾" },
       { id:"degustation", label:"Dégustation",     icon:"🥂" },
@@ -4855,6 +4791,8 @@ export default function App() {
   }, [mobileNavigationOpen]);
   const [nav, setNav]               = useState<string>("dashboard");
   const [selContainer, setSelCont]  = useState<any | null>(null);
+  const [maloContext,setMaloContext] = useState<{preparationId?:number;containerId?:number;role?:'MR'|'PCM'}>({});
+  useEffect(()=>{const open=(event:Event)=>{setMaloContext((event as CustomEvent).detail);setNav('malo');setSelCont(null);setSelLot(null)};window.addEventListener('open-malo',open);return()=>window.removeEventListener('open-malo',open)},[]);
   const [selLot, setSelLot]         = useState<any | null>(null);
   const [state, dispatch]           = useReducer(storeReducer, initialState);
   
@@ -4926,6 +4864,9 @@ export default function App() {
               zone: c.zone || "Cave",
               status: c.status,
               notes: c.notes || "",
+              usage: c.usage,
+              parentId: c.parentId?.toString(),
+              capacityUnit: c.capacityUnit,
             };
           }),
         });
@@ -4962,6 +4903,9 @@ export default function App() {
               code: l.businessCode,
               businessCode: l.businessCode,
               technicalCode: l.technicalCode,
+              maloRole: l.maloRole,
+              maloPreparationId: l.maloPreparationId,
+              maloCompositionEventId: l.maloCompositionEventId,
               millesime: l.year,
               year: l.year,
               cepage: l.mainGrapeCode,
@@ -5289,6 +5233,7 @@ export default function App() {
       case "cuverie":     return <Cuverie   onSelectContainer={handleSelectContainer} AddContainerModal={AddContainerModal} />;
       case "lots":        return <Lots      onSelectLot={handleSelectLot} />;
       case "tour_fa":     return <TourFA    onSelectLot={handleSelectLot} />;
+      case "malo": return <Malo {...maloContext} />;
       case "assemblages": return <Assemblages />;
       case "inventaire":  return <Stocks AddProductModal={AddProductModal} StockMovementModal={StockMovementModal} />;
       case "stock":       return <StockBouteilles onSelectLot={handleSelectLot} />;

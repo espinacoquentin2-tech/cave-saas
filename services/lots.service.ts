@@ -271,7 +271,7 @@ export class LotsService {
       const lotIds = [...new Set(validReadings.map((reading) => reading.lotId))];
       const lots = await tx.lot.findMany({
         where: { id: { in: lotIds }, organizationId },
-        select: { id: true, status:true, qualiteLot:true, currentContainer: {select:{displayName:true}} },
+        select: { id: true, status:true, maloRole:true, qualiteLot:true, currentContainer: {select:{displayName:true}} },
       });
       if (lots.length !== lotIds.length) throw new Error("Lot introuvable.");
       lots.forEach(lot => assertGenericLotMutationAllowed(lot, 'status'));

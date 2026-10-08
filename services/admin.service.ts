@@ -1,3 +1,4 @@
+import { assertMaloGenericMutationAllowed } from '@/lib/malo';
 // services/admin.service.ts
 import { randomUUID } from 'crypto';
 import { CreateWorkOrderPayload } from '../validations/admin.schema';
@@ -94,6 +95,7 @@ export class AdminService {
 
         const lot = await tx.lot.findFirst({ where: { id: source.lotId, organizationId } });
         if (!lot) throw new Error(`Lot source ID ${source.lotId} introuvable.`);
+        assertMaloGenericMutationAllowed(lot, "planifier une opération sur");
         if (Number(lot.currentVolume) < source.volume) {
           throw new Error(`Volume insuffisant dans le lot ${lot.businessCode}. Requis: ${source.volume}, Dispo: ${lot.currentVolume}`);
         }
@@ -128,6 +130,7 @@ export class AdminService {
       if (data.targetContainerId) {
         const targetContainer = await tx.container.findFirst({ where: { id: data.targetContainerId, organizationId } });
         if (!targetContainer) throw new Error("Cuve de destination introuvable.");
+        if(targetContainer.usage) throw new Error("Utilisez le dossier Malo pour ce contenant.");
         
         const totalIncomingVolume = volumeSources.reduce((sum, s) => sum + s.volume, 0);
         // Tolérance de 5% de débordement théorique tolérée dans la réalité, mais stricte en base
@@ -139,6 +142,7 @@ export class AdminService {
       if (data.targetLotId) {
         const targetLot = await tx.lot.findFirst({ where: { id: data.targetLotId, organizationId } });
         if (!targetLot) throw new Error("Lot cible introuvable.");
+        assertMaloGenericMutationAllowed(targetLot, "planifier une opération sur");
       }
 
       // 3. PERSISTANCE (À adapter selon votre modèle Prisma réel pour les WorkOrders)

@@ -86,6 +86,7 @@ export function Assemblages() {
 
   const mainBulkSources = (state.lots || [])
     .filter((lot: any) => {
+      if(lot.maloRole)return false;
       const volume = Number(lot.currentVolume ?? lot.volume ?? 0);
       return volume > 0.001 && isAssemblageMainEligibleLotStatus(lot.status);
     })
@@ -104,6 +105,7 @@ export function Assemblages() {
 
   const reserveBulkSources = (state.lots || [])
     .filter((lot: any) => {
+      if(lot.maloRole)return false;
       const volume = Number(lot.currentVolume ?? lot.volume ?? 0);
       if (volume <= 0.001) return false;
       if (!isAssemblageReserveEligibleLotStatus(lot.status)) return false;
@@ -124,6 +126,7 @@ export function Assemblages() {
 
   const roseBulkSources = (state.lots || [])
     .filter((lot: any) => {
+      if(lot.maloRole)return false;
       const volume = Number(lot.currentVolume ?? lot.volume ?? 0);
       return volume > 0.001 && isAssemblageRoseEligibleLotStatus(lot.status);
     })
