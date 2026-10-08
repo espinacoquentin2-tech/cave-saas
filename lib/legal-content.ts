@@ -42,7 +42,7 @@ export const LEGAL_CONFIG = {
     dpo: "Non désigné à ce stade / à compléter",
     subprocessors: ["Supabase", "Vercel"],
   },
-  lastUpdated: "À compléter",
+  lastUpdated: "8 octobre 2026",
 } as const;
 
 const workInProgressNotice =
@@ -118,7 +118,7 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
   {
     slug: "confidentialite",
     shortTitle: "Confidentialité",
-    title: "Politique de confidentialité",
+    title: "Politique de confidentialité (RGPD)",
     summary: "Principes de traitement des données de compte, des données métier et des journaux techniques.",
     sections: [
       {
@@ -151,6 +151,14 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
         title: "Finalités",
         paragraphs: [
           "Les traitements visent à fournir l'accès au service, gérer les comptes, permettre le suivi métier, assurer la traçabilité, maintenir la sécurité et améliorer la fiabilité de l'application.",
+        ],
+      },
+      {
+        title: "Mesure d'audience facultative",
+        paragraphs: [
+          "Lorsqu'elle est activée, la mesure d'audience Plausible concerne uniquement les pages publiques et les clics sur la demande de démo. Elle est bloquée tant que vous n'avez pas donné votre accord.",
+          "Aucun identifiant utilisateur, nom d'organisation, lot ou donnée de cave n'est transmis par cette mesure. Les paramètres et fragments des adresses de page ne sont pas envoyés. Le prestataire reçoit les informations techniques associées à la requête, notamment l'adresse IP et le navigateur.",
+          "Vous pouvez refuser ou retirer votre accord depuis le bouton Préférences cookies présent sur chaque page.",
         ],
       },
       {
@@ -202,7 +210,7 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
       {
         title: "Droits des personnes",
         paragraphs: [
-          "Sous réserve des conditions prévues par la réglementation applicable, les personnes concernées peuvent demander l'accès, la rectification, l'effacement, la limitation ou l'opposition au traitement de leurs données.",
+          "Sous réserve des conditions prévues par la réglementation applicable, les personnes concernées peuvent demander l'accès, la rectification, l'effacement, la limitation, la portabilité ou l'opposition au traitement de leurs données.",
           "Lorsque les données sont traitées pour le compte d'une organisation cliente, certaines demandes peuvent devoir être adressées ou transférées à cette organisation.",
         ],
       },
@@ -439,7 +447,7 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
     slug: "cookies",
     shortTitle: "Cookies / traceurs",
     title: "Cookies / traceurs",
-    summary: "État actuel des traceurs nécessaires au fonctionnement, à l'authentification et à la sécurité.",
+    summary: "Stockage nécessaire, mesure d'audience facultative et gestion de vos préférences.",
     sections: [
       {
         title: "Document de travail",
@@ -454,7 +462,7 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
       {
         title: "Cookies nécessaires au fonctionnement",
         paragraphs: [
-          "À ce stade, si aucun outil marketing ou analytics n'est installé, Ma Cuverie utilise uniquement les traceurs nécessaires au fonctionnement du service, à l'authentification et à la sécurité.",
+          "Le stockage nécessaire au fonctionnement, à l'authentification et à la sécurité reste disponible indépendamment de votre choix concernant la mesure d'audience.",
         ],
       },
       {
@@ -470,15 +478,19 @@ export const LEGAL_DOCUMENTS: LegalDocument[] = [
         ],
       },
       {
-        title: "Mesure d'audience si ajoutée plus tard",
+        title: "Mesure d'audience facultative : Plausible",
         paragraphs: [
-          "Si un outil de mesure d'audience est ajouté ultérieurement, cette page devra être mise à jour pour décrire l'outil, les données collectées, les finalités et la durée de conservation.",
+          "L'intégration Plausible est désactivée par défaut. Lorsqu'elle est configurée et activée, elle mesure les visites du site public et les clics sur Demander une démo, uniquement après votre accord.",
+          "La mesure n'est pas utilisée dans l'espace connecté /app. Les adresses transmises excluent les paramètres de requête et les fragments. Aucune donnée de compte ou de cave n'est ajoutée aux événements.",
+          "Le prestataire de mesure reçoit les informations techniques de la requête, notamment l'adresse IP et le navigateur. Les conditions de traitement et la durée de conservation du service retenu doivent être confirmées avant activation en production.",
         ],
       },
       {
-        title: "Cookies soumis au consentement si ajoutés plus tard",
+        title: "Mémorisation et modification du choix",
         paragraphs: [
-          "Si des traceurs non strictement nécessaires sont ajoutés, un mécanisme d'information et, si requis, de consentement devra être prévu selon l'outil et la réglementation applicable.",
+          "Votre choix est conservé dans le stockage local de votre navigateur sous la clé ma-cuverie:privacy:v1 pendant 180 jours. L'acceptation et le refus ont la même durée. Si le stockage local est bloqué, le choix reste disponible pendant la visite en cours.",
+          "Le bouton Préférences cookies permet d'accepter, de refuser ou de retirer l'accord à tout moment. Le retrait bloque les nouveaux envois de mesure d'audience. Les événements déjà transmis ne peuvent pas être annulés depuis le navigateur.",
+          "Un changement de configuration du prestataire ou de site de mesure impose un nouveau choix. Vous pouvez également supprimer le choix depuis les réglages de stockage de votre navigateur.",
         ],
       },
       {

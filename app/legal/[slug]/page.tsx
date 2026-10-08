@@ -25,6 +25,7 @@ export async function generateMetadata({ params }: PublicLegalPageProps) {
   return {
     title: `${document.title} - ${LEGAL_CONFIG.productName}`,
     description: document.summary,
+    alternates: { canonical: `/legal/${document.slug}` },
   };
 }
 
@@ -93,6 +94,9 @@ export default async function PublicLegalPage({ params }: PublicLegalPageProps) 
           </div>
         </article>
 
+        <Link href="/" style={{ display: "inline-block", marginTop: 22, marginRight: 20, color: "#e2c47a" }}>
+          Retour au site
+        </Link>
         <Link
           data-testid="back-to-login-link"
           href="/app"

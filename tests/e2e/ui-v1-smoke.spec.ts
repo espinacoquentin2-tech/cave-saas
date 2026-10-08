@@ -19,13 +19,34 @@ const benignConsolePatterns = [
 ];
 
 test.describe("Smoke UI V1 isolé", () => {
+  test("l'espace connecté reste utilisable sur mobile", async ({ page }) => {
+    test.setTimeout(120_000);
+    test.skip(!email || !password, "Compte E2E requis pour vérifier l'espace connecté.");
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.goto("/app");
+    const refuse = page.getByRole("button", { name: "Tout refuser", exact: true });
+    if (await refuse.isVisible()) await refuse.click();
+    await loginIfNeeded(page, email!, password!);
+    const documentWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    expect(documentWidth).toBeLessThanOrEqual(375);
+    await expect(page.getByRole("button", { name: "Ouvrir la navigation" })).toBeVisible();
+    await page.getByRole("button", { name: "Ouvrir la navigation" }).click();
+    await expect(page.getByRole("button", { name: /cuverie/i }).first()).toBeVisible();
+    await page.getByRole("button", { name: /cuverie/i }).first().click();
+    await expect(page.getByRole("heading", { name: /cuverie/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Ouvrir la navigation" })).toBeVisible();
+  });
+
   test("ouvre les modules V1 sans mutation métier", async ({ page }) => {
+    test.setTimeout(180_000);
+    page.setDefaultTimeout(15_000);
     test.skip(!email, "E2E_ADMIN_EMAIL est requis pour le smoke UI V1.");
     test.skip(!password, "E2E_ADMIN_PASSWORD est requis pour le smoke UI V1.");
 
     const issues = collectRuntimeIssues(page);
 
-    await page.goto("/");
+    await page.goto("/app");
+    await page.getByRole("button", { name: "Tout refuser", exact: true }).click();
     await loginIfNeeded(page, email!, password!);
     await expect(page.getByRole("heading", { name: /tableau de bord/i })).toBeVisible();
     await assertNoBlockingUiError(page);
@@ -103,7 +124,8 @@ async function go(page: Page, buttonName: RegExp, headingName: RegExp) {
 async function assertNoBlockingUiError(page: Page) {
   await expect(page.locator("body")).not.toContainText(/invalid date/i);
   await expect(page.locator("body")).not.toContainText(/hydration failed|text content does not match|Unhandled Runtime Error/i);
-  await expect(page.locator("nextjs-portal, [data-nextjs-dialog-overlay], [data-nextjs-toast]")).toHaveCount(0);
+  // Le portail contient aussi l'indicateur de développement, qui n'est pas une erreur.
+  await expect(page.locator("[data-nextjs-dialog-overlay], [data-nextjs-dialog], [data-nextjs-toast]")).toHaveCount(0);
 }
 
 async function expectAnyVisible(page: Page, patterns: RegExp[]) {
@@ -124,13 +146,11 @@ async function clickIfUsable(locator: Locator) {
 }
 
 async function closeModal(page: Page) {
-  const closeButton = page.getByRole("button", { name: /annuler|fermer|x|×/i }).last();
-  if (await closeButton.isVisible().catch(() => false)) {
-    await closeButton.click();
-  } else {
-    await page.keyboard.press("Escape");
-  }
-  await expect(page.locator('[style*="position: fixed"]')).toHaveCount(0, { timeout: 10_000 }).catch(() => undefined);
+  const modal = page.locator('[style*="position: fixed"][style*="inset: 0"]');
+  const closeButton = modal.getByRole("button", { name: /^(annuler|fermer|x|×)$/i }).last();
+  await expect(closeButton).toBeVisible();
+  await closeButton.click();
+  await expect(modal).toHaveCount(0);
 }
 
 async function smokeDashboard(page: Page) {
@@ -166,17 +186,17 @@ async function smokeCuverie(page: Page) {
 }
 
 async function smokeLots(page: Page) {
-  await go(page, /^lots/i, /^lots$/i);
+  await go(page, /lots \(vrac\)/i, /^lots$/i);
   await expect(page.getByPlaceholder(/recherche code/i)).toBeVisible();
   await expectAnyVisible(page, [/code lot/i, /aucun lot dans cette section/i]);
 
-  const firstLotCell = page.locator("text=/^[A-Z0-9][A-Z0-9_-]{2,}/").first();
-  if (await firstLotCell.isVisible().catch(() => false)) {
-    await firstLotCell.click();
+  const firstLot = page.getByTestId("lot-row").first();
+  if (await firstLot.isVisible().catch(() => false)) {
+    await firstLot.click();
+    await expect(page.getByRole("button", { name: /retour/i })).toBeVisible();
     await expectAnyVisible(page, [/timeline|historique|analyses|traçabilité|fiche/i]);
-    await page.getByRole("button", { name: /retour|←|back/i }).first().click().catch(async () => {
-      await go(page, /^lots/i, /^lots$/i);
-    });
+    await page.getByRole("button", { name: /retour/i }).click();
+    await expect(page.getByRole("heading", { name: /^lots$/i })).toBeVisible();
   }
 }
 
@@ -212,13 +232,17 @@ async function smokeWorkOrders(page: Page) {
 }
 
 async function smokeStockBouteilles(page: Page) {
-  await go(page, /^cave$/i, /stock bouteilles/i);
-  for (const tab of [/vieillissement/i, /à habiller/i, /prêts/i, /vins de réserve/i]) {
+  await go(page, /cave$/i, /stock bouteilles/i);
+  const cases = [
+    { tab: /vieillissement/i, action: /^dégorger$/i },
+    { tab: /à habiller/i, action: /^habiller$/i },
+    { tab: /prêts/i, action: /^expédier$/i },
+    { tab: /vins de réserve/i, action: null },
+  ];
+  for (const { tab, action } of cases) {
     await page.getByRole("button", { name: tab }).click();
     await assertNoBlockingUiError(page);
-  }
-  for (const action of [/dégorger/i, /habiller/i, /expédier/i]) {
-    if (await clickIfUsable(page.getByRole("button", { name: action }))) {
+    if (action && await clickIfUsable(page.getByRole("button", { name: action }))) {
       await closeModal(page);
     }
   }
@@ -227,13 +251,13 @@ async function smokeStockBouteilles(page: Page) {
 async function smokeExpeditions(page: Page) {
   await go(page, /expéditions/i, /expéditions/i);
   for (const tab of [/bouteilles/i, /vrac/i, /distillerie/i]) {
-    await page.getByRole("button", { name: tab }).click();
+    await page.locator(".app-module-content").getByRole("button", { name: tab }).click();
     await assertNoBlockingUiError(page);
   }
 
-  await page.getByRole("button", { name: /vrac/i }).click();
+  await page.locator(".app-module-content").getByRole("button", { name: /vrac/i }).click();
   await expectAnyVisible(page, [/expéditions vrac|vrac \/ citerne|aucune expédition vrac|lot|volume/i]);
-  await expect(page.locator("body")).not.toContainText(/contenants vides ou en nettoyage|cuverie/i);
+  await expect(page.locator(".app-module-content")).not.toContainText(/contenants vides ou en nettoyage|cuverie/i);
 
   if (await clickIfUsable(page.getByRole("button", { name: /\+ nouvel envoi/i }).first())) {
     await expectAnyVisible(page, [/nouvel envoi/i, /client|transporteur|lot/i]);
@@ -249,26 +273,26 @@ async function smokeTracabilite(page: Page) {
 async function smokeStocks(page: Page) {
   await go(page, /matières sèches/i, /inventaire & matières/i);
   await expectAnyVisible(page, [/inventaire|mouvements|produit|stock/i]);
-  await page.getByRole("button", { name: /mouvements/i }).click();
-  await assertNoBlockingUiError(page);
   if (await clickIfUsable(page.getByRole("button", { name: /nouveau produit/i }))) {
     await closeModal(page);
   }
-  if (await clickIfUsable(page.getByRole("button", { name: /mouvement/i }))) {
+  if (await clickIfUsable(page.getByRole("button", { name: /^mouvement$/i }))) {
     await closeModal(page);
   }
+  await page.getByRole("button", { name: /historique mouvements/i }).click();
+  await assertNoBlockingUiError(page);
+  await expectAnyVisible(page, [/motif|opérateur|aucun mouvement/i]);
 }
 
 async function smokeAdministratif(page: Page) {
-  await go(page, /administratif/i, /administratif|documents/i);
+  await go(page, /administratif/i, /cahier de pressoir|registre de cave/i);
   await expectAnyVisible(page, [/pressoir|drm|distillerie|exporter/i]);
 
-  await page.getByText(/administration/i).click();
+  await page.getByText(/^système$/i).click();
   await page.getByRole("button", { name: /utilisateurs/i }).click();
   await expect(page.getByRole("heading", { name: /utilisateurs/i })).toBeVisible();
   await expectAnyVisible(page, [/email|role|rôle|admin|caviste|lecture seule/i]);
 
-  await page.getByText(/administration/i).click();
   await page.getByRole("button", { name: /journal/i }).click();
   await expectAnyVisible(page, [/journal|audit|logs|événements/i]);
 }

@@ -43,6 +43,9 @@ npm run test:e2e:headed -- tests/e2e/ui-v1-smoke.spec.ts --project=chrome
 ```
 
 Le test ouvre les modules V1, verifie les ecrans et peut ouvrir/fermer certaines modales, sans soumettre de formulaire metier.
+Le parcours connecté commence sur `/app`. Playwright charge les variables locales via `@next/env`.
+
+La recette du site public se lance avec `npm run test:e2e:launch` ; les protections contre les secrets publics avec `npm run test:security`.
 
 ## Si Chrome ne demarre pas sur macOS
 
